@@ -1,0 +1,310 @@
+import React, { useEffect, useRef, useState, useCallback, useMemo } from 'react'
+import ForceGraph3D from 'react-force-graph-3d'
+import * as THREE from 'three'
+import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPass.js'
+import { api } from './api'
+import { IconSearch } from './icons'
+
+const PRESETS = [
+  { key: 'galaxy', name: '星系', dims: 3, bg: '#08090d',
+    palette: ['#fbbf24', '#fb923c', '#f472b6', '#a78bfa', '#67e8f9', '#34d399', '#f9a8d4', '#4ade80'],
+    bloom: { s: 1.15, r: 0.7, t: 0.18 }, link: 'rgba(150,170,210,0.22)', charge: -160, dist: 55, stars: 2600, starColor: '#cfd8ff', starSize: 0.9 },
+  { key: 'nebula', name: '星云', dims: 3, bg: '#0a0712',
+    palette: ['#c084fc', '#a78bfa', '#f472b6', '#818cf8', '#22d3ee', '#f0abfc', '#93c5fd', '#5eead4'],
+    bloom: { s: 1.6, r: 0.95, t: 0.1 }, link: 'rgba(190,160,255,0.22)', charge: -140, dist: 50, stars: 3400, starColor: '#e9d5ff', starSize: 1.0 },
+  { key: 'deepfield', name: '繁星', dims: 3, bg: '#060709',
+    palette: ['#e2e8f0', '#93c5fd', '#fcd34d', '#fca5a5', '#a7f3d0', '#c4b5fd', '#67e8f9', '#fdba74'],
+    bloom: { s: 0.85, r: 0.6, t: 0.28 }, link: 'rgba(140,150,175,0.18)', charge: -210, dist: 70, stars: 5200, starColor: '#ffffff', starSize: 0.7 },
+  { key: 'aurora', name: '极光', dims: 3, bg: '#04100e',
+    palette: ['#34d399', '#22d3ee', '#5eead4', '#a3e635', '#38bdf8', '#6ee7b7', '#7dd3fc', '#bef264'],
+    bloom: { s: 1.35, r: 0.8, t: 0.14 }, link: 'rgba(120,230,200,0.24)', charge: -150, dist: 55, stars: 2800, starColor: '#bffce8', starSize: 0.9 },
+  { key: 'fireworks', name: '烟花', dims: 3, bg: '#0a0608',
+    palette: ['#f43f5e', '#fb923c', '#facc15', '#f472b6', '#22d3ee', '#a78bfa', '#4ade80', '#38bdf8'],
+    bloom: { s: 2.1, r: 1.0, t: 0.05 }, link: 'rgba(255,180,190,0.22)', charge: -120, dist: 45, stars: 2000, starColor: '#ffe0e6', starSize: 1.1 },
+  { key: 'disk', name: '银盘', dims: 2, bg: '#0a0a0f',
+    palette: ['#fcd34d', '#fb923c', '#f472b6', '#60a5fa', '#5eead4', '#c4b5fd', '#fda4af', '#a3e635'],
+    bloom: { s: 1.3, r: 0.8, t: 0.14 }, link: 'rgba(180,190,220,0.2)', charge: -90, dist: 42, stars: 3000, starColor: '#d6def7', starSize: 0.85 },
+  { key: 'chart', name: '星图', dims: 2, bg: '#070a10',
+    palette: ['#93c5fd', '#67e8f9', '#a7f3d0', '#c4b5fd', '#fda4af', '#fcd34d', '#6ee7b7', '#f0abfc'],
+    bloom: { s: 0.9, r: 0.65, t: 0.22 }, link: 'rgba(150,180,220,0.22)', charge: -110, dist: 50, stars: 2400, starColor: '#cfe0ff', starSize: 0.8 },
+  { key: 'neon', name: '霓虹', dims: 3, bg: '#08060e',
+    palette: ['#f0abfc', '#22d3ee', '#a78bfa', '#5eead4', '#fb7185', '#818cf8', '#facc15', '#34d399'],
+    bloom: { s: 1.9, r: 0.95, t: 0.08 }, link: 'rgba(220,150,255,0.24)', charge: -150, dist: 52, stars: 2600, starColor: '#f0d0ff', starSize: 1.0 },
+  { key: 'minimal', name: '极简', dims: 3, bg: '#0b0c0f',
+    palette: ['#cbd5e1', '#94a3b8', '#e2e8f0', '#a5b4fc', '#7dd3fc', '#fca5a5', '#fdba74', '#86efac'],
+    bloom: { s: 0.55, r: 0.5, t: 0.35 }, link: 'rgba(160,170,190,0.18)', charge: -180, dist: 60, stars: 1400, starColor: '#e6ecf5', starSize: 0.7 },
+]
+
+const GRAINS = [
+  { key: 'coarse', name: '粗', chunk: 30 },
+  { key: 'medium', name: '中', chunk: 12 },
+  { key: 'fine', name: '细', chunk: 5 },
+]
+
+const FTYPES = {
+  '.pdf': ['PDF', '#f87171'], '.epub': ['电子书', '#c084fc'], '.mobi': ['电子书', '#c084fc'],
+  '.fb2': ['电子书', '#c084fc'], '.docx': ['Word', '#60a5fa'], '.pptx': ['PPT', '#fb923c'],
+  '.xlsx': ['Excel', '#34d399'], '.xlsm': ['Excel', '#34d399'], '.md': ['笔记', '#94a3b8'],
+  '.markdown': ['笔记', '#94a3b8'], '.txt': ['文本', '#94a3b8'],
+  '.html': ['网页', '#38bdf8'], '.htm': ['网页', '#38bdf8'], '.csv': ['数据', '#a3e635'],
+  '.json': ['数据', '#a3e635'], '.eml': ['邮件', '#f0abfc'],
+}
+function ftypeOf(node) {
+  const fn = String(node.label || '').split(' · ')[0].toLowerCase()
+  const ext = fn.slice(fn.lastIndexOf('.'))
+  return FTYPES[ext] || ['其它', '#cbd5e1']
+}
+const FT_ABBR = { PDF: 'PDF', 电子书: 'BOOK', Word: 'DOC', PPT: 'PPT', Excel: 'XLS', 笔记: 'MD', 文本: 'TXT', 网页: 'WEB', 数据: 'CSV', 邮件: 'MAIL', 其它: 'FILE', 目标: '目标', 日记: '日记', 笔记本: '笔记' }
+
+// 画一个专业的"文件"图标:白纸 + 应用色顶栏 + 折角 + 类型字
+function roundRectPath(g, x, y, w, h, r) {
+  g.beginPath()
+  g.moveTo(x + r, y); g.arcTo(x + w, y, x + w, y + h, r); g.arcTo(x + w, y + h, x, y + h, r)
+  g.arcTo(x, y + h, x, y, r); g.arcTo(x, y, x + w, y, r); g.closePath()
+}
+function makeFileIcon(node) {
+  const isCard = String(node.label || '').startsWith('card') || node.ctype
+  const [label, color] = isCard ? ['卡片', '#67e8f9'] : ftypeOf(node)
+  const cv = document.createElement('canvas'); cv.width = 128; cv.height = 160
+  const g = cv.getContext('2d')
+  const x = 22, y = 14, w = 84, h = 116, r = 12, fold = 24
+  // 纸张(白)带折角
+  g.fillStyle = '#f4f6fb'
+  g.beginPath()
+  g.moveTo(x + r, y); g.lineTo(x + w - fold, y); g.lineTo(x + w, y + fold)
+  g.lineTo(x + w, y + h - r); g.arcTo(x + w, y + h, x, y + h, r)
+  g.arcTo(x, y + h, x, y, r); g.arcTo(x, y, x + w, y, r); g.closePath(); g.fill()
+  // 折角阴影
+  g.fillStyle = '#cfd6e4'; g.beginPath(); g.moveTo(x + w - fold, y); g.lineTo(x + w - fold, y + fold); g.lineTo(x + w, y + fold); g.closePath(); g.fill()
+  // 顶部应用色标签带
+  g.fillStyle = color
+  roundRectPath(g, x + 12, y + h - 46, w - 24, 30, 6); g.fill()
+  g.fillStyle = '#0a0d13'; g.font = 'bold 20px -apple-system, "PingFang SC", sans-serif'; g.textAlign = 'center'; g.textBaseline = 'middle'
+  g.fillText(FT_ABBR[label] || label, x + w / 2, y + h - 30)
+  // 内容线条(装饰)
+  g.strokeStyle = 'rgba(120,130,150,0.5)'; g.lineWidth = 3; g.lineCap = 'round'
+  for (let i = 0; i < 3; i++) { g.beginPath(); g.moveTo(x + 14, y + 20 + i * 12); g.lineTo(x + w - 14 - (i === 2 ? 20 : 0), y + 20 + i * 12); g.stroke() }
+  const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: new THREE.CanvasTexture(cv), transparent: true, depthWrite: false }))
+  const s = 9 + Math.min(node.size || 1, 6)
+  sp.scale.set(s * 0.8, s, 1)
+  return sp
+}
+function hash(s) { let h = 0; s = String(s); for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) | 0; return h }
+const nodeKey = (n) => (n.doc_id != null ? n.doc_id : n.id)
+
+export default function Explore({ onOpen }) {
+  const fgRef = useRef(); const hostRef = useRef(); const bloomRef = useRef(null); const starRef = useRef(null)
+  const [data, setData] = useState(null)
+  const [clusterNames, setClusterNames] = useState([])
+  const [dim, setDim] = useState({ w: 800, h: 600 })
+  const [q, setQ] = useState(''); const [hi, setHi] = useState(null)
+  const [presetKey, setPresetKey] = useState('galaxy')
+  const [mode, setMode] = useState('star')
+  const [grain, setGrain] = useState('medium')
+  const [colorBy, setColorBy] = useState('cluster')  // 'cluster' | 'ftype'
+  const [hidden, setHidden] = useState(() => new Set())
+  const [adj, setAdj] = useState({ bloom: 1.15, charge: -160, dist: 55, dims: 3, size: 1 })
+  const [showAdj, setShowAdj] = useState(false)
+
+  const preset = PRESETS.find((p) => p.key === presetKey)
+  const presetRef = useRef(preset); presetRef.current = preset
+  const isStar = mode === 'star'
+
+  // 分组键:簇 index 或 文件类型 label
+  const groupKey = useCallback((n) => (colorBy === 'ftype' ? ftypeOf(n)[0] : (n.cluster != null ? n.cluster : 0)), [colorBy])
+  const colorOf = useCallback((n) => {
+    if (colorBy === 'ftype') return ftypeOf(n)[1]
+    const pal = presetRef.current.palette
+    const c = n.cluster != null ? n.cluster : Math.abs(hash(n.id))
+    return pal[Math.abs(c) % pal.length]
+  }, [colorBy])
+
+  useEffect(() => {
+    setData(null); setHi(null); setHidden(new Set())
+    const chunk = GRAINS.find((g) => g.key === grain).chunk
+    const load = mode === 'star' ? api.starmap(chunk) : api.graph()
+    load.then((g) => {
+      setClusterNames(g.cluster_names || [])
+      setData({ nodes: g.nodes.map((n) => ({ ...n })), links: g.edges.map((e) => ({ source: e.source, target: e.target, weight: e.weight })) })
+    }).catch(() => setData({ nodes: [], links: [] }))
+  }, [mode, grain])
+
+  useEffect(() => { setHidden(new Set()) }, [colorBy])
+
+  useEffect(() => {
+    const el = hostRef.current; if (!el) return
+    const ro = new ResizeObserver(() => setDim({ w: el.clientWidth, h: el.clientHeight }))
+    ro.observe(el); return () => ro.disconnect()
+  }, [])
+
+  // 图例分组
+  const groups = useMemo(() => {
+    if (!data) return []
+    const pal = preset.palette; const map = new Map()
+    for (const n of data.nodes) {
+      let key, name, color
+      if (colorBy === 'ftype') { const [nm, col] = ftypeOf(n); key = nm; name = nm; color = col }
+      else { const c = n.cluster != null ? n.cluster : 0; key = c; name = clusterNames[c] || ('簇' + (c + 1)); color = pal[Math.abs(c) % pal.length] }
+      if (!map.has(key)) map.set(key, { key, name, color, count: 0 })
+      map.get(key).count++
+    }
+    return [...map.values()].sort((a, b) => b.count - a.count)
+  }, [data, colorBy, clusterNames, presetKey])  // eslint-disable-line
+
+  const toggleHidden = (key) => setHidden((s) => { const n = new Set(s); n.has(key) ? n.delete(key) : n.add(key); return n })
+
+  const buildStars = useCallback((p) => {
+    const fg = fgRef.current; if (!fg) return
+    const scene = fg.scene(); if (!scene) return
+    if (starRef.current) { scene.remove(starRef.current); starRef.current.geometry.dispose(); starRef.current.material.dispose() }
+    const n = p.stars, pos = new Float32Array(n * 3)
+    for (let i = 0; i < n; i++) {
+      const r = 320 + Math.pow(Math.abs(Math.sin(i * 12.9898) * 43758.5453 % 1), 0.5) * 1800
+      const th = (i * 2.399963) % (Math.PI * 2), ph = Math.acos(1 - 2 * ((i * 0.61803) % 1))
+      pos[i * 3] = r * Math.sin(ph) * Math.cos(th); pos[i * 3 + 1] = r * Math.sin(ph) * Math.sin(th); pos[i * 3 + 2] = r * Math.cos(ph)
+    }
+    const geo = new THREE.BufferGeometry(); geo.setAttribute('position', new THREE.BufferAttribute(pos, 3))
+    const mat = new THREE.PointsMaterial({ color: new THREE.Color(p.starColor), size: p.starSize, sizeAttenuation: true, transparent: true, opacity: 0.85, blending: THREE.AdditiveBlending, depthWrite: false })
+    const pts = new THREE.Points(geo, mat); scene.add(pts); starRef.current = pts
+  }, [])
+
+  const applyPreset = useCallback((p) => {
+    const fg = fgRef.current; if (!fg) return
+    try {
+      if (bloomRef.current) { const b = bloomRef.current; b.strength = p.bloom.s; b.radius = p.bloom.r; b.threshold = p.bloom.t }
+      if (fg.d3Force('charge')) fg.d3Force('charge').strength(p.charge)
+      if (fg.d3Force('link')) fg.d3Force('link').distance(p.dist)
+      fg.d3ReheatSimulation && fg.d3ReheatSimulation(); buildStars(p)
+    } catch (e) { /* noop */ }
+  }, [buildStars])
+
+  useEffect(() => {
+    const fg = fgRef.current; if (!fg || !data) return
+    const t = setTimeout(() => {
+      try {
+        if (!bloomRef.current) { const b = new UnrealBloomPass(); fg.postProcessingComposer().addPass(b); bloomRef.current = b }
+        const c = fg.controls(); if (c) { c.autoRotate = true; c.autoRotateSpeed = 0.42 }
+      } catch (e) { /* noop */ }
+      applyPreset(presetRef.current)
+    }, 450)
+    const t2 = setTimeout(() => { try { fg.zoomToFit(900, 150) } catch (e) {} }, 1900)
+    return () => { clearTimeout(t); clearTimeout(t2) }
+  }, [data, applyPreset])
+
+  useEffect(() => { if (data && bloomRef.current) applyPreset(preset) }, [presetKey])  // eslint-disable-line
+  // 切预设时,调节值回到该预设默认
+  useEffect(() => { setAdj({ bloom: preset.bloom.s, charge: preset.charge, dist: preset.dist, dims: preset.dims, size: 1 }) }, [presetKey])  // eslint-disable-line
+  // 调节值实时作用到图
+  useEffect(() => {
+    const fg = fgRef.current; if (!fg) return
+    try {
+      if (bloomRef.current) bloomRef.current.strength = adj.bloom
+      if (fg.d3Force('charge')) fg.d3Force('charge').strength(adj.charge)
+      if (fg.d3Force('link')) fg.d3Force('link').distance(adj.dist)
+      fg.d3ReheatSimulation && fg.d3ReheatSimulation()
+    } catch (e) { /* noop */ }
+  }, [adj])
+
+  const flyTo = useCallback((docId) => {
+    const fg = fgRef.current; if (!fg || !data) return
+    const node = data.nodes.find((n) => nodeKey(n) === docId); if (!node) return
+    const d = 1.6
+    fg.cameraPosition({ x: (node.x || 1) * d, y: (node.y || 1) * d, z: (node.z || 120) * d }, node, 1600)
+  }, [data])
+
+  async function doSearch(e) {
+    e.preventDefault()
+    if (!q.trim()) { setHi(null); return }
+    try { const r = await api.search(q); const ids = new Set((r.hits || []).map((h) => h.doc_id)); setHi(ids); if (r.hits && r.hits[0]) flyTo(r.hits[0].doc_id) } catch { /* noop */ }
+  }
+
+  const empty = data && data.nodes.length === 0
+
+  return (
+    <div className="main" style={{ position: 'absolute', inset: 0 }}>
+      <div className="graph-overlay">
+        <div className="graph-title glass">
+          <h1>探索</h1>
+          {data ? (<p><span className="dot" style={{ background: 'var(--accent)', boxShadow: '0 0 8px var(--accent)' }} /><span className="num">{data.nodes.length}</span> {isStar ? '颗星' : '文档'}<span style={{ color: 'var(--text-3)' }}>·</span><span className="num">{data.links.length}</span> 连线</p>) : <p>加载中…</p>}
+        </div>
+        <div style={{ display: 'flex', gap: 10, alignItems: 'flex-start' }}>
+          <div className="seg glass">
+            <button className={!isStar ? 'on' : ''} onClick={() => setMode('doc')}>文档</button>
+            <button className={isStar ? 'on' : ''} onClick={() => setMode('star')}>星海</button>
+          </div>
+          {isStar && (<div className="seg glass">{GRAINS.map((g) => (<button key={g.key} className={g.key === grain ? 'on' : ''} onClick={() => setGrain(g.key)}>{g.name}</button>))}</div>)}
+          <form className="search-wrap" onSubmit={doSearch} style={{ width: 220 }}><IconSearch /><input className="search" placeholder="搜索飞向星系" value={q} onChange={(e) => setQ(e.target.value)} /></form>
+        </div>
+      </div>
+
+      {/* 颜色组面板 */}
+      {!empty && data && (
+        <div className="groups-panel glass">
+          <div className="gp-head">颜色组</div>
+          <div className="seg" style={{ padding: 3, marginBottom: 10 }}>
+            <button className={colorBy === 'cluster' ? 'on' : ''} onClick={() => setColorBy('cluster')}>语义簇</button>
+            <button className={colorBy === 'ftype' ? 'on' : ''} onClick={() => setColorBy('ftype')}>文件类型</button>
+          </div>
+          <div className="gp-list">
+            {groups.map((g) => (
+              <div key={g.key} className={'gp-item' + (hidden.has(g.key) ? ' off' : '')} onClick={() => toggleHidden(g.key)} title="点击隐藏/显示">
+                <span className="sw" style={{ background: g.color }} />
+                <span className="gp-name">{g.name}</span>
+                <span className="gp-count num">{g.count}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* 外观 / 力度调节 */}
+      {!empty && data && (
+        <div className="adjust-panel glass">
+          <div className="ap-head" onClick={() => setShowAdj((s) => !s)}>调节 <span>{showAdj ? '▾' : '▸'}</span></div>
+          {showAdj && (
+            <div className="ap-body">
+              <label>辉光<input type="range" min="0" max="3" step="0.05" value={adj.bloom} onChange={(e) => setAdj((a) => ({ ...a, bloom: +e.target.value }))} /></label>
+              <label>节点<input type="range" min="0.4" max="2.5" step="0.1" value={adj.size} onChange={(e) => setAdj((a) => ({ ...a, size: +e.target.value }))} /></label>
+              <label>散开<input type="range" min="40" max="320" step="10" value={-adj.charge} onChange={(e) => setAdj((a) => ({ ...a, charge: -(+e.target.value) }))} /></label>
+              <label>连距<input type="range" min="20" max="110" step="2" value={adj.dist} onChange={(e) => setAdj((a) => ({ ...a, dist: +e.target.value }))} /></label>
+              <div className="ap-dims">
+                <button className={adj.dims === 3 ? 'on' : ''} onClick={() => setAdj((a) => ({ ...a, dims: 3 }))}>3D</button>
+                <button className={adj.dims === 2 ? 'on' : ''} onClick={() => setAdj((a) => ({ ...a, dims: 2 }))}>2D</button>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {!empty && data && (<div className="preset-bar glass">{PRESETS.map((p) => (<button key={p.key} className={p.key === presetKey ? 'on' : ''} onClick={() => setPresetKey(p.key)}>{p.name}</button>))}</div>)}
+
+      <div className="graph-host" ref={hostRef}
+        onPointerEnter={() => { try { const c = fgRef.current && fgRef.current.controls(); if (c) c.autoRotate = false } catch (e) { } }}
+        onPointerLeave={() => { try { const c = fgRef.current && fgRef.current.controls(); if (c) c.autoRotate = true } catch (e) { } }}>
+        {!data ? (<div className="empty"><div className="spinner" /></div>)
+          : empty ? (<div className="empty"><div className="e-big">还没有星图</div><div>去「入库」灌入文档,语义连线会自动生长</div></div>)
+            : (
+              <ForceGraph3D
+                ref={fgRef} width={dim.w} height={dim.h} graphData={data}
+                backgroundColor={preset.bg} numDimensions={adj.dims} controlType="orbit" showNavInfo={false}
+                nodeLabel={(n) => `<div style="padding:7px 11px;font-size:12.5px;font-weight:600;color:#edeff3;background:rgba(12,14,20,0.92);border:1px solid rgba(255,255,255,0.1);border-radius:8px;max-width:260px">${n.label}${isStar ? '' : `<div style="font-size:11px;font-weight:400;color:#9aa0aa;margin-top:2px">${ftypeOf(n)[0]} · 点击打开</div>`}</div>`}
+                nodeThreeObject={isStar ? undefined : makeFileIcon}
+                nodeThreeObjectExtend={false}
+                nodeRelSize={isStar ? 2 : 5}
+                nodeVal={(n) => Math.max(isStar ? 0.5 : 2, n.size || 1) * adj.size}
+                nodeVisibility={(n) => !hidden.has(groupKey(n))}
+                nodeColor={(n) => (hi && !hi.has(nodeKey(n)) ? '#2b2f3a' : colorOf(n))}
+                nodeOpacity={0.95} nodeResolution={isStar ? 6 : 18}
+                linkColor={() => preset.link}
+                linkWidth={isStar ? 0.25 : (l) => 0.5 + (l.weight || 0.4) * 1.4}
+                linkOpacity={isStar ? 0.22 : 0.55}
+                linkVisibility={(l) => { const s = l.source, t = l.target; const sk = typeof s === 'object' ? groupKey(s) : null; const tk = typeof t === 'object' ? groupKey(t) : null; return !(hidden.has(sk) || hidden.has(tk)) }}
+                warmupTicks={isStar ? 20 : 40} cooldownTicks={isStar ? 80 : undefined}
+                onEngineStop={() => { try { fgRef.current && fgRef.current.zoomToFit(700, 150) } catch (e) {} }}
+                onNodeClick={(n) => onOpen(nodeKey(n))} enableNodeDrag={false}
+              />
+            )}
+      </div>
+    </div>
+  )
+}

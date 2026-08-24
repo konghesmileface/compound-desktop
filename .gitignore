@@ -1,0 +1,29 @@
+# deps / build
+node_modules/
+dist/
+frontend/dist/
+src-tauri/target/
+src-tauri/gen/
+*.log
+.DS_Store
+
+# ★★ 严禁任何用户数据/密钥进入本仓库(构建期会转 public)★★
+*.db
+*.sqlite
+*.sqlite3
+*.db-journal
+uploads/
+vault/
+testdata/
+themes/
+*.p12
+*.pem
+*.key
+*.crt
+*cert*
+alipay*.env
+.env
+.env.*
+wxkeys/
+accounts.db
+library.db
