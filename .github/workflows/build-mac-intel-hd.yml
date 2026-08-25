@@ -1,21 +1,17 @@
 name: Build Mac Intel 高精版
 
-# 高精版(rapidocr + paddle PP-StructureV3):
-#  - 主 sidecar(torch 环境)+ paddle worker(独立 paddle 环境,进程隔离避依赖冲突)
-#  - Tauri 用 tauri.hd.conf.json 把两个二进制都内嵌
-# ★必须 macos-13(Intel 原生)。paddle 打包较硬,单独 workflow 便于迭代。
+# 高精版(rapidocr v6 + paddle PP-StructureV3 + bge-m3)。
+# 主 sidecar(torch)+ paddle worker(独立 paddle 环境,进程隔离)都用 Rosetta 出 x86_64;
+# Tauri 用 tauri.hd.conf.json 内嵌两个二进制,交叉编译 x86_64。macos-latest 不排队。
 on:
   workflow_dispatch:
 
 jobs:
   build:
-    runs-on: macos-13
+    runs-on: macos-latest
     timeout-minutes: 120
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with:
-          python-version: '3.10'
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
@@ -28,32 +24,39 @@ jobs:
           workspaces: './src-tauri -> target'
           cache-on-failure: true
 
-      - name: 下 bge-m3 嵌入模型(打进包)
-        working-directory: sidecar
+      - name: 装 x86_64 Python(经 Rosetta)
         run: |
-          python -m pip install --upgrade pip huggingface_hub
-          HF_ENDPOINT=https://hf-mirror.com python -c "from huggingface_hub import snapshot_download; snapshot_download('BAAI/bge-m3', local_dir='models/bge-m3', ignore_patterns=['onnx/*','*.onnx','colbert*','*.msgpack','*.h5','imgs/*'])"
+          curl -fsSL -o /tmp/python.pkg https://www.python.org/ftp/python/3.10.11/python-3.10.11-macos11.pkg
+          sudo installer -pkg /tmp/python.pkg -target /
+          echo "PY=/Library/Frameworks/Python.framework/Versions/3.10/bin/python3" >> "$GITHUB_ENV"
 
-      - name: 打主 sidecar(torch 环境,内含 rapidocr v6 + bge-m3)
+      - name: 下 bge-m3(打进包)
         working-directory: sidecar
         run: |
-          python -m venv .venv-base
-          .venv-base/bin/pip install --upgrade pip
-          .venv-base/bin/pip install -r requirements.txt pyinstaller
-          .venv-base/bin/pyinstaller --noconfirm compound-sidecar.spec
+          arch -x86_64 "$PY" -m pip install --upgrade pip huggingface_hub
+          HF_ENDPOINT=https://hf-mirror.com arch -x86_64 "$PY" -c "from huggingface_hub import snapshot_download; snapshot_download('BAAI/bge-m3', local_dir='models/bge-m3', ignore_patterns=['onnx/*','*.onnx','colbert*','*.msgpack','*.h5','imgs/*'])"
+
+      - name: 冻结主 sidecar(x86_64,torch 环境)+ selftest
+        working-directory: sidecar
+        run: |
+          arch -x86_64 "$PY" -m venv .venv-base
+          arch -x86_64 .venv-base/bin/python -m pip install --upgrade pip
+          arch -x86_64 .venv-base/bin/python -m pip install -r requirements.txt pyinstaller
+          arch -x86_64 .venv-base/bin/python -m PyInstaller --noconfirm compound-sidecar.spec
+          file dist/compound-sidecar/compound-sidecar
           ./dist/compound-sidecar/compound-sidecar --selftest
 
-      - name: 打 paddle worker(独立 paddle 环境)
+      - name: 冻结 paddle worker(x86_64,独立 paddle 环境)
         working-directory: sidecar
         run: |
-          python -m venv .venv-paddle
-          .venv-paddle/bin/pip install --upgrade pip
-          .venv-paddle/bin/pip install "paddlepaddle==3.0.0" "paddleocr" "paddlex[ocr]" \
-            fastapi uvicorn python-multipart Pillow pyinstaller
-          .venv-paddle/bin/pyinstaller --noconfirm compound-paddle.spec
-          test -x dist/compound-paddle/compound-paddle && echo "✓ paddle worker 冻结成功"
+          arch -x86_64 "$PY" -m venv .venv-paddle
+          arch -x86_64 .venv-paddle/bin/python -m pip install --upgrade pip
+          arch -x86_64 .venv-paddle/bin/python -m pip install "paddlepaddle==3.0.0" "paddleocr" "paddlex[ocr]" fastapi uvicorn python-multipart Pillow pyinstaller
+          arch -x86_64 .venv-paddle/bin/python -m PyInstaller --noconfirm compound-paddle.spec
+          file dist/compound-paddle/compound-paddle
+          test -x dist/compound-paddle/compound-paddle && echo "✓ paddle worker x86_64 冻结成功"
 
-      - name: Tauri 打高精版 .app/.dmg(内嵌主+paddle 两个二进制)
+      - name: Tauri 打高精版 .app/.dmg(内嵌主+paddle 两 x86_64 二进制)
         run: |
           npm install
           npm run tauri build -- --config src-tauri/tauri.hd.conf.json --target x86_64-apple-darwin
@@ -62,6 +65,5 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: compound-mac-intel-hd
-          path: |
-            src-tauri/target/x86_64-apple-darwin/release/bundle/dmg/*.dmg
+          path: src-tauri/target/x86_64-apple-darwin/release/bundle/dmg/*.dmg
           if-no-files-found: warn
