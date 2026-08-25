@@ -44,7 +44,7 @@ jobs:
         working-directory: sidecar
         run: |
           arch -x86_64 "$PY" -m pip install --upgrade pip huggingface_hub
-          HF_ENDPOINT=https://hf-mirror.com arch -x86_64 "$PY" -c "from huggingface_hub import snapshot_download; snapshot_download('BAAI/bge-m3', local_dir='models/bge-m3', ignore_patterns=['onnx/*','*.onnx','colbert*','*.msgpack','*.h5','imgs/*'])"
+          arch -x86_64 "$PY" -c "from huggingface_hub import snapshot_download; snapshot_download('BAAI/bge-m3', local_dir='models/bge-m3', ignore_patterns=['onnx/*','*.onnx','colbert*','*.msgpack','*.h5','imgs/*'])"
           du -sh models/bge-m3
 
       - name: 冻结后端 sidecar(x86_64,内含 rapidocr v6 + bge-m3)+ selftest
