@@ -1,0 +1,33 @@
+name: Test Rosetta x86_64 Sidecar
+
+# 验证:macos-latest(arm,不排队)+ Rosetta 跑 x86_64 Python → PyInstaller 出 x86_64 sidecar → selftest。
+# 通了就把这套用到正式 build(避开 macos-13 死排)。
+on:
+  workflow_dispatch:
+
+jobs:
+  test:
+    runs-on: macos-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: 装 x86_64 Python(python.org universal2,经 Rosetta 跑 x86 切片)
+        run: |
+          curl -fsSL -o /tmp/python.pkg https://www.python.org/ftp/python/3.10.11/python-3.10.11-macos11.pkg
+          sudo installer -pkg /tmp/python.pkg -target /
+          PY=/Library/Frameworks/Python.framework/Versions/3.10/bin/python3
+          echo "PY=$PY" >> "$GITHUB_ENV"
+          echo "== 确认 x86_64 执行 =="
+          arch -x86_64 "$PY" -c "import platform; print('machine:', platform.machine())"
+
+      - name: 冻结 sidecar(x86_64)+ selftest
+        working-directory: sidecar
+        run: |
+          arch -x86_64 "$PY" -m pip install --upgrade pip
+          arch -x86_64 "$PY" -m pip install -r requirements.txt pyinstaller
+          arch -x86_64 "$PY" -m PyInstaller --noconfirm compound-sidecar.spec
+          echo "== 产物架构(应含 x86_64)=="
+          file dist/compound-sidecar/compound-sidecar
+          echo "== selftest =="
+          ./dist/compound-sidecar/compound-sidecar --selftest
