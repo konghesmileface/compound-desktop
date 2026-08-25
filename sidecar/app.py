@@ -2794,6 +2794,20 @@ def _ensure_user_cols(con):
         try: con.execute("ALTER TABLE users2 ADD COLUMN %s TEXT" % col)
         except Exception: pass
 
+
+@app.on_event("startup")
+def _bootstrap_auth_tables():
+    """★全新客户端首启:确保本地资料表 users2/sms_codes 存在。
+    否则密码登录(pwd_login)等直接查 users2 → no such table 崩(106上早建过所以没暴露)。"""
+    try:
+        _c = _con()
+        _ensure_sms(_c)
+        _ensure_user_cols(_c)
+        _c.commit()
+        _c.close()
+    except Exception:
+        pass
+
 def _user_profile(con, username):
     """用户【真实填写】的基础资料(来自 users2)。缺失即空串,绝不猜测。"""
     try:
