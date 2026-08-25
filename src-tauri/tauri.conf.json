@@ -5,8 +5,8 @@
   "version": "0.1.0",
   "identifier": "com.compoundtome.desktop",
   "build": {
-    "beforeDevCommand": "cd ../frontend && npm install && VITE_TAURI=1 npm run dev",
-    "beforeBuildCommand": "cd ../frontend && npm install && VITE_TAURI=1 npm run build",
+    "beforeDevCommand": "cd frontend && npm install && VITE_TAURI=1 npm run dev",
+    "beforeBuildCommand": "cd frontend && npm install && VITE_TAURI=1 npm run build",
     "frontendDist": "../frontend/dist",
     "devUrl": "http://localhost:5173"
   },
