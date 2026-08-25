@@ -13,7 +13,7 @@ on:
 
 jobs:
   build:
-    runs-on: macos-13            # ★ GitHub 的 Intel Mac runner(x86_64 原生,无需交叉编译)
+    runs-on: macos-latest        # ★ arm runner(供给充足,不排队);交叉编译到 x86_64 出 Intel .app
     timeout-minutes: 60
     steps:
       - uses: actions/checkout@v4
