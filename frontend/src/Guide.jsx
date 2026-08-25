@@ -109,7 +109,7 @@ export default function Guide({ sourceKey, onClose }) {
         {s.dls && (
           <div className="guide-dls">
             {s.dls.map((d, i) => (
-              <a key={i} className="guide-dl-btn" href={'/dl/' + encodeURIComponent(d.file)} download>
+              <a key={i} className="guide-dl-btn" href={((typeof window !== 'undefined' && window.__COMPOUND_API_BASE__) || '') + '/dl/' + encodeURIComponent(d.file)} download>
                 <b>{d.label}</b><span>{d.hint}</span>
               </a>
             ))}

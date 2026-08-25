@@ -36,12 +36,13 @@ if os.path.isdir(_bge):
             full = os.path.join(root, f)
             datas.append((full, os.path.relpath(root, here)))
 
-# ★微信同步助手(client/wxsync,纯标准库):打进包。iPhone 备份导入 + 桌面实时增量同步。
-_wx = os.path.join(here, "wxsync")
-if os.path.isdir(_wx):
-    for f in os.listdir(_wx):
-        if f.endswith((".py", ".txt")):
-            datas.append((os.path.join(_wx, f), "wxsync"))
+# ★微信同步助手安装包(WxSync .dmg/.exe):打进包,客户端 sidecar /dl 就地发(离线下载,不出本地)。
+#   CI 构建前从 106 下载中心拉到 downloads/。本机快速构建没拉则跳过。
+_dl = os.path.join(here, "downloads")
+if os.path.isdir(_dl):
+    for f in os.listdir(_dl):
+        if not f.startswith("."):
+            datas.append((os.path.join(_dl, f), "downloads"))
 
 hiddenimports = ["cv2"]  # cv2 走上面显式收库,这里只作 plain hidden import(不 collect_submodules 免 gapi 崩)
 for pkg in ("sentence_transformers", "transformers", "sklearn",

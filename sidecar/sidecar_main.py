@@ -23,6 +23,28 @@ def _data_dir() -> str:
     return d
 
 
+def _seed_downloads(data_dir):
+    """把打进包的「微信同步助手」安装包铺到 BRAIN_DATA/downloads,
+    app.py 的 /dl 挂载即可就地发包(客户端离线下载,不用去云端)。"""
+    import shutil
+    srcs = []
+    if getattr(sys, "frozen", False):
+        srcs.append(os.path.join(getattr(sys, "_MEIPASS", ""), "downloads"))
+    srcs.append(os.path.join(os.path.dirname(os.path.abspath(__file__)), "downloads"))
+    src = next((s for s in srcs if os.path.isdir(s)), None)
+    if not src:
+        return
+    dst = os.path.join(data_dir, "downloads")
+    os.makedirs(dst, exist_ok=True)
+    for f in os.listdir(src):
+        d = os.path.join(dst, f)
+        if not os.path.exists(d):
+            try:
+                shutil.copy2(os.path.join(src, f), d)
+            except Exception:
+                pass
+
+
 def _spawn_paddle_worker():
     """高精版:若同级打了 compound-paddle worker 二进制,拉起它并设 PADDLE_OCR_URL。
     轻量版没这个二进制 → 直接跳过,paddle 后端不可用。"""
@@ -76,6 +98,8 @@ def main():
     data = _data_dir()
     # 后端数据/库位置(ingest.py 读 BRAIN_DATA → library.db 落这里)
     os.environ.setdefault("BRAIN_DATA", data)
+    # 微信同步助手安装包铺到 downloads(app.py /dl 就地发,离线下载)
+    _seed_downloads(data)
     # 嵌入模型 bge-m3:优先用打进包的离线模型(_internal/models/bge-m3);没打进才回落下载。
     bundled = None
     if getattr(sys, "frozen", False):
