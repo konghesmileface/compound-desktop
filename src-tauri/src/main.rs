@@ -2,13 +2,28 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 use std::fs::OpenOptions;
-use std::net::TcpListener;
+use std::io::{Read, Write};
+use std::net::{TcpListener, TcpStream};
 use std::path::PathBuf;
 use std::process::{Child, Command, Stdio};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use tauri::{Manager, RunEvent, WebviewUrl, WebviewWindowBuilder};
+
+/// sidecar 是否就绪:GET /health 返回 200。用最小 HTTP,不引 reqwest。
+fn sidecar_ready(port: u16) -> bool {
+    if let Ok(mut s) = TcpStream::connect(("127.0.0.1", port)) {
+        let _ = s.set_read_timeout(Some(Duration::from_secs(2)));
+        let req = format!("GET /health HTTP/1.0\r\nHost: 127.0.0.1:{}\r\n\r\n", port);
+        if s.write_all(req.as_bytes()).is_ok() {
+            let mut buf = String::new();
+            let _ = s.read_to_string(&mut buf);
+            return buf.starts_with("HTTP/1.") && buf.contains(" 200");
+        }
+    }
+    false
+}
 
 /// 挑一个空闲回环端口(绑 :0 让系统分配)。
 fn free_port() -> u16 {
@@ -102,6 +117,15 @@ fn main() {
                 });
             } else {
                 eprintln!("compound-sidecar 未找到(资源目录/开发回落均无)");
+            }
+
+            // ★等 sidecar /health 就绪再开窗:否则前端初始请求(支付宝/账号/好友/订单)在后端起来前就发→
+            //   失败又不重试(支付宝按钮/订单加载中/好友请先登录都因此)。最多等 40s(torch import 要几秒),超时也开窗。
+            for _ in 0..80 {
+                if sidecar_ready(port) {
+                    break;
+                }
+                std::thread::sleep(Duration::from_millis(500));
             }
 
             // 主窗口:注入本机 API 地址(api.js 的模块级 fetch 影子会读它)。

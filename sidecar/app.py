@@ -1991,7 +1991,7 @@ def _cloud_proxy(method, path, authorization, body=None):
     req = _urlreq.Request(_CLOUD + path, data=data, method=method,
                           headers={"Authorization": authorization or "", "Content-Type": "application/json"})
     try:
-        with _urlreq.urlopen(req, timeout=25) as r:
+        with _cloud_opener.open(req, timeout=25) as r:
             return json.loads(r.read())
     except _urlerr.HTTPError as e:
         try:
