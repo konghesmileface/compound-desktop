@@ -112,9 +112,9 @@ def main():
         if os.path.isdir(cand):
             bundled = cand
     os.environ.setdefault("EMBED_MODEL", bundled or "BAAI/bge-m3")
-    # 回落下载时用国内镜像 + 缓存进数据目录
+    # 模型已打进包(区域无关、离线);缓存目录中性。★不硬编码国内镜像(会坑海外用户)——
+    #   万一要回落下载,默认走 huggingface.co(海外可达);国内用户可自行设 HF_ENDPOINT=hf-mirror.com。
     os.environ.setdefault("HF_HOME", os.path.join(data, "hf"))
-    os.environ.setdefault("HF_ENDPOINT", "https://hf-mirror.com")
     os.environ.setdefault("SENTENCE_TRANSFORMERS_HOME", os.path.join(data, "hf"))
     # 本机后端只监听回环
     os.environ.setdefault("WEB_HOST", args.host)

@@ -16,6 +16,15 @@ for pkg in ("paddle", "paddlex", "paddleocr"):
     except Exception:
         pass
 
+# ★PP-StructureV3 模型打进包(区域无关、海外/国内离线开箱即用):CI 构建前下到 paddle_models/。
+#   运行时 paddle_worker 设 PADDLE_PDX_CACHE_HOME 指向包内 paddle_models,不联网。
+_pm = os.path.join(here, "paddle_models")
+if os.path.isdir(_pm):
+    for root, _, files in os.walk(_pm):
+        for f in files:
+            full = os.path.join(root, f)
+            datas.append((full, os.path.join("paddle_models", os.path.relpath(root, _pm))))
+
 # opencv(paddle 装的是 contrib 版)+ fastapi/uvicorn 栈
 try:
     binaries += collect_dynamic_libs("cv2")

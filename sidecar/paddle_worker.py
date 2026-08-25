@@ -26,10 +26,14 @@ def _cache_dir() -> str:
     return d
 
 
-# paddle 模型缓存落用户数据目录(持久,不重复下载)
-os.environ.setdefault("PADDLE_PDX_CACHE_HOME", _cache_dir())
-# 模型下载源用百度 BOS(国内可靠;默认 HF 常连不上)
-os.environ.setdefault("PADDLE_PDX_MODEL_SOURCE", "BOS")
+# paddle 模型:优先用打进包的离线模型(区域无关、海外/国内都开箱即用),否则落用户数据目录。
+_bundled_pdx = os.path.join(getattr(sys, "_MEIPASS", ""), "paddle_models") if getattr(sys, "frozen", False) else ""
+if _bundled_pdx and os.path.isdir(_bundled_pdx):
+    os.environ.setdefault("PADDLE_PDX_CACHE_HOME", _bundled_pdx)
+else:
+    os.environ.setdefault("PADDLE_PDX_CACHE_HOME", _cache_dir())
+# ★不硬编码国内 BOS 源(会坑海外微信客户)。模型已打进包→通常不下载;
+#   万一回落下载,paddlex 默认源(海外可达);国内用户可自设 PADDLE_PDX_MODEL_SOURCE=BOS。
 
 app = FastAPI(title="Compound 高精 OCR (PP-StructureV3)")
 _engine = None

@@ -35,3 +35,6 @@ sidecar/.buildvenv/
 sidecar/__pycache__/
 
 sidecar/.paddlevenv/
+
+sidecar/models/
+sidecar/paddle_models/
