@@ -179,7 +179,6 @@ function iosStageIndex(pct) {
 export default function WechatSync({ onGuide }) {
   const [rt, setRt] = useState(null)          // realtime status
   const [prog, setProg] = useState(null)      // ingest progress
-  const [toggling, setToggling] = useState(false)
   const timer = useRef(null)
 
   const refresh = () => {
@@ -191,12 +190,6 @@ export default function WechatSync({ onGuide }) {
     timer.current = setInterval(refresh, 4000)
     return () => clearInterval(timer.current)
   }, [])
-
-  const toggle = () => {
-    if (!rt) return
-    setToggling(true)
-    api.realtimeToggle(!rt.enabled).then((r) => { setRt((s) => ({ ...s, enabled: r.enabled })); setToggling(false); setTimeout(refresh, 500) }).catch(() => setToggling(false))
-  }
 
   const items = (prog && prog.items) || []
   const nowSec = Date.now() / 1000
@@ -213,9 +206,9 @@ export default function WechatSync({ onGuide }) {
   const iosStage = iosDone ? IOS_STAGES.length : iosStageIndex(iosPct)
 
   // ── 实时同步四态 ───────────────────────────────────────────────
-  const live = !!(rt && rt.enabled && rt.running && rt.fresh)
-  const waiting = !!(rt && rt.enabled && !live)
-  const mode = !rt ? 'detect' : live ? 'live' : waiting ? 'waiting' : 'off'
+  // 去掉 Compound 侧总开关(冗余):助手在跑+心跳新鲜=实时接收;否则=等待助手。用户在助手里自己启停。
+  const live = !!(rt && rt.running && rt.fresh)
+  const mode = !rt ? 'detect' : live ? 'live' : 'waiting'
   const badgeText = { detect: '检测中', live: '实时同步中', waiting: '等待客户端', off: '已关闭' }[mode]
 
   // ── 常规实时入库进度(排除 iOS 那批)───────────────────────────
@@ -261,17 +254,11 @@ export default function WechatSync({ onGuide }) {
             {mode === 'detect' && <>正在探测你电脑上的同步助手…<em>打开助手即接通</em></>}
             {mode === 'live' && <>第二大脑<b>正在实时接收</b>你的新消息{rt.last_synced ? ' · 最近 ' + rt.last_synced : ''}{rt.pending ? <em>待入库 {rt.pending} 条</em> : null}</>}
             {mode === 'waiting' && <>通道已就绪,数据在源头等待<em>去电脑打开同步助手即接通</em></>}
-            {mode === 'off' && <>实时同步已暂停 · 打开后你在手机上聊的每条都会自动进大脑</>}
           </div>
 
           <div className="wx-switch-box">
-            <label className="wx-toggle2">
-              <input type="checkbox" checked={!!(rt && rt.enabled)} disabled={toggling || !rt} onChange={toggle} />
-              <span className="wx-toggle-track"><span className="wx-toggle-knob" /></span>
-              <span className="wx-toggle-label">{rt && rt.enabled ? '同步总开关 · 已允许接收' : '同步总开关 · 已暂停'}</span>
-            </label>
             <div className="wx-switch-note">
-              在电脑上<b>打开「微信同步助手」并保持运行</b>,这里就会<b>自动接通</b> —— 几秒内徽章亮起"实时同步中",无需在网页做任何操作。这个开关是总闸,可随时暂停 / 继续接收。
+              在电脑上<b>打开「微信同步助手」并保持运行</b>,你在手机上聊的每条都会<b>自动进大脑</b> —— 几秒内徽章亮起"实时同步中",无需在网页做任何操作。要暂停就在助手里停一下。
               {mode !== 'live' && <span className="wx-switch-cta" onClick={() => onGuide && onGuide('realtime')}> 助手还没开?看怎么启动 →</span>}
             </div>
           </div>
@@ -303,7 +290,7 @@ export default function WechatSync({ onGuide }) {
             </div>
             <div className="wx-dlbox-grid">
               {SYNC_DL.map((d, i) => (
-                <a key={i} className="wx-dlbox-btn" href={'/dl/' + encodeURIComponent(d.file)} download>
+                <a key={i} className="wx-dlbox-btn" href={((typeof window !== 'undefined' && window.__COMPOUND_API_BASE__) || '') + '/dl/' + encodeURIComponent(d.file)} download>
                   <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M12 3v12m0 0 4-4m-4 4-4-4M4 19h16"/></svg>
                   <span className="wx-dlbox-l">{d.label}</span>
                   <span className="wx-dlbox-h">{d.hint}</span>

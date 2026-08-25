@@ -1330,17 +1330,7 @@ def wechat_ingest(payload: dict = Body(...), authorization: str = Header(None)):
     """实时微信入库:一批消息 → msg_id 幂等去重 → 按会话追加到文档(pages,自动进FTS)。
     消费器把 handoff 的 NDJSON 批量推这里;向量嵌入另由后台增量补。"""
     me = _me(authorization)
-    # ★同步总开关门控(修:原来 handoff 路径不查开关→开关形同虚设)。
-    #   关(或从未开)→ 423;消费器 _post 遇非2xx 抛异常→不推进游标→数据留 handoff 源头,开了再续。
-    _c0 = _con()
-    try:
-        _row = _c0.execute("SELECT enabled FROM realtime_state WHERE owner=?", (me,)).fetchone()
-    except Exception:
-        _row = None
-    finally:
-        _c0.close()
-    if not (_row and _row[0]):
-        raise HTTPException(status_code=423, detail="微信同步总开关未开启,已暂停接收")
+    # 微信助手开着(用户在助手里自己控制启停)= 数据就进;不再设 Compound 侧总开关(已去除,冗余)。
     msgs = payload.get("messages") or []
     con = _con()
     try:
