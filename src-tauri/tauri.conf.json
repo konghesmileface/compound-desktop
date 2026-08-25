@@ -11,19 +11,7 @@
     "devUrl": "http://localhost:5173"
   },
   "app": {
-    "windows": [
-      {
-        "label": "main",
-        "title": "第二大脑",
-        "width": 1440,
-        "height": 900,
-        "minWidth": 1080,
-        "minHeight": 720,
-        "resizable": true,
-        "fullscreen": false,
-        "backgroundColor": [15, 16, 20, 255]
-      }
-    ],
+    "windows": [],
     "security": {
       "csp": "default-src 'self'; connect-src 'self' http://127.0.0.1:* http://localhost:* https:; img-src 'self' data: blob: https: http://127.0.0.1:* http://localhost:*; style-src 'self' 'unsafe-inline'; script-src 'self' 'wasm-unsafe-eval'; worker-src 'self' blob:; font-src 'self' data: https:; media-src 'self' data: blob: https: http://127.0.0.1:* http://localhost:*; frame-src 'self' http://127.0.0.1:* http://localhost:*;",
       "dangerousDisableAssetCspModification": ["style-src"]
@@ -42,8 +30,11 @@
       "icons/icon.icns",
       "icons/icon.ico"
     ],
+    "resources": {
+      "../sidecar/dist/compound-sidecar": "compound-sidecar"
+    },
     "macOS": {
-      "hardenedRuntime": true
+      "hardenedRuntime": false
     }
   }
 }

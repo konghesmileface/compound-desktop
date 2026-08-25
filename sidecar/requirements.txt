@@ -1,0 +1,26 @@
+# 第二大脑 sidecar 依赖(钉死互相兼容的版本;本机与 CI 共用)。
+# ★torch==2.2.2 = 最后一个支持 macOS Intel(x86_64)的版本;transformers<4.50 才兼容 torch2.2;
+#   sentence-transformers==3.4.1 兼容 transformers<4.50(kb 实战验证组合)。
+# ★opencv 只用 headless(免 libGL);numpy<2(torch2.2/sklearn 兼容)。
+fastapi
+uvicorn
+python-multipart
+numpy<2
+pymupdf
+python-docx
+python-pptx
+openpyxl
+Pillow
+jieba
+scikit-learn
+sentence-transformers==3.4.1
+transformers<4.50
+torch==2.2.2
+rapidocr_onnxruntime
+onnxruntime
+opencv-python-headless==4.10.0.84
+requests
+certifi
+beautifulsoup4
+mobi
+yt-dlp

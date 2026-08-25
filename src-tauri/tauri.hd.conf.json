@@ -1,0 +1,10 @@
+{
+  "productName": "Compound 高精版",
+  "identifier": "com.compoundtome.desktop.hd",
+  "bundle": {
+    "resources": {
+      "../sidecar/dist/compound-sidecar": "compound-sidecar",
+      "../sidecar/dist/compound-paddle": "compound-paddle"
+    }
+  }
+}

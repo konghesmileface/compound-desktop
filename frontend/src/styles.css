@@ -3878,3 +3878,8 @@ button.oc-node { background: none; border: none; padding: 0; margin: 0; cursor: 
 .ms-order:hover .ms-o-del { opacity: 1; }
 .ms-o-del:hover { color: var(--accent-2); background: rgba(251,113,133,0.14); opacity: 1; }
 .ms-o-del svg { width: 14px; height: 14px; }
+
+/* 客户端登录/注册切换链接 */
+.lp-auth-switch { text-align: center; margin-top: 14px; font-size: 13px; color: #7a8290; }
+.lp-auth-switch a { color: var(--accent); cursor: pointer; font-weight: 600; }
+.lp-auth-switch a:hover { text-decoration: underline; }

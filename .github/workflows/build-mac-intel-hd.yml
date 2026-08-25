@@ -1,0 +1,61 @@
+name: Build Mac Intel 高精版
+
+# 高精版(rapidocr + paddle PP-StructureV3):
+#  - 主 sidecar(torch 环境)+ paddle worker(独立 paddle 环境,进程隔离避依赖冲突)
+#  - Tauri 用 tauri.hd.conf.json 把两个二进制都内嵌
+# ★必须 macos-13(Intel 原生)。paddle 打包较硬,单独 workflow 便于迭代。
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: macos-13
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-apple-darwin
+      - name: Rust cache
+        uses: swatinem/rust-cache@v2
+        with:
+          workspaces: './src-tauri -> target'
+          cache-on-failure: true
+
+      - name: 打主 sidecar(torch 环境)
+        working-directory: sidecar
+        run: |
+          python -m venv .venv-base
+          .venv-base/bin/pip install --upgrade pip
+          .venv-base/bin/pip install -r requirements.txt pyinstaller
+          .venv-base/bin/pyinstaller --noconfirm compound-sidecar.spec
+          ./dist/compound-sidecar/compound-sidecar --selftest
+
+      - name: 打 paddle worker(独立 paddle 环境)
+        working-directory: sidecar
+        run: |
+          python -m venv .venv-paddle
+          .venv-paddle/bin/pip install --upgrade pip
+          .venv-paddle/bin/pip install "paddlepaddle==3.0.0" "paddleocr" "paddlex[ocr]" \
+            fastapi uvicorn python-multipart Pillow pyinstaller
+          .venv-paddle/bin/pyinstaller --noconfirm compound-paddle.spec
+          test -x dist/compound-paddle/compound-paddle && echo "✓ paddle worker 冻结成功"
+
+      - name: Tauri 打高精版 .app/.dmg(内嵌主+paddle 两个二进制)
+        run: |
+          npm install
+          npm run tauri build -- --config src-tauri/tauri.hd.conf.json --target x86_64-apple-darwin
+
+      - name: 上传产物
+        uses: actions/upload-artifact@v4
+        with:
+          name: compound-mac-intel-hd
+          path: |
+            src-tauri/target/x86_64-apple-darwin/release/bundle/dmg/*.dmg
+          if-no-files-found: warn

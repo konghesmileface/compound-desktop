@@ -538,6 +538,9 @@ export default function Landing({ onAuthed }) {
   const regPhoneMask = regPhone && regPhone.length === 11 ? regPhone.slice(0, 3) + '****' + regPhone.slice(7) : regPhone
   // 隐藏登录入口:网址带 ?login 才显示登录(普通访客只能注册)。用精确参数判定,避免 ?relogin/?xlogin 子串误命中
   const showLogin = typeof window !== 'undefined' && (new URLSearchParams(window.location.search).has('login') || window.location.hash === '#login')
+  // 客户端(Tauri 壳注入了本机 API 地址):登录+注册都要有(老用户登录/新用户注册);web 版保持只注册。
+  const isClient = typeof window !== 'undefined' && !!window.__COMPOUND_API_BASE__
+  const [authTab, setAuthTab] = useState(showLogin || isClient ? 'login' : 'register')
   const toDownload = () => document.getElementById('lp-download')?.scrollIntoView({ behavior: 'smooth', block: 'center' })
   return (
     <div className="lp">
@@ -584,7 +587,7 @@ export default function Landing({ onAuthed }) {
             </div>
           </div>
           <div id="lp-login" className="lp-login2 glass lp-up" style={{ animationDelay: '.32s' }}>
-            {registered ? (
+            {registered && !isClient ? (
               <div className="lp-reg-done">
                 <div className="lp-reg-check"><svg viewBox="0 0 24 24"><path d="m5 12.5 4.5 4.5L19 7" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" /></svg></div>
                 <h2>注册成功{regNick ? ',' + regNick : ''}!</h2>
@@ -596,16 +599,17 @@ export default function Landing({ onAuthed }) {
                 <button className="btn btn-primary lp-reg-dl" onClick={toDownload}><Ico.down />下载客户端</button>
                 <p className="lp-reg-note">手机 App 用来随手拍照、录音、记灵感,同样在设置里登录同一个手机号即可。</p>
               </div>
-            ) : showLogin ? (
+            ) : (authTab === 'login') ? (
               <>
                 <div className="lp-login2-head">
                   <Logo />
                   <div>
                     <h2>登录 Compound</h2>
-                    <p>内部入口 · 直接进入体验</p>
+                    <p>{isClient ? '用注册的手机号登录,进入你的第二大脑' : '内部入口 · 直接进入体验'}</p>
                   </div>
                 </div>
                 <Form onAuthed={onAuthed} />
+                {isClient && <p className="lp-auth-switch">还没有账号?<a onClick={() => setAuthTab('register')}>注册一个</a></p>}
               </>
             ) : (
               <>
@@ -613,10 +617,11 @@ export default function Landing({ onAuthed }) {
                   <Logo />
                   <div>
                     <h2>注册 Compound</h2>
-                    <p>一个手机号就能注册 · 到客户端里开始使用</p>
+                    <p>一个手机号就能注册 · 立即开始使用</p>
                   </div>
                 </div>
-                <Form registerOnly onRegistered={(u) => { setRegNick(u.nickname || ''); setRegPhone(u.username || ''); setRegistered(true); try { sessionStorage.setItem('reg_guide', JSON.stringify({ nick: u.nickname || '', phone: u.username || '' })) } catch { /* noop */ } }} />
+                <Form registerOnly onRegistered={(u) => { setRegNick(u.nickname || ''); setRegPhone(u.username || ''); if (isClient) { setAuthTab('login') } else { setRegistered(true) } try { sessionStorage.setItem('reg_guide', JSON.stringify({ nick: u.nickname || '', phone: u.username || '' })) } catch { /* noop */ } }} />
+                {isClient && <p className="lp-auth-switch">已有账号?<a onClick={() => setAuthTab('login')}>去登录</a></p>}
               </>
             )}
           </div>

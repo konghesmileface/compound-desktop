@@ -27,3 +27,11 @@ alipay*.env
 wxkeys/
 accounts.db
 library.db
+
+# sidecar 构建产物(勿进库)
+sidecar/dist/
+sidecar/build/
+sidecar/.buildvenv/
+sidecar/__pycache__/
+
+sidecar/.paddlevenv/

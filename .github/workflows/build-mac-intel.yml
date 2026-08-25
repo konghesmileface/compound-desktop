@@ -1,30 +1,33 @@
-name: Build Desktop (macOS Intel)
+name: Build Mac Intel 轻量版
 
-# 里程碑1:Tauri 壳 + 网页UI,在 macos-13(Intel x86_64)runner 出 .app/.dmg(未签名)。
+# 轻量版(rapidocr):PyInstaller 打后端 sidecar + Tauri 打 .app/.dmg。
+# ★必须 macos-13(Intel 原生):Python sidecar 不能交叉编译。
 on:
   workflow_dispatch:
   push:
     branches: [main]
     paths:
+      - 'sidecar/**'
       - 'src-tauri/**'
       - 'frontend/**'
-      - 'package.json'
       - '.github/workflows/build-mac-intel.yml'
 
 jobs:
   build:
-    runs-on: macos-latest        # ★ arm runner(供给充足,不排队);交叉编译到 x86_64 出 Intel .app
-    timeout-minutes: 60
+    runs-on: macos-13
+    timeout-minutes: 90
     steps:
       - uses: actions/checkout@v4
 
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+
+      - uses: actions/setup-node@v4
         with:
           node-version: '22'
 
-      - name: Install Rust stable (x86_64)
-        uses: dtolnay/rust-toolchain@stable
+      - uses: dtolnay/rust-toolchain@stable
         with:
           targets: x86_64-apple-darwin
 
@@ -34,21 +37,27 @@ jobs:
           workspaces: './src-tauri -> target'
           cache-on-failure: true
 
-      - name: Install root deps (tauri cli)
-        run: npm install
+      - name: 打后端 sidecar(PyInstaller)
+        working-directory: sidecar
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt pyinstaller
+          pyinstaller --noconfirm compound-sidecar.spec
+          echo "=== 冻结包自检:重依赖 import ==="
+          ./dist/compound-sidecar/compound-sidecar --selftest
+          echo "=== /health 自检 ==="
+          ./dist/compound-sidecar/compound-sidecar --host 127.0.0.1 --port 8299 & sleep 20
+          curl -sf http://127.0.0.1:8299/health && echo " OK" || (echo "FAIL: sidecar 起不来"; exit 1)
 
-      - name: Build Tauri app (unsigned)
-        uses: tauri-apps/tauri-action@v0
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          args: --target x86_64-apple-darwin
+      - name: Tauri 打 .app/.dmg(内嵌 sidecar)
+        run: |
+          npm install
+          npm run tauri build -- --target x86_64-apple-darwin
 
-      - name: Upload artifacts
+      - name: 上传产物
         uses: actions/upload-artifact@v4
         with:
-          name: compound-macos-intel
+          name: compound-mac-intel-lite
           path: |
-            src-tauri/target/x86_64-apple-darwin/release/bundle/macos/*.app
             src-tauri/target/x86_64-apple-darwin/release/bundle/dmg/*.dmg
           if-no-files-found: warn

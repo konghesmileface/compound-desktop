@@ -1,0 +1,22 @@
+<svg width="1024" height="1024" viewBox="0 0 1024 1024" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1024" y2="1024" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#12142a"/><stop offset="1" stop-color="#0a0c18"/>
+    </linearGradient>
+    <linearGradient id="lgc" x1="4.5" y1="20" x2="19" y2="4.5" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#5b6ef5"/><stop offset="0.52" stop-color="#41c6ef"/><stop offset="1" stop-color="#8fe9ff"/>
+    </linearGradient>
+    <radialGradient id="lgdot" cx="40%" cy="36%" r="70%">
+      <stop offset="0" stop-color="#fff4d6"/><stop offset="0.4" stop-color="#fbbf24"/><stop offset="1" stop-color="#f59e0b"/>
+    </radialGradient>
+  </defs>
+  <!-- 深色圆角底 -->
+  <rect x="0" y="0" width="1024" height="1024" rx="228" fill="url(#bg)"/>
+  <!-- 品牌标(0-24 坐标系放大居中):复利 C 弧 + 金色彗头 -->
+  <g transform="translate(200,200) scale(26)">
+    <path d="M16.4 17.8 A 7.7 7.7 0 1 1 17.6 7.2" fill="none" stroke="url(#lgc)" stroke-width="3.7" stroke-linecap="round"/>
+    <circle cx="17.6" cy="7.2" r="3.3" fill="#fbbf24" opacity="0.2"/>
+    <circle cx="17.6" cy="7.2" r="2.55" fill="url(#lgdot)"/>
+    <circle cx="16.8" cy="6.5" r="0.75" fill="#fffdf5" opacity="0.72"/>
+  </g>
+</svg>
