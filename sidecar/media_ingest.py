@@ -172,7 +172,7 @@ def video_keyframes_ocr(src, tmpdir, max_frames=40):
     if not frames:
         return out
     try:
-        from rapidocr_onnxruntime import RapidOCR  # noqa: F401
+        from rapidocr import RapidOCR  # noqa: F401
         cap = len(frames)
     except ImportError:
         cap = min(len(frames), int(os.environ.get("VIDEO_OCR_MAX_FRAMES", "3")))  # 大模型OCR慢, 限帧
@@ -289,7 +289,7 @@ def _clean_ocr_lines(lines):
 def _ocr_image_file(path):
     """图片OCR: rapidocr可用则用(快), 否则走本机8100百度OCR服务(质量高)。返回清洗后的行列表。"""
     try:
-        from rapidocr_onnxruntime import RapidOCR
+        from rapidocr import RapidOCR
         res, _ = RapidOCR()(path)
         return _clean_ocr_lines([x[1] for x in (res or [])])
     except ImportError:

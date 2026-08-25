@@ -61,7 +61,7 @@ def main():
 
     if args.selftest:
         ok = True
-        for mod in ("torch", "sentence_transformers", "rapidocr_onnxruntime",
+        for mod in ("torch", "sentence_transformers", "rapidocr",
                     "sklearn.cluster", "sklearn.neighbors", "fitz", "docx",
                     "pptx", "openpyxl", "jieba", "cv2", "onnxruntime", "numpy"):
             try:
@@ -76,8 +76,19 @@ def main():
     data = _data_dir()
     # 后端数据/库位置(ingest.py 读 BRAIN_DATA → library.db 落这里)
     os.environ.setdefault("BRAIN_DATA", data)
-    # 嵌入模型:与 106 一致用 bge-m3;缓存进数据目录;国内镜像。首次语义检索按需下载。
-    os.environ.setdefault("EMBED_MODEL", "BAAI/bge-m3")
+    # 嵌入模型 bge-m3:优先用打进包的离线模型(_internal/models/bge-m3);没打进才回落下载。
+    bundled = None
+    if getattr(sys, "frozen", False):
+        cand = os.path.join(getattr(sys, "_MEIPASS", ""), "models", "bge-m3")
+        if os.path.isdir(cand):
+            bundled = cand
+    if not bundled:
+        here0 = os.path.dirname(os.path.abspath(__file__))
+        cand = os.path.join(here0, "models", "bge-m3")
+        if os.path.isdir(cand):
+            bundled = cand
+    os.environ.setdefault("EMBED_MODEL", bundled or "BAAI/bge-m3")
+    # 回落下载时用国内镜像 + 缓存进数据目录
     os.environ.setdefault("HF_HOME", os.path.join(data, "hf"))
     os.environ.setdefault("HF_ENDPOINT", "https://hf-mirror.com")
     os.environ.setdefault("SENTENCE_TRANSFORMERS_HOME", os.path.join(data, "hf"))

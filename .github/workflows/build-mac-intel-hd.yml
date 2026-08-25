@@ -28,7 +28,13 @@ jobs:
           workspaces: './src-tauri -> target'
           cache-on-failure: true
 
-      - name: 打主 sidecar(torch 环境)
+      - name: 下 bge-m3 嵌入模型(打进包)
+        working-directory: sidecar
+        run: |
+          python -m pip install --upgrade pip huggingface_hub
+          HF_ENDPOINT=https://hf-mirror.com python -c "from huggingface_hub import snapshot_download; snapshot_download('BAAI/bge-m3', local_dir='models/bge-m3', ignore_patterns=['onnx/*','*.onnx','colbert*','*.msgpack','*.h5','imgs/*'])"
+
+      - name: 打主 sidecar(torch 环境,内含 rapidocr v6 + bge-m3)
         working-directory: sidecar
         run: |
           python -m venv .venv-base

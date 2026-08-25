@@ -56,7 +56,11 @@ class RapidOCRBackend(BaseBackend):
 
     def _engine_lazy(self):
         if self._engine is None:
-            from rapidocr_onnxruntime import RapidOCR
+            # ★方案要 v6:用新 rapidocr 包(>=2,PP-OCRv5/v6 onnx);旧 rapidocr_onnxruntime 是 PP-OCRv4。
+            try:
+                from rapidocr import RapidOCR
+            except ImportError:
+                from rapidocr_onnxruntime import RapidOCR  # 兜底(旧包)
             self._engine = RapidOCR()
         return self._engine
 
@@ -65,14 +69,17 @@ class RapidOCRBackend(BaseBackend):
         from PIL import Image
 
         png = render_png(page, render_dpi)
-        img = Image.open(io.BytesIO(png)).convert("RGB")
-        arr = np.array(img)
-        result, _ = self._engine_lazy()(arr)
-        if not result:
+        arr = np.array(Image.open(io.BytesIO(png)).convert("RGB"))
+        res = self._engine_lazy()(arr)
+        # 新 rapidocr:结果对象含 .txts;旧包:返回 (result_list, elapse)
+        txts = None
+        if hasattr(res, "txts"):
+            txts = list(res.txts) if res.txts else []
+        elif isinstance(res, tuple) and res and res[0]:
+            txts = [item[1] for item in res[0]]
+        if not txts:
             return "", "ocr:rapidocr(empty)"
-        # result: [[points, text, score], ...],按识别顺序拼接
-        lines = [item[1] for item in result]
-        return "\n".join(lines), "ocr:rapidocr"
+        return "\n".join(txts), "ocr:rapidocr"
 
 
 class PaddleBackend(BaseBackend):

@@ -16,7 +16,7 @@ scikit-learn
 sentence-transformers==3.4.1
 transformers<4.50
 torch==2.2.2
-rapidocr_onnxruntime
+rapidocr
 onnxruntime
 opencv-python-headless==4.10.0.84
 requests

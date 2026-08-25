@@ -42,19 +42,13 @@ def _engine_lazy():
         with _lock:
             if _engine is None:
                 from paddleocr import PPStructureV3
-                # ★用 mobile 轻量模型:server 大模型在 8GB 机 OOM;mobile 仍比 rapidocr 新/准,
-                #   加版面结构。表格识别默认关(表格模型重,可 PADDLE_TABLE=1 打开,需 ≥16GB)。
-                kw = dict(
+                # ★完整高精 PP-StructureV3(方案第二节):识别+表格SLANeXt+公式PP-FormulaNet+版面 全开。
+                #   建议 16G 内存(方案已注明)。仅方向分类/去扭曲/图表识别这几个预处理关掉(不在方案清单、省资源)。
+                _engine = PPStructureV3(
                     use_doc_orientation_classify=False,
                     use_doc_unwarping=False,
                     use_chart_recognition=False,
-                    use_formula_recognition=False,
-                    text_detection_model_name="PP-OCRv5_mobile_det",
-                    text_recognition_model_name="PP-OCRv5_mobile_rec",
                 )
-                if os.environ.get("PADDLE_TABLE") != "1":
-                    kw["use_table_recognition"] = False
-                _engine = PPStructureV3(**kw)
     return _engine
 
 
