@@ -1851,6 +1851,9 @@ import hmac as _hmac, hashlib as _hl, base64 as _b64, time as _time
 import urllib.request as _urlreq, urllib.error as _urlerr
 # ===== 账号中心化(2026-08-07):账号/身份/短信全在云端 106.189,web 不持 secret =====
 _CLOUD = os.environ.get("CLOUD_URL", "http://106.14.189.104:8000")
+# ★绕过本机代理(clash 等)直连云账号服:否则装了代理的用户(国内很多),
+#   登录/账号/支付/支付宝 全部转发失败(106 是内地IP,走 clash 连不上)。
+_cloud_opener = _urlreq.build_opener(_urlreq.ProxyHandler({}))
 _tok_cache = {}  # token -> (ident, expire_ts):验证走云,本地缓存2分钟减少往返
 def _cloud_post(path, payload, authorization=None):
     """转发到云账号服务,返回其响应(补 username 字段兼容前端)。"""
@@ -1858,7 +1861,7 @@ def _cloud_post(path, payload, authorization=None):
     if authorization:
         _h["Authorization"] = authorization
     try:
-        r = _urlreq.urlopen(_urlreq.Request(_CLOUD + path, json.dumps(payload).encode(), _h), timeout=15)
+        r = _cloud_opener.open(_urlreq.Request(_CLOUD + path, json.dumps(payload).encode(), _h), timeout=15)
         d = json.loads(r.read())
         if "ident" in d and "username" not in d:
             d["username"] = d["ident"]
@@ -1940,7 +1943,7 @@ def _account_raw(authorization, fresh=False):
     if hit and hit[1] > now and not fresh:
         return hit[0]
     try:
-        r = _urlreq.urlopen(_urlreq.Request(_CLOUD + "/account/me", headers={"Authorization": "Bearer " + tok}), timeout=10)
+        r = _cloud_opener.open(_urlreq.Request(_CLOUD + "/account/me", headers={"Authorization": "Bearer " + tok}), timeout=10)
         acc = json.loads(r.read())
     except _urlerr.HTTPError as e:
         if e.code == 401:
@@ -2912,14 +2915,14 @@ def pwd_login(payload: dict = Body(...)):
 def alipay_enabled():
     """支付宝扫码登录是否可用(云端没配 alipay.env 就 false,前端隐藏按钮)。"""
     try:
-        r = _urlreq.urlopen(_CLOUD + "/account/alipay/enabled", timeout=8)
+        r = _cloud_opener.open(_CLOUD + "/account/alipay/enabled", timeout=8)
         return json.loads(r.read().decode())
     except Exception:
         return {"enabled": False}
 
 @app.get("/api/auth/alipay/login_url")
 def alipay_login_url():
-    r = _urlreq.urlopen(_CLOUD + "/account/alipay/login_url", timeout=8)
+    r = _cloud_opener.open(_CLOUD + "/account/alipay/login_url", timeout=8)
     return json.loads(r.read().decode())
 
 @app.post("/api/auth/alipay/bind")
