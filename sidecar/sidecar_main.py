@@ -95,6 +95,23 @@ def main():
         print("SELFTEST", "PASS" if ok else "FAIL")
         sys.exit(0 if ok else 1)
 
+    # ★★CA 证书(所有 https 校验的根):冻结包必须指向打进包的 cacert.pem,否则 DeepSeek/云端/下载
+    #   全报证书错(self signed / verify failed)。SSL_CERT_FILE 一设,Python ssl 全局默认就用它。
+    try:
+        _base = getattr(sys, "_MEIPASS", os.path.dirname(os.path.abspath(__file__)))
+        _ca = os.path.join(_base, "certifi", "cacert.pem")
+        if not os.path.exists(_ca):
+            import certifi as _cf
+            _ca = _cf.where()
+        if os.path.exists(_ca):
+            os.environ["SSL_CERT_FILE"] = _ca
+            os.environ["REQUESTS_CA_BUNDLE"] = _ca
+            print(f"[ca] SSL_CERT_FILE={_ca}")
+        else:
+            print("[ca] 警告:找不到 cacert.pem,https 校验可能失败")
+    except Exception as _e:
+        print(f"[ca] CA 设置异常: {_e}")
+
     data = _data_dir()
     # 后端数据/库位置(ingest.py 读 BRAIN_DATA → library.db 落这里)
     os.environ.setdefault("BRAIN_DATA", data)

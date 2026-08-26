@@ -20,6 +20,7 @@ rapidocr
 # ★钉 1.19.2:1.20.0 起 onnxruntime macOS wheel 跳到 minos 13.0,老 Intel Mac(用户 macOS 12.7)
 #   加载 .so 报 Symbol not found(__ZNSt3__18to_charsEPcS0_d)→本地OCR全废。1.19.2=macosx_11_0,兼容 11+。
 onnxruntime==1.19.2
+certifi   # ★显式钉:冻结包必须带 cacert.pem,否则所有 https 证书校验失败(DeepSeek/云端连不通)
 opencv-python-headless==4.10.0.84
 requests
 certifi

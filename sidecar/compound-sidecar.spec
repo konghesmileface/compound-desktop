@@ -30,6 +30,13 @@ for pkg in ("sentence_transformers", "transformers", "tokenizers",
         datas += collect_data_files(pkg)
     except Exception:
         pass
+# ★★强制打进 certifi 的 cacert.pem 到已知路径(certifi/cacert.pem)。collect_data_files 有时收不到,
+#   冻结包无 CA → 所有 https 证书校验失败(DeepSeek/云端/下载全连不通)。sidecar_main 启动设 SSL_CERT_FILE 指向它。
+try:
+    import certifi as _certifi_mod
+    datas.append((_certifi_mod.where(), "certifi"))
+except Exception:
+    pass
 
 # ★bge-m3 嵌入模型(2.3G):CI 在构建前下到 models/bge-m3,打进包→离线开箱即用。
 #   没下(本机快速构建)则跳过,运行时回落 hf-mirror 下载。
