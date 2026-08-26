@@ -21,6 +21,10 @@ rapidocr
 #   加载 .so 报 Symbol not found(__ZNSt3__18to_charsEPcS0_d)→本地OCR全废。1.19.2=macosx_11_0,兼容 11+。
 onnxruntime==1.19.2
 certifi   # ★显式钉:冻结包必须带 cacert.pem,否则所有 https 证书校验失败(DeepSeek/云端连不通)
+# ★★钉 scipy<1.12:scipy 1.12 起改用 Apple Accelerate 新 LAPACK(_caxpy$NEWLAPACK 等符号,
+#   macOS 13.3+ 才有),用户 macOS 12.7 加载 scipy/linalg/_fblas.so 崩→transformers/sentence_transformers
+#   /bge-m3 全崩→嵌入0%星图空。1.11.4 用自带 OpenBLAS(macosx_10_9,兼容老 macOS)。CI在macOS14跑不暴露此坑。
+scipy==1.11.4
 opencv-python-headless==4.10.0.84
 requests
 certifi
