@@ -156,7 +156,9 @@ export function Form({ onAuthed, onClose, registerOnly, onRegistered }) {
       )}
       {mode === 'register' && <input className="auth-in" placeholder="自我介绍(选填,想写多点也行)" maxLength={200} value={bio} onChange={(e) => setBio(e.target.value)} />}
       <button className="btn btn-primary" style={{ width: '100%', marginTop: 4 }} disabled={busy} onClick={submit}>{busy ? '…' : (mode === 'register' ? (registerOnly ? '注册,开启我的第二大脑' : '注册') : (mode === 'pwd' && forgot ? '重置密码并登录' : '登录'))}</button>
-      {!registerOnly && <AlipayButton />}
+      {/* 支付宝扫码登录暂时隐藏(用户令):客户端需 ticket 轮询流(云端+客户端两头),待单独实现。
+          现用手机验证码/密码登录。要恢复:把下行的 false && 去掉。 */}
+      {false && !registerOnly && <AlipayButton />}
       {mode === 'pwd' && (
         <div style={{ marginTop: 10, textAlign: 'right' }}>
           <button type="button" style={{ background: 'none', border: 'none', color: '#67a6c9', fontSize: 12.5, cursor: 'pointer' }} onClick={() => setForgot((v) => !v)}>{forgot ? '← 返回密码登录' : '忘记密码?用验证码重置'}</button>

@@ -79,7 +79,18 @@ def chat(messages, temperature: float = 0.4, max_tokens: int = 2000, model: str 
     headers = {"Content-Type": "application/json"}
     if key:
         headers["Authorization"] = "Bearer " + key
-    opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
+    # 以客户网络为主:直连(ProxyHandler({})=不塞任何代理),用 certifi 证书库正常校验
+    # (冻结包里系统 CA 路径可能是空的,不显式给 certifi 会连合法证书都验不过)。
+    # ★绝不做免校验回落:若客户本地代理/加速器拦截 TLS 导致校验失败,如实报错,由客户处理。
+    import ssl as _ssl
+    try:
+        import certifi as _certifi
+        _ctx = _ssl.create_default_context(cafile=_certifi.where())
+    except Exception:
+        _ctx = _ssl.create_default_context()
+    opener = urllib.request.build_opener(
+        urllib.request.ProxyHandler({}),
+        urllib.request.HTTPSHandler(context=_ctx))
     last_err = "empty"
     for attempt in range(3):
         try:
@@ -114,7 +125,25 @@ def chat(messages, temperature: float = 0.4, max_tokens: int = 2000, model: str 
         except Exception as e:
             last_err = e
         time.sleep(0.6 * (attempt + 1))
-    raise RuntimeError(f"AI 返回为空或失败(已重试3次): {last_err}")
+    raise RuntimeError(_friendly_err(last_err))
+
+
+def _friendly_err(err) -> str:
+    """把技术错误翻成客户看得懂的人话(绝不把 Python/SSL 原文丢给用户)。"""
+    s = str(err); low = s.lower()
+    if "certificate_verify_failed" in low or "self signed certificate" in low or "ssl" in low:
+        return ("连不上 AI 服务:你电脑上的代理 / 加速器(如 Clash、云翼加速)拦截了到 AI 的加密连接。"
+                "请先关闭代理 / 加速器,或把 api.deepseek.com 设为直连,再点「测试连通」。")
+    if "timed out" in low or "timeout" in low:
+        return "连接 AI 服务超时。请检查网络是否正常,或稍后再试。"
+    if any(k in low for k in ("connection refused", "getaddrinfo", "name or service",
+                              "failed to establish", "urlopen error", "network is unreachable")):
+        return "连不上 AI 服务。请确认你的网络能正常上网、能访问 AI 服务地址(公司网 / 校园网可能屏蔽),再试。"
+    if "401" in s or "403" in s or "unauthorized" in low or ("invalid" in low and "key" in low):
+        return "AI key 无效或没有权限。请到「设置」检查 key 是否填对、账户是否还有余额。"
+    if "空返回" in s or "empty" in low or "max_tokens" in low:
+        return "AI 暂时没返回内容,请稍后重试;若一直这样,换一个模型名再试。"
+    return "AI 连接失败,请检查网络和 key 后重试。"
 
 
 def test_key() -> dict:

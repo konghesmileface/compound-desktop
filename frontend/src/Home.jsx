@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react'
 import { createPortal } from 'react-dom'
 import { api } from './api'
 import { IconSearch, IconClose } from './icons'
-import { toast, confirmDialog, Thinking } from './ui'
+import { toast, confirmDialog, Thinking, Empty } from './ui'
 import { renderRich } from './AskDrawer'
 import { MoodIcon, MOOD_META } from './MoodIcons'
 
@@ -382,6 +382,15 @@ export default function Home({ onOpen, onUnread }) {
         {todayFeed === null && (
           <div className="today-sec">
             <Thinking phases={['正在跨知识库主动发现…', '关联你的目标与历史…', '组织今日要点…']} hint="第二大脑在通读你的全部资料,稍等片刻" />
+          </div>
+        )}
+
+        {todayFeed && todayFeed.length === 0 && (
+          <div className="today-sec">
+            <Empty
+              icon={<IconSearch />}
+              title="还没有可主动推给你的发现"
+              sub="第二大脑正在通读你的资料并做语义分析(右下角「分析中」),完成后会主动把相关历史/线索推到这里。你也可以上面新建一张目标 / 日记卡片,或去「入库」喂进更多资料。" />
           </div>
         )}
 

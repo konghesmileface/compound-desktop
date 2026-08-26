@@ -1444,11 +1444,21 @@ def _handoff_watch_loop():
                                     pass
                     except Exception:
                         pass
+                # ★助手活性判定:助手运行时每秒刷新 ~/.wxsync/state.json;关掉就不再刷。
+                #   只有 state.json 15s 内更新过=助手在跑→才心跳(running=1)→UI"实时同步中";
+                #   关了助手→不心跳→last_beat_ts 变旧→前端 fresh=false→回落"等待客户端"。诚实反映。
+                alive = False
+                try:
+                    _sj = os.path.join(os.path.expanduser("~"), ".wxsync", "state.json")
+                    alive = os.path.exists(_sj) and (_time.time() - os.path.getmtime(_sj) < 15)
+                except Exception:
+                    alive = False
                 con = _con()
                 try:
                     if batch:
-                        _ingest_wechat_msgs(con, me, batch)
-                    _handoff_beat(con, me)   # 有无新消息都心跳(保持'实时同步中')
+                        _ingest_wechat_msgs(con, me, batch)  # 入库总做(读到新数据就存,与徽章无关)
+                    if alive:
+                        _handoff_beat(con, me)               # 只有助手在跑才亮"实时同步中"
                     con.commit()
                 except Exception:
                     pass

@@ -8,14 +8,15 @@ export const SYNC_DL = [
   { label: 'Mac · Intel 芯片', file: '微信同步助手-mac-Intel.dmg', hint: '较早的 Mac(约2020年前)' },
   { label: 'Mac · Apple 芯片', file: '微信同步助手-mac-arm64.dmg', hint: 'M1 / M2 / M3 / M4' },
 ]
-// 助手安装包放云端下载中心(备案后换 https 域名)。客户端 webview 里直接点会跳 404 页,
-// 故在系统默认浏览器打开(Tauri open_external 命令);网页版则普通链接同源下发。
-const SYNC_DL_BASE = 'http://106.14.189.104:8200/dl/'
-export function syncHref(file) { return SYNC_DL_BASE + encodeURIComponent(file) }
+// 助手安装包=打进包本地发(sidecar /dl,离线、区域无关,不连云端)。客户端 base=注入的本机
+// sidecar 端口;网页版 base='' 同源(106 的 /dl)。客户端 webview 里 target=_blank 打不开外链,
+// 故走 Tauri open_external 用系统浏览器打开本地 URL 触发下载。
+const DL_BASE = ((typeof window !== 'undefined' && window.__COMPOUND_API_BASE__) || '') + '/dl/'
+export function syncHref(file) { return DL_BASE + encodeURIComponent(file) }
 export function onSyncDownload(e, file) {
   if (typeof window !== 'undefined' && window.__TAURI__ && window.__TAURI__.core) {
     e.preventDefault()
-    window.__TAURI__.core.invoke('open_external', { url: SYNC_DL_BASE + encodeURIComponent(file) })
+    window.__TAURI__.core.invoke('open_external', { url: DL_BASE + encodeURIComponent(file) })
   }
 }
 // tile:false 的不在「更多数据来源」网格里露出(只从微信同步卡的按钮打开)。
