@@ -10,6 +10,10 @@ here = os.path.abspath(".")
 
 datas = []
 binaries = []
+# ★全 schema(客户端启动建全 106 的全部业务表,避免空DB逐个撞 no such table/column)
+_sf = os.path.join(here, "schema_full.sql")
+if os.path.isfile(_sf):
+    datas.append((_sf, "."))
 # ★opencv-python-headless:collect_submodules('cv2') 会在 cv2.gapi 崩(AttributeError),
 #   改为显式收 cv2 的动态库 + 数据(.so + config),并作为 plain hidden import,交给内置 hook 处理其余。
 try:

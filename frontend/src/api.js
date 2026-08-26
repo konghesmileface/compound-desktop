@@ -74,6 +74,7 @@ export const api = {
   panorama: () => fetch('/api/panorama', { headers: authHeaders() }).then(j),
   checkup: () => fetch('/api/checkup', { headers: authHeaders() }).then(j),
   draftReply: (contact, incoming) => fetch('/api/draft_reply', { method: 'POST', headers: { 'Content-Type': 'application/json', ...authHeaders() }, body: JSON.stringify({ contact, incoming }) }).then(j),
+  wechatWatch: () => fetch('/api/wechat/watch', { method: 'POST', headers: authHeaders() }).then(j),
   realtimeStatus: () => fetch('/api/realtime/status', { headers: authHeaders() }).then(j),
   realtimeToggle: (enabled) => fetch('/api/realtime/toggle', { method: 'POST', headers: { 'Content-Type': 'application/json', ...authHeaders() }, body: JSON.stringify({ enabled }) }).then(j),
   ingestProgress: () => fetch('/api/ingest/progress', { headers: authHeaders() }).then(j),

@@ -1325,63 +1325,154 @@ def _wx_line(m):
     return "[%s] %s: %s" % (ts, who, text)
 
 
+def _ingest_wechat_msgs(con, me, msgs):
+    """把一批微信消息入库(内容指纹去重 + 按会话分页进FTS)。
+    /api/wechat/ingest 与本地 handoff 消费线程共用。调用方负责 con.commit()/close()。
+    返回 (ingested, dup, sessions)。"""
+    import hashlib
+    # 内容指纹去重(通用闸):不依赖各库 msg_id(iOS/桌面 ID 体系不同,对不上)。
+    con.execute("CREATE TABLE IF NOT EXISTS wechat_lines(owner TEXT, fp TEXT, PRIMARY KEY(owner,fp))")
+    by_sess = {}
+    dup = 0
+    for m in msgs:
+        sess = (m.get("session_name") or m.get("session_id") or "未知").strip()
+        text = m.get("text") or ""
+        if not text:
+            continue
+        ts = str(m.get("ts") or "").replace("T", " ")[:16]   # 与 _wx_line 同口径(分钟精度)
+        sname = (m.get("sender_name") or "").strip()
+        is_me = sname in ("我", "(我)") or not (m.get("sender_id") or "").strip()
+        skey = "我" if is_me else sname
+        fp = hashlib.md5(("%s|%s|%s|%s|%s" % (me, sess, skey, ts, text)).encode("utf-8")).hexdigest()
+        try:
+            con.execute("INSERT INTO wechat_lines(owner,fp) VALUES(?,?)", (me, fp))
+        except Exception:
+            dup += 1
+            continue
+        by_sess.setdefault(sess, []).append(m)
+    ingested = 0
+    for sess, ms in by_sess.items():
+        fn = "微信_与" + _wx_safe(sess) + ".txt"
+        row = con.execute("SELECT id, pages FROM documents WHERE owner=? AND filename=?", (me, fn)).fetchone()
+        if row:
+            did, pcount = row[0], (row[1] or 0)
+        else:
+            con.execute("INSERT INTO documents(source_path,filename,pages,backend,file_hash,ingested_at,owner) "
+                        "VALUES(?,?,?,?,?,datetime('now'),?)",
+                        ("wechat_realtime:" + me + ":" + fn, fn, 0, "wechat", "wx:" + me + ":" + fn, me))
+            did = con.execute("SELECT last_insert_rowid()").fetchone()[0]
+            pcount = 0
+        lines = [_wx_line(m) for m in ms]
+        CH = 50
+        for i in range(0, len(lines), CH):
+            pcount += 1
+            con.execute("INSERT INTO pages(doc_id,page_no,method,text) VALUES(?,?,?,?)",
+                        (did, pcount, "wechat", "\n".join(lines[i:i + CH])))
+            ingested += len(lines[i:i + CH])
+        con.execute("UPDATE documents SET pages=? WHERE id=?", (pcount, did))
+    return ingested, dup, len(by_sess)
+
+
 @app.post("/api/wechat/ingest")
 def wechat_ingest(payload: dict = Body(...), authorization: str = Header(None)):
-    """实时微信入库:一批消息 → msg_id 幂等去重 → 按会话追加到文档(pages,自动进FTS)。
+    """实时微信入库:一批消息 → 内容指纹幂等去重 → 按会话追加到文档(pages,自动进FTS)。
     消费器把 handoff 的 NDJSON 批量推这里;向量嵌入另由后台增量补。"""
     me = _me(authorization)
-    # 微信助手开着(用户在助手里自己控制启停)= 数据就进;不再设 Compound 侧总开关(已去除,冗余)。
     msgs = payload.get("messages") or []
     con = _con()
     try:
-        import hashlib
-        # 内容指纹去重(通用闸):不再依赖各库自己的 msg_id(iOS/桌面 ID 体系不同,对不上)。
-        # 同一条消息无论来自 iOS 历史导入还是桌面实时,会话+时间(到分)+正文一致 → 同指纹 → 只入一次。
-        con.execute("CREATE TABLE IF NOT EXISTS wechat_lines(owner TEXT, fp TEXT, PRIMARY KEY(owner,fp))")
-        by_sess = {}
-        dup = 0
-        for m in msgs:
-            sess = (m.get("session_name") or m.get("session_id") or "未知").strip()
-            text = m.get("text") or ""
-            if not text:
-                continue
-            ts = str(m.get("ts") or "").replace("T", " ")[:16]   # 与 _wx_line 同口径(分钟精度)
-            # 发言人纳入指纹(同一个人同一分钟同内容才算重复):把"我"归一化,让 iOS 的"我"
-            # 与桌面的"(我)"跨端对上;群成员用各自昵称/wxid 区分,避免不同人同句被误并。
-            sname = (m.get("sender_name") or "").strip()
-            is_me = sname in ("我", "(我)") or not (m.get("sender_id") or "").strip()
-            skey = "我" if is_me else sname
-            fp = hashlib.md5(("%s|%s|%s|%s|%s" % (me, sess, skey, ts, text)).encode("utf-8")).hexdigest()
-            try:
-                con.execute("INSERT INTO wechat_lines(owner,fp) VALUES(?,?)", (me, fp))
-            except Exception:
-                dup += 1
-                continue
-            by_sess.setdefault(sess, []).append(m)
-        ingested = 0
-        for sess, ms in by_sess.items():
-            fn = "微信_与" + _wx_safe(sess) + ".txt"
-            row = con.execute("SELECT id, pages FROM documents WHERE owner=? AND filename=?", (me, fn)).fetchone()
-            if row:
-                did, pcount = row[0], (row[1] or 0)
-            else:
-                con.execute("INSERT INTO documents(source_path,filename,pages,backend,file_hash,ingested_at,owner) "
-                            "VALUES(?,?,?,?,?,datetime('now'),?)",
-                            ("wechat_realtime:" + me + ":" + fn, fn, 0, "wechat", "wx:" + me + ":" + fn, me))
-                did = con.execute("SELECT last_insert_rowid()").fetchone()[0]
-                pcount = 0
-            lines = [_wx_line(m) for m in ms]
-            CH = 50
-            for i in range(0, len(lines), CH):
-                pcount += 1
-                con.execute("INSERT INTO pages(doc_id,page_no,method,text) VALUES(?,?,?,?)",
-                            (did, pcount, "wechat", "\n".join(lines[i:i + CH])))
-                ingested += len(lines[i:i + CH])
-            con.execute("UPDATE documents SET pages=? WHERE id=?", (pcount, did))
+        ingested, dup, ns = _ingest_wechat_msgs(con, me, msgs)
         con.commit()
-        return {"ok": True, "ingested": ingested, "dup": dup, "sessions": len(by_sess)}
+        return {"ok": True, "ingested": ingested, "dup": dup, "sessions": ns}
     finally:
         con.close()
+
+
+# ── 本地 handoff 消费器(客户端内嵌):微信助手把消息写 ~/.wxsync/handoff/*.ndjson,
+#    sidecar 常驻线程逐行读入库 + 心跳,免得再靠外部 handoff_consumer.py + token。
+_HANDOFF_OWNER = {"v": None}          # 当前登录用户(由 /api/wechat/watch 设定)
+_HANDOFF_THREAD = {"v": None}
+
+def _handoff_dir():
+    return os.path.join(os.path.expanduser("~"), ".wxsync", "handoff")
+
+def _handoff_beat(con, me):
+    """写 realtime_state 心跳:running=1 + last_beat_ts=now,让 UI 从'等待客户端'变'实时同步中'。"""
+    _ensure_sync_tables(con)
+    cur = con.execute("SELECT enabled FROM realtime_state WHERE owner=?", (me,)).fetchone()
+    en = cur[0] if cur else 1
+    con.execute("INSERT INTO realtime_state(owner,enabled,running,pending,last_synced,last_beat_ts,note) "
+                "VALUES(?,?,?,?,?,?,?) ON CONFLICT(owner) DO UPDATE SET "
+                "running=excluded.running,last_beat_ts=excluded.last_beat_ts,note=excluded.note",
+                (me, en, 1, 0, "", _time.time(), "本地助手"))
+
+def _handoff_watch_loop():
+    """逐文件字节游标(binary)分块读 NDJSON,批量入库 + 心跳。
+    ★分块:每 tick 每文件最多读 CHUNK 字节,只到最后一个换行(不切断行),游标按字节精确前移。
+    历史文件(86MB+)也能安全渐进消化,不会一次性读进内存 OOM。指纹去重保证重复扫不重复入库。"""
+    import json as _json
+    CHUNK = 4 * 1024 * 1024   # 每文件每 tick 最多读 4MB
+    cursors = {}   # path -> byte offset(内存态;进程重启从0重扫,靠指纹去重不会重复入库)
+    hd = _handoff_dir()
+    while True:
+        try:
+            me = _HANDOFF_OWNER["v"]
+            if me and os.path.isdir(hd):
+                batch = []
+                for f in sorted(x for x in os.listdir(hd) if x.endswith(".ndjson")):
+                    p = os.path.join(hd, f)
+                    try:
+                        off = cursors.get(p, 0)
+                        if os.path.getsize(p) <= off:
+                            continue
+                        with open(p, "rb") as fh:
+                            fh.seek(off)
+                            raw = fh.read(CHUNK)
+                        nl = raw.rfind(b"\n")
+                        if nl < 0:
+                            # 本块内无完整行(超长行罕见)→ 全吃掉,防卡死
+                            usable, adv = raw, len(raw)
+                        else:
+                            usable, adv = raw[:nl], nl + 1
+                        cursors[p] = off + adv
+                        for ln in usable.split(b"\n"):
+                            ln = ln.strip()
+                            if ln:
+                                try:
+                                    batch.append(_json.loads(ln.decode("utf-8", "ignore")))
+                                except Exception:
+                                    pass
+                    except Exception:
+                        pass
+                con = _con()
+                try:
+                    if batch:
+                        _ingest_wechat_msgs(con, me, batch)
+                    _handoff_beat(con, me)   # 有无新消息都心跳(保持'实时同步中')
+                    con.commit()
+                except Exception:
+                    pass
+                finally:
+                    con.close()
+        except Exception:
+            pass
+        _time.sleep(4)
+
+def _handoff_watch_start(me):
+    _HANDOFF_OWNER["v"] = me
+    if _HANDOFF_THREAD["v"] is None:
+        import threading
+        t = threading.Thread(target=_handoff_watch_loop, daemon=True)
+        t.start()
+        _HANDOFF_THREAD["v"] = t
+
+
+@app.post("/api/wechat/watch")
+def wechat_watch(authorization: str = Header(None)):
+    """客户端登录后调用:告知 sidecar 当前用户,启动本地 handoff 消费线程。"""
+    me = _me(authorization)
+    _handoff_watch_start(me)
+    return {"ok": True}
 
 
 @app.post("/api/realtime/toggle")

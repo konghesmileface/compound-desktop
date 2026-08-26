@@ -53,7 +53,8 @@ CREATE TABLE IF NOT EXISTS documents (
     pages       INTEGER,
     backend     TEXT,
     file_hash   TEXT,
-    ingested_at TEXT
+    ingested_at TEXT,
+    owner       TEXT
 );
 CREATE TABLE IF NOT EXISTS pages (
     id      INTEGER PRIMARY KEY,
@@ -81,6 +82,22 @@ def db_connect(db_path: str) -> sqlite3.Connection:
     con.execute("PRAGMA synchronous=NORMAL")
     con.execute("PRAGMA foreign_keys=ON")
     con.executescript(SCHEMA)
+    # ★★全新客户端一次建全 106 的全部业务表(45张),避免运行时一个个撞 no such table/column。
+    #   schema_full.sql 与本模块同目录(冻结后在 _MEIPASS)。
+    try:
+        _base = getattr(sys, "_MEIPASS", os.path.dirname(os.path.abspath(__file__)))
+        _sf = os.path.join(_base, "schema_full.sql")
+        if not os.path.exists(_sf):
+            _sf = os.path.join(os.path.dirname(os.path.abspath(__file__)), "schema_full.sql")
+        if os.path.exists(_sf):
+            con.executescript(open(_sf, encoding="utf-8").read())
+    except Exception:
+        pass
+    # 老库迁移:早期建的 documents 没 owner 列(106 后加的),补上
+    try:
+        con.execute("ALTER TABLE documents ADD COLUMN owner TEXT")
+    except Exception:
+        pass
     return con
 
 

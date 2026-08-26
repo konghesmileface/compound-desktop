@@ -186,6 +186,7 @@ export default function WechatSync({ onGuide }) {
     api.ingestProgress().then(setProg).catch(() => {})
   }
   useEffect(() => {
+    api.wechatWatch().catch(() => {})   // 启动 sidecar 本地 handoff 消费线程(读 ~/.wxsync/handoff 入库+心跳)
     refresh()
     timer.current = setInterval(refresh, 4000)
     return () => clearInterval(timer.current)
