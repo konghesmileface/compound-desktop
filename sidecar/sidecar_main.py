@@ -82,16 +82,48 @@ def main():
     args = ap.parse_args()
 
     if args.selftest:
+        import glob as _glob
         ok = True
+        # A) 重依赖能 import(缺=ImportError 运行时崩)
         for mod in ("torch", "sentence_transformers", "rapidocr",
                     "sklearn.cluster", "sklearn.neighbors", "fitz", "docx",
-                    "pptx", "openpyxl", "jieba", "cv2", "onnxruntime", "numpy"):
+                    "pptx", "openpyxl", "jieba", "cv2", "onnxruntime", "numpy", "certifi"):
             try:
                 __import__(mod)
-                print(f"  OK  {mod}")
+                print(f"  OK  import {mod}")
             except Exception as e:
                 ok = False
-                print(f"  FAIL {mod}: {type(e).__name__}: {e}")
+                print(f"  FAIL import {mod}: {type(e).__name__}: {e}")
+        # B) ★数据文件真打进包了没(模块能 import ≠ 数据在)。这是历史踩坑:cacert/模型/安装包
+        #    缺了 import 照样过,却在用户机上哑火。缺任一 → SELFTEST FAIL → CI 构建失败,不流到用户。
+        base = getattr(sys, "_MEIPASS", os.path.dirname(os.path.abspath(__file__)))
+        def _need(label, path, is_dir=False):
+            nonlocal ok
+            good = os.path.isdir(path) if is_dir else os.path.isfile(path)
+            print(f"  {'OK  ' if good else 'FAIL'} 数据:{label}")
+            if not good:
+                ok = False
+            return good
+        _need("cacert.pem(CA证书=所有https命根)", os.path.join(base, "certifi", "cacert.pem"))
+        _need("schema_full.sql(空DB建全45表)", os.path.join(base, "schema_full.sql"))
+        if _need("bge-m3 模型目录", os.path.join(base, "models", "bge-m3"), is_dir=True):
+            w = (_glob.glob(os.path.join(base, "models", "bge-m3", "*.safetensors"))
+                 + _glob.glob(os.path.join(base, "models", "bge-m3", "pytorch_model.bin")))
+            print(f"  {'OK  ' if w else 'FAIL'} 数据:bge-m3 权重文件")
+            ok = ok and bool(w)
+        n_onnx = len(_glob.glob(os.path.join(base, "rapidocr", "**", "*.onnx"), recursive=True))
+        print(f"  {'OK  ' if n_onnx else 'FAIL'} 数据:rapidocr onnx 模型({n_onnx} 个)")
+        ok = ok and n_onnx > 0
+        n_dl = len(_glob.glob(os.path.join(base, "downloads", "*")))
+        print(f"  {'OK  ' if n_dl else 'FAIL'} 数据:微信助手安装包({n_dl} 个)")
+        ok = ok and n_dl > 0
+        # C) onnxruntime 真能加载(catch .so 符号/minos 问题;CI 上 import 成功即基本 OK)
+        try:
+            import onnxruntime as _ort
+            print(f"  OK  onnxruntime {_ort.__version__}(providers={_ort.get_available_providers()})")
+        except Exception as e:
+            ok = False
+            print(f"  FAIL onnxruntime 加载: {e}")
         print("SELFTEST", "PASS" if ok else "FAIL")
         sys.exit(0 if ok else 1)
 
