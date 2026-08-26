@@ -170,7 +170,17 @@ export default function Home({ onOpen, onUnread }) {
   const ansRef = useRef()
 
   const load = () => api.cards().then((r) => { setCards(r.cards || []); onUnread && onUnread(r.unread_total || 0) }).catch(() => {})
-  useEffect(() => { load(); api.today().then((r) => setTodayFeed(r.items || [])).catch(() => {}); api.links().then((r) => setLinks(r.links || [])).catch(() => {}); api.entityLinks().then((r) => setEntLinks(r.links || [])).catch(() => {}); api.news().then((r) => setNews(r)).catch(() => {}) }, [])
+  useEffect(() => {
+    load()
+    // ★today 失败(空DB/无LLM key/慢)必须置空,否则 todayFeed 永远 null → "关联你的目标与历史"永久转圈
+    api.today().then((r) => setTodayFeed(r.items || [])).catch(() => setTodayFeed([]))
+    api.links().then((r) => setLinks(r.links || [])).catch(() => {})
+    api.entityLinks().then((r) => setEntLinks(r.links || [])).catch(() => {})
+    api.news().then((r) => setNews(r)).catch(() => {})
+    // 兜底:20s 还没返回(后端慢/卡)就当空,不让用户一直看转圈
+    const _t = setTimeout(() => setTodayFeed((v) => (v === null ? [] : v)), 20000)
+    return () => clearTimeout(_t)
+  }, [])
 
   // 从「人脉」页点"问TA/分析入口"跳来:自动带着问题问一次
   useEffect(() => {
