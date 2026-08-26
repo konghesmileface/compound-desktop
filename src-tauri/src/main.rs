@@ -79,12 +79,24 @@ struct SidecarState {
     child: Arc<Mutex<Option<Child>>>,
 }
 
+/// 在系统默认浏览器打开 URL(下载微信助手安装包等 —— webview 里直接下会跳错误页)。
+#[tauri::command]
+fn open_external(url: String) {
+    #[cfg(target_os = "macos")]
+    let _ = Command::new("open").arg(&url).spawn();
+    #[cfg(target_os = "windows")]
+    let _ = Command::new("cmd").args(["/C", "start", "", &url]).spawn();
+    #[cfg(target_os = "linux")]
+    let _ = Command::new("xdg-open").arg(&url).spawn();
+}
+
 fn main() {
     let child_slot: Arc<Mutex<Option<Child>>> = Arc::new(Mutex::new(None));
     let child_for_state = child_slot.clone();
 
     tauri::Builder::default()
         .manage(SidecarState { child: child_for_state })
+        .invoke_handler(tauri::generate_handler![open_external])
         .setup(move |app| {
             let handle = app.handle().clone();
             let port = free_port();

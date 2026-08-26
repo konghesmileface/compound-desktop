@@ -2,12 +2,22 @@ import React from 'react'
 import { IconClose } from './icons'
 
 // 各数据源的「秒懂」分步引导。铁律:小白照着点,最少步骤把数据搞进来,最详细指导,搞不定我们帮接。
-// 微信同步助手 · 自有三平台安装包(106:/opt/compound-brain/downloads,经 /dl/ 下发)
+// 微信同步助手 · 自有三平台安装包(106 下载中心,公开可达)
 export const SYNC_DL = [
   { label: 'Windows 版', file: '微信同步助手-Windows.exe', hint: 'Windows 10 / 11,双击安装' },
   { label: 'Mac · Intel 芯片', file: '微信同步助手-mac-Intel.dmg', hint: '较早的 Mac(约2020年前)' },
   { label: 'Mac · Apple 芯片', file: '微信同步助手-mac-arm64.dmg', hint: 'M1 / M2 / M3 / M4' },
 ]
+// 助手安装包放云端下载中心(备案后换 https 域名)。客户端 webview 里直接点会跳 404 页,
+// 故在系统默认浏览器打开(Tauri open_external 命令);网页版则普通链接同源下发。
+const SYNC_DL_BASE = 'http://106.14.189.104:8200/dl/'
+export function syncHref(file) { return SYNC_DL_BASE + encodeURIComponent(file) }
+export function onSyncDownload(e, file) {
+  if (typeof window !== 'undefined' && window.__TAURI__ && window.__TAURI__.core) {
+    e.preventDefault()
+    window.__TAURI__.core.invoke('open_external', { url: SYNC_DL_BASE + encodeURIComponent(file) })
+  }
+}
 // tile:false 的不在「更多数据来源」网格里露出(只从微信同步卡的按钮打开)。
 export const SOURCES = {
   // ── 微信 · 实时同步(电脑自动,日常主力)────────────────────────────
@@ -109,7 +119,7 @@ export default function Guide({ sourceKey, onClose }) {
         {s.dls && (
           <div className="guide-dls">
             {s.dls.map((d, i) => (
-              <a key={i} className="guide-dl-btn" href={((typeof window !== 'undefined' && window.__COMPOUND_API_BASE__) || '') + '/dl/' + encodeURIComponent(d.file)} download>
+              <a key={i} className="guide-dl-btn" href={syncHref(d.file)} onClick={(e) => onSyncDownload(e, d.file)} target="_blank" rel="noreferrer">
                 <b>{d.label}</b><span>{d.hint}</span>
               </a>
             ))}

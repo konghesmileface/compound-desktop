@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react'
 import { api } from './api'
-import { SYNC_DL } from './Guide'
+import { SYNC_DL, syncHref, onSyncDownload } from './Guide'
 
 // ===== 「数据入脑 · 神经流」canvas 场景 =====
 // 左=信源(你的微信) 右=大脑核心(同心环+辉光呼吸) 中间=粒子数据流
@@ -290,7 +290,7 @@ export default function WechatSync({ onGuide }) {
             </div>
             <div className="wx-dlbox-grid">
               {SYNC_DL.map((d, i) => (
-                <a key={i} className="wx-dlbox-btn" href={((typeof window !== 'undefined' && window.__COMPOUND_API_BASE__) || '') + '/dl/' + encodeURIComponent(d.file)} download>
+                <a key={i} className="wx-dlbox-btn" href={syncHref(d.file)} onClick={(e) => onSyncDownload(e, d.file)} target="_blank" rel="noreferrer">
                   <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M12 3v12m0 0 4-4m-4 4-4-4M4 19h16"/></svg>
                   <span className="wx-dlbox-l">{d.label}</span>
                   <span className="wx-dlbox-h">{d.hint}</span>
