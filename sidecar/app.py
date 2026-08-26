@@ -2089,7 +2089,10 @@ def people(authorization: str = Header(None)):
     me = _me(authorization)
     con = _con()
     try:
-        con.execute("CREATE TABLE IF NOT EXISTS personas (username TEXT PRIMARY KEY, data TEXT, mbti TEXT)")
+        # ★全新客户端:personas 表要带 emb 列(否则下句 SELECT emb 崩 no such column→前端误报"请先登录")
+        con.execute("CREATE TABLE IF NOT EXISTS personas (username TEXT PRIMARY KEY, data TEXT, mbti TEXT, emb TEXT)")
+        try: con.execute("ALTER TABLE personas ADD COLUMN emb TEXT")  # 老库补列
+        except Exception: pass
         myp, _ = _my_persona(con, me)
         myrow = con.execute("SELECT emb FROM personas WHERE username=?", (me,)).fetchone()
         myemb = myrow[0] if myrow else None
@@ -2803,6 +2806,10 @@ def _bootstrap_auth_tables():
         _c = _con()
         _ensure_sms(_c)
         _ensure_user_cols(_c)
+        # personas 带 emb 列(多处 SELECT emb FROM personas,老库/新库都补上,免 no such column)
+        _c.execute("CREATE TABLE IF NOT EXISTS personas (username TEXT PRIMARY KEY, data TEXT, mbti TEXT, emb TEXT)")
+        try: _c.execute("ALTER TABLE personas ADD COLUMN emb TEXT")
+        except Exception: pass
         _c.commit()
         _c.close()
     except Exception:

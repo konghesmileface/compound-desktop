@@ -206,7 +206,10 @@ export default function Friends({ auth }) {
   const [discover, setDiscover] = useState(false)
   const hostRef = useRef(); const [dim, setDim] = useState({ w: 800, h: 600 })
 
-  const reload = () => api.people().then((r) => setList(r.people || [])).catch(() => setNeed(true))
+  // 只有真·未登录(401)才提示登录;其它错误(空DB/后端慢)显示空列表,不误报"请先登录"
+  const reload = () => api.people().then((r) => setList(r.people || [])).catch((e) => {
+    if (String(e && e.message) === '401') setNeed(true); else setList([])
+  })
   useEffect(() => {
     if (!auth) { setNeed(true); return }
     setNeed(false); reload()
