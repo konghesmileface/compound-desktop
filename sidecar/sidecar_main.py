@@ -161,6 +161,11 @@ def main():
         if os.path.isdir(cand):
             bundled = cand
     os.environ.setdefault("EMBED_MODEL", bundled or "BAAI/bge-m3")
+    # ★模型已打进包→强制离线加载:不设的话 sentence_transformers/huggingface_hub 会联网校验,
+    #   慢 + 无网/无CA时直接加载失败 → 嵌入起不来 → 分析中卡0%。打进包就该纯本地。
+    if bundled:
+        os.environ.setdefault("HF_HUB_OFFLINE", "1")
+        os.environ.setdefault("TRANSFORMERS_OFFLINE", "1")
     # 模型已打进包(区域无关、离线);缓存目录中性。★不硬编码国内镜像(会坑海外用户)——
     #   万一要回落下载,默认走 huggingface.co(海外可达);国内用户可自行设 HF_ENDPOINT=hf-mirror.com。
     os.environ.setdefault("HF_HOME", os.path.join(data, "hf"))

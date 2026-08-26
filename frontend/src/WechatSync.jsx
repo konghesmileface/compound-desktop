@@ -206,11 +206,14 @@ export default function WechatSync({ onGuide }) {
   const iosPct = iosDone ? 100 : (iosOverall ? (iosOverall.percent || 0) : 0)
   const iosStage = iosDone ? IOS_STAGES.length : iosStageIndex(iosPct)
 
-  // ── 实时同步四态 ───────────────────────────────────────────────
-  // 去掉 Compound 侧总开关(冗余):助手在跑+心跳新鲜=实时接收;否则=等待助手。用户在助手里自己启停。
+  // ── 同步状态:导入历史 / 实时同步 / 等待 ─────────────────────────
+  // importing=还在把本地已攒的历史聊天补进大脑(一次性);否则看助手在不在跑=实时接收/等待。
   const live = !!(rt && rt.running && rt.fresh)
-  const mode = !rt ? 'detect' : live ? 'live' : 'waiting'
-  const badgeText = { detect: '检测中', live: '实时同步中', waiting: '等待客户端', off: '已关闭' }[mode]
+  const importing = !!(rt && rt.importing)
+  const histPct = rt ? (rt.hist_pct != null ? rt.hist_pct : 0) : 0
+  const mode = !rt ? 'detect' : importing ? 'importing' : live ? 'live' : 'waiting'
+  const badgeText = { detect: '检测中', importing: `导入历史 ${histPct}%`,
+                      live: '实时同步中', waiting: '等待客户端', off: '已关闭' }[mode]
 
   // ── 常规实时入库进度(排除 iOS 那批)───────────────────────────
   const rtItems = items.filter((x) => !(x.job_id || '').startsWith('iphone'))
@@ -253,6 +256,7 @@ export default function WechatSync({ onGuide }) {
           </div>
           <div className="wx-c2-status">
             {mode === 'detect' && <>正在探测你电脑上的同步助手…<em>打开助手即接通</em></>}
+            {mode === 'importing' && <>正在<b>导入本地微信历史</b>(一次性,{histPct}%)—— 边导边分析,不用等全部完成<em>后台进行,可关页面</em></>}
             {mode === 'live' && <>第二大脑<b>正在实时接收</b>你的新消息{rt.last_synced ? ' · 最近 ' + rt.last_synced : ''}{rt.pending ? <em>待入库 {rt.pending} 条</em> : null}</>}
             {mode === 'waiting' && <>通道已就绪,数据在源头等待<em>去电脑打开同步助手即接通</em></>}
           </div>

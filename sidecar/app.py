@@ -94,6 +94,31 @@ def _warm_cache():
     threading.Thread(target=w, daemon=True).start()
 
 
+# ★★后台常驻嵌入驱动:客户端是单机、没有 106 上那种回填 cron,微信 handoff 入库的页
+#   永远不会被嵌入 → "分析中"卡 0%、星图/语义问答/探索全空。这里持续把待嵌页嵌完(embed_pending
+#   每48页 commit,进度实时可见),有活快转没活慢转。106 上它只补零星漏嵌,无害(统一单一代码)。
+_BG_EMBED_LOCK = threading.Lock()
+
+@app.on_event("startup")
+def _start_bg_embedder():
+    def _loop():
+        while True:
+            n = 0
+            if _BG_EMBED_LOCK.acquire(blocking=False):
+                try:
+                    con = _con()
+                    try:
+                        n = S.embed_pending(con)
+                    finally:
+                        con.close()
+                except Exception as e:
+                    print(f"[bg-embed] {e}")
+                finally:
+                    _BG_EMBED_LOCK.release()
+            _time.sleep(2 if n else 30)   # 有待嵌页→2s连续嵌;嵌完→30s轻巡
+    threading.Thread(target=_loop, daemon=True).start()
+
+
 @app.get("/health")
 def health():
     return {"status": "ok", "db": I.DEFAULT_DB, "vault": I.DEFAULT_VAULT,
@@ -1300,14 +1325,20 @@ def realtime_status(authorization: str = Header(None)):
     con = _con()
     try:
         _ensure_sync_tables(con)
+        # 历史导入进度(前端区分「导入历史 X%」vs「实时同步中」)
+        _tot = _HANDOFF_PROG.get("total", 0) or 0
+        _done = _HANDOFF_PROG.get("done", 0) or 0
+        _hist = {"importing": bool(_HANDOFF_PROG.get("importing")),
+                 "hist_done": _done, "hist_total": _tot,
+                 "hist_pct": int(_done * 100 / _tot) if _tot else 100}
         r = con.execute("SELECT enabled,running,pending,last_synced,last_beat_ts FROM realtime_state "
                         "WHERE owner=?", (me,)).fetchone()
         if not r:
             return {"enabled": False, "running": False, "fresh": False, "pending": 0,
-                    "last_synced": "", "last_beat_ts": 0}
+                    "last_synced": "", "last_beat_ts": 0, **_hist}
         fresh = bool(r[4]) and (_time.time() - r[4] < 30)
         return {"enabled": bool(r[0]), "running": bool(r[1]), "fresh": fresh,
-                "pending": r[2] or 0, "last_synced": r[3] or "", "last_beat_ts": r[4] or 0}
+                "pending": r[2] or 0, "last_synced": r[3] or "", "last_beat_ts": r[4] or 0, **_hist}
     finally:
         con.close()
 
@@ -1392,9 +1423,36 @@ def wechat_ingest(payload: dict = Body(...), authorization: str = Header(None)):
 #    sidecar 常驻线程逐行读入库 + 心跳,免得再靠外部 handoff_consumer.py + token。
 _HANDOFF_OWNER = {"v": None}          # 当前登录用户(由 /api/wechat/watch 设定)
 _HANDOFF_THREAD = {"v": None}
+# 历史导入进度(前端据此区分「导入历史」vs「实时同步」):done/total=已读/总字节,importing=还在补历史
+_HANDOFF_PROG = {"done": 0, "total": 0, "importing": False, "alive": False}
 
 def _handoff_dir():
     return os.path.join(os.path.expanduser("~"), ".wxsync", "handoff")
+
+def _handoff_cursor_file():
+    # 游标持久化:重开从上次位置续,不重扫历史(与库里指纹去重双保险)
+    return os.path.join(os.path.expanduser("~"), ".wxsync", "compound_cursors.json")
+
+def _handoff_load_cursors():
+    try:
+        import json as _j
+        p = _handoff_cursor_file()
+        if os.path.exists(p):
+            d = _j.load(open(p, encoding="utf-8"))
+            return d if isinstance(d, dict) else {}
+    except Exception:
+        pass
+    return {}
+
+def _handoff_save_cursors(cursors):
+    try:
+        import json as _j
+        p = _handoff_cursor_file()
+        with open(p + ".tmp", "w", encoding="utf-8") as f:
+            _j.dump(cursors, f)
+        os.replace(p + ".tmp", p)
+    except Exception:
+        pass
 
 def _handoff_beat(con, me):
     """写 realtime_state 心跳:running=1 + last_beat_ts=now,让 UI 从'等待客户端'变'实时同步中'。"""
@@ -1407,63 +1465,73 @@ def _handoff_beat(con, me):
                 (me, en, 1, 0, "", _time.time(), "本地助手"))
 
 def _handoff_watch_loop():
-    """逐文件字节游标(binary)分块读 NDJSON,批量入库 + 心跳。
-    ★分块:每 tick 每文件最多读 CHUNK 字节,只到最后一个换行(不切断行),游标按字节精确前移。
-    历史文件(86MB+)也能安全渐进消化,不会一次性读进内存 OOM。指纹去重保证重复扫不重复入库。"""
+    """逐文件字节游标(binary)分块读 NDJSON,批量入库 + 心跳 + 历史导入进度。
+    ★游标持久化:重开从上次位置续,不重扫历史。★分块 4MB/tick 不 OOM。指纹去重防重复入库。
+    ★进度:total=全部 handoff 字节,done=已读字节;done<total 且差>256KB=还在补历史(前端显示进度)。"""
     import json as _json
-    CHUNK = 4 * 1024 * 1024   # 每文件每 tick 最多读 4MB
-    cursors = {}   # path -> byte offset(内存态;进程重启从0重扫,靠指纹去重不会重复入库)
+    CHUNK = 4 * 1024 * 1024
+    cursors = _handoff_load_cursors()
     hd = _handoff_dir()
     while True:
         try:
             me = _HANDOFF_OWNER["v"]
             if me and os.path.isdir(hd):
                 batch = []
+                dirty = False
+                total_bytes = 0
+                done_bytes = 0
                 for f in sorted(x for x in os.listdir(hd) if x.endswith(".ndjson")):
                     p = os.path.join(hd, f)
                     try:
-                        off = cursors.get(p, 0)
-                        if os.path.getsize(p) <= off:
-                            continue
-                        with open(p, "rb") as fh:
-                            fh.seek(off)
-                            raw = fh.read(CHUNK)
-                        nl = raw.rfind(b"\n")
-                        if nl < 0:
-                            # 本块内无完整行(超长行罕见)→ 全吃掉,防卡死
-                            usable, adv = raw, len(raw)
-                        else:
-                            usable, adv = raw[:nl], nl + 1
-                        cursors[p] = off + adv
-                        for ln in usable.split(b"\n"):
-                            ln = ln.strip()
-                            if ln:
-                                try:
-                                    batch.append(_json.loads(ln.decode("utf-8", "ignore")))
-                                except Exception:
-                                    pass
+                        sz = os.path.getsize(p)
                     except Exception:
-                        pass
-                # ★助手活性判定:助手运行时每秒刷新 ~/.wxsync/state.json;关掉就不再刷。
-                #   只有 state.json 15s 内更新过=助手在跑→才心跳(running=1)→UI"实时同步中";
-                #   关了助手→不心跳→last_beat_ts 变旧→前端 fresh=false→回落"等待客户端"。诚实反映。
+                        continue
+                    total_bytes += sz
+                    off = cursors.get(p, 0)
+                    if off > sz:          # 文件被截断/重建 → 重头读
+                        off = 0
+                    if sz > off:
+                        try:
+                            with open(p, "rb") as fh:
+                                fh.seek(off)
+                                raw = fh.read(CHUNK)
+                            nl = raw.rfind(b"\n")
+                            usable, adv = (raw, len(raw)) if nl < 0 else (raw[:nl], nl + 1)
+                            cursors[p] = off + adv
+                            dirty = True
+                            for ln in usable.split(b"\n"):
+                                ln = ln.strip()
+                                if ln:
+                                    try:
+                                        batch.append(_json.loads(ln.decode("utf-8", "ignore")))
+                                    except Exception:
+                                        pass
+                        except Exception:
+                            pass
+                    done_bytes += min(cursors.get(p, 0), sz)
+                # 助手活性:助手运行时每秒刷新 ~/.wxsync/state.json;关掉就不刷(关窗未退进程仍算在跑)。
                 alive = False
                 try:
                     _sj = os.path.join(os.path.expanduser("~"), ".wxsync", "state.json")
                     alive = os.path.exists(_sj) and (_time.time() - os.path.getmtime(_sj) < 15)
                 except Exception:
                     alive = False
+                importing = (total_bytes - done_bytes) > 256 * 1024   # 还有>256KB没读=在补历史
+                _HANDOFF_PROG.update(done=done_bytes, total=total_bytes,
+                                     importing=importing, alive=alive)
                 con = _con()
                 try:
                     if batch:
-                        _ingest_wechat_msgs(con, me, batch)  # 入库总做(读到新数据就存,与徽章无关)
+                        _ingest_wechat_msgs(con, me, batch)  # 入库总做
                     if alive:
-                        _handoff_beat(con, me)               # 只有助手在跑才亮"实时同步中"
+                        _handoff_beat(con, me)               # 助手在跑=实时同步中
                     con.commit()
                 except Exception:
                     pass
                 finally:
                     con.close()
+                if dirty:
+                    _handoff_save_cursors(cursors)
         except Exception:
             pass
         _time.sleep(4)
