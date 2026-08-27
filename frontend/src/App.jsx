@@ -159,7 +159,7 @@ export default function App() {
           <button className={'rail-user-btn' + (tab === 'account' ? ' active' : '')} onClick={() => setTab('account')} title={displayName + ' · 账户'}>
             {myAvatar
               ? <img className="rail-user-ava" src={myAvatar} alt="" />
-              : <span className="rail-user-ava-fallback">{([...displayName][0] || '').toUpperCase()}</span>}
+              : <span className="rail-user-ava-fallback">{([...(displayName || '?')][0] || '').toUpperCase()}</span>}
             <span className="rail-user-name">{displayName}</span>
           </button>
           <button className={'rail-logout' + (tab === 'settings' ? ' active' : '')} title="设置" onClick={() => setTab('settings')}>

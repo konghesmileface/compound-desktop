@@ -49,6 +49,7 @@ export const api = {
   lifestory: (refresh, style) => fetch('/api/lifestory?' + (refresh ? 'refresh=1&' : '') + 'style=' + (style || 'cinema'), { headers: authHeaders() }).then(j),
   songMake: (force) => fetch('/api/song/make' + (force ? '?force=1' : ''), { method: 'POST', headers: authHeaders() }).then(j),
   songStatus: () => fetch('/api/song/status', { headers: authHeaders() }).then(j),
+  lifesong: (refresh) => fetch('/api/lifesong' + (refresh ? '?refresh=1' : ''), { headers: authHeaders() }).then(j),   // ★补:Life.jsx 调 api.lifesong 但之前没定义→冥想tab崩(api.lifesong is not a function)
   mylibrary: () => fetch('/api/mylibrary', { headers: authHeaders() }).then(j),
   today: (refresh) => fetch('/api/today' + (refresh ? '?refresh=1' : ''), { headers: authHeaders() }).then(j),
   links: () => fetch('/api/links', { headers: authHeaders() }).then(j),
