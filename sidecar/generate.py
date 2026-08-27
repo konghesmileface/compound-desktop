@@ -7,9 +7,14 @@ import os
 import re
 import json
 
-BRAIN = os.path.dirname(os.path.abspath(__file__))
+# ★产出文件写数据目录(BRAIN_DATA),不能写包内(冻结包只读→import 时 makedirs 崩;
+#   且写进包里重装即丢/破坏签名)。回落到本文件目录仅为源码直跑时。
+BRAIN = os.environ.get("BRAIN_DATA") or os.path.dirname(os.path.abspath(__file__))
 OUT_DIR = os.path.join(BRAIN, "generated")
-os.makedirs(OUT_DIR, exist_ok=True)
+try:
+    os.makedirs(OUT_DIR, exist_ok=True)
+except Exception:
+    pass
 
 # ===== PPT 设计主题(RGB)。前端可选;default=deep =====
 THEMES = {

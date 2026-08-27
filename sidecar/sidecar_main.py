@@ -188,4 +188,11 @@ def main():
 
 
 if __name__ == "__main__":
+    # ★PyInstaller 冻结包必须先 freeze_support():否则任何库(torch/sentence_transformers/tokenizers)
+    #   起 multiprocessing 子进程时,子进程会重入冻结二进制并带 -c/-B/-S 参数,被 argparse 当未知参数崩
+    #   (报 unrecognized arguments: -c from multiprocessing.resource_tracker)。必须在最前面。
+    import multiprocessing
+    multiprocessing.freeze_support()
+    # 冻结包里禁用 tokenizers 多进程并行(会 fork 触发上面的重入 + 无谓开销),单机嵌入用不上。
+    os.environ.setdefault("TOKENIZERS_PARALLELISM", "false")
     main()
