@@ -14,6 +14,12 @@ binaries = []
 _sf = os.path.join(here, "schema_full.sql")
 if os.path.isfile(_sf):
     datas.append((_sf, "."))
+# ★officecli 二进制(officecli.ai 单文件原生,专业排版 PPT/Word/Excel;非Docker,离线无依赖)。
+#   打进 bin/,generate.py _resolve_occ 找 _MEIPASS/bin/officecli 调用;缺则回落 python-pptx。
+#   ★平台专属:仓库里的是 Intel x86_64;arm/win 各自二进制需另放(缺则该平台自动回落)。
+_occ = os.path.join(here, "bin", "officecli")
+if os.path.isfile(_occ):
+    datas.append((_occ, "bin"))
 # ★opencv-python-headless:collect_submodules('cv2') 会在 cv2.gapi 崩(AttributeError),
 #   改为显式收 cv2 的动态库 + 数据(.so + config),并作为 plain hidden import,交给内置 hook 处理其余。
 try:

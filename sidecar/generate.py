@@ -198,14 +198,39 @@ def render_xlsx(data: dict, tag: str) -> str:
     return path
 
 
-# ---------- OfficeCLI(Docker)PPT:用主题母版的标题/正文占位符,排版专业 ----------
+# ---------- OfficeCLI(officecli.ai 单文件原生二进制,专业排版)----------
+# ★officecli 是打进包的原生二进制(非 Docker,离线无依赖)。resolve:包内 bin/officecli 优先→
+#   PATH 里的 officecli→都没有则 OCC=None,render_*_officecli 抛错→generate() 回落 python 库。
+def _resolve_occ():
+    import sys as _sys, shutil, stat
+    cands = []
+    base = getattr(_sys, "_MEIPASS", None)
+    if base:
+        cands.append(os.path.join(base, "bin", "officecli"))
+    cands.append(os.path.join(os.path.dirname(os.path.abspath(__file__)), "bin", "officecli"))
+    w = shutil.which("officecli")
+    if w:
+        cands.append(w)
+    for c in cands:
+        if c and os.path.isfile(c):
+            try:  # 打包解压可能丢执行位,补上
+                os.chmod(c, os.stat(c).st_mode | stat.S_IEXEC | stat.S_IXGRP | stat.S_IXOTH)
+            except Exception:
+                pass
+            return [c]
+    return None
+
+
+OCC = _resolve_occ()
+
+
 def render_ppt_officecli(data: dict, tag: str) -> str:
     import subprocess
+    if not OCC:
+        raise RuntimeError("officecli 未打包/不可用")
     fn = f"{_safe(data.get('title', 'ppt'))}_{tag}.pptx"
-    path = os.path.join(OUT_DIR, fn)
-    work = "/work/" + fn
-    OCC = ["occli"]  # wrapper: docker run ... -v OUT_DIR:/work officecli
-    subprocess.run(OCC + ["create", work], check=True, capture_output=True, timeout=90)
+    path = os.path.join(OUT_DIR, fn)   # ★真实文件系统路径(非 Docker /work/)
+    subprocess.run(OCC + ["create", path], check=True, capture_output=True, timeout=90)
     cmds = [{"command": "add", "parent": "/", "type": "slide",
              "props": {"layout": "Title Slide", "title": data.get("title", "演示"),
                        "text": data.get("subtitle", "由你的第二大脑生成")}}]
@@ -219,7 +244,7 @@ def render_ppt_officecli(data: dict, tag: str) -> str:
     with open(cf, "w", encoding="utf-8") as f:
         json.dump(cmds, f, ensure_ascii=False)
     try:
-        subprocess.run(OCC + ["batch", work, "--input", "/work/" + os.path.basename(cf)],
+        subprocess.run(OCC + ["batch", path, "--input", cf],
                        check=True, capture_output=True, timeout=150)
     finally:
         try:
@@ -232,15 +257,15 @@ def render_ppt_officecli(data: dict, tag: str) -> str:
     return path
 
 
-OCC = ["occli"]  # wrapper: docker run ... -v OUT_DIR:/work officecli
-
-
 def _occ_preview(fn):
     """给已产出的文件渲一份 html 预览(可交互,免浏览器,"做完看效果")。"""
     import subprocess
+    if not OCC:
+        return
     try:
         base = fn.rsplit(".", 1)[0]
-        subprocess.run(OCC + ["view", "/work/" + fn, "html", "-o", "/work/" + base + ".html"],
+        subprocess.run(OCC + ["view", os.path.join(OUT_DIR, fn), "html",
+                              "-o", os.path.join(OUT_DIR, base + ".html")],
                        check=True, capture_output=True, timeout=90)
     except Exception:
         pass
@@ -249,8 +274,10 @@ def _occ_preview(fn):
 def render_docx_officecli(data: dict, tag: str) -> str:
     """Word:OfficeCLI markdown → 样式化 docx。"""
     import subprocess
+    if not OCC:
+        raise RuntimeError("officecli 未打包/不可用")
     fn = f"{_safe(data.get('title', 'doc'))}_{tag}.docx"
-    path = os.path.join(OUT_DIR, fn); work = "/work/" + fn
+    path = os.path.join(OUT_DIR, fn)
     md = "# " + str(data.get("title", "文档")) + "\n\n"
     if data.get("subtitle"):
         md += "*" + str(data["subtitle"]) + "*\n\n"
@@ -258,8 +285,8 @@ def render_docx_officecli(data: dict, tag: str) -> str:
         md += "## " + str(sec.get("heading", "")) + "\n\n"
         for para in sec.get("paragraphs", []):
             md += str(para) + "\n\n"
-    subprocess.run(OCC + ["create", work], check=True, capture_output=True, timeout=90)
-    subprocess.run(OCC + ["add", work, "/body", "--type", "markdown", "--prop", "text=" + md],
+    subprocess.run(OCC + ["create", path], check=True, capture_output=True, timeout=90)
+    subprocess.run(OCC + ["add", path, "/body", "--type", "markdown", "--prop", "text=" + md],
                    check=True, capture_output=True, timeout=120)
     if not os.path.exists(path):
         raise RuntimeError("officecli 未产出 docx")
@@ -269,9 +296,11 @@ def render_docx_officecli(data: dict, tag: str) -> str:
 
 def render_xlsx_officecli(data: dict, tag: str) -> str:
     """Excel:OfficeCLI import CSV(公式可被求值)。"""
-    import subprocess, csv, io
+    import subprocess, csv
+    if not OCC:
+        raise RuntimeError("officecli 未打包/不可用")
     fn = f"{_safe(data.get('title', 'sheet'))}_{tag}.xlsx"
-    path = os.path.join(OUT_DIR, fn); work = "/work/" + fn
+    path = os.path.join(OUT_DIR, fn)
     cf = os.path.join(OUT_DIR, f"_data_{tag}.csv")
     with open(cf, "w", encoding="utf-8-sig", newline="") as f:
         w = csv.writer(f)
@@ -281,8 +310,8 @@ def render_xlsx_officecli(data: dict, tag: str) -> str:
         for row in data.get("rows", []):
             w.writerow([str(c) for c in row])
     try:
-        subprocess.run(OCC + ["create", work], check=True, capture_output=True, timeout=90)
-        subprocess.run(OCC + ["import", work, "/Sheet1", "/work/" + os.path.basename(cf)],
+        subprocess.run(OCC + ["create", path], check=True, capture_output=True, timeout=90)
+        subprocess.run(OCC + ["import", path, "/Sheet1", cf],
                        check=True, capture_output=True, timeout=120)
     finally:
         try:
