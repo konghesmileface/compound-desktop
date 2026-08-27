@@ -9,8 +9,11 @@ import time
 import urllib.request
 import urllib.error
 
-BRAIN = os.path.dirname(os.path.abspath(__file__))
+# ★settings.json(含 AI key)存数据目录(BRAIN_DATA),不能写包内:冻结包只读安装会崩,
+#   且写进包里重装即丢配置。回落本文件目录仅为源码直跑时。
+BRAIN = os.environ.get("BRAIN_DATA") or os.path.dirname(os.path.abspath(__file__))
 SETTINGS_PATH = os.path.join(BRAIN, "settings.json")
+_SETTINGS_PATH_OLD = os.path.join(os.path.dirname(os.path.abspath(__file__)), "settings.json")  # 旧位置(包内),仅兼容读
 
 # 每家预置 (接口地址, 质量模型, 快模型)。★接口地址已联网核实(2026-08);模型名尽量用稳定别名/确定可用的,
 #   用户只需选厂商+填 key 即最优开箱;两档都可在设置里自由覆盖(未来出新模型自己填名字,不改代码)。
@@ -33,6 +36,17 @@ def load_cfg() -> dict:
     try:
         with open(SETTINGS_PATH, "r", encoding="utf-8") as f:
             return json.load(f)
+    except Exception:
+        pass
+    # 兼容:老版本把 settings.json 写进了包内,迁移读一次(读到就顺手迁到数据目录)
+    try:
+        with open(_SETTINGS_PATH_OLD, "r", encoding="utf-8") as f:
+            cfg = json.load(f)
+        try:
+            save_cfg(cfg)   # 迁到 BRAIN_DATA
+        except Exception:
+            pass
+        return cfg
     except Exception:
         return {}
 
