@@ -1,113 +1,441 @@
-# 客户端全功能测试矩阵 · 多轮审计（下一轮出包全面复测用）
+# 客户端全功能测试矩阵 v2 · 原子级（每 tab 每功能每文件类型）
 
-**测试原则（用户定）：** 以**空数据全新用户**从**注册登录 → 每个 tab 每个功能**走一遍。空态/引导/崩溃是重点，不用旧库掩盖新用户问题。
-
-**测试方法：** 打包 sidecar（不是我抽的临时版，要下最新 CI 产物）+ 全新注册的空账号 + Chrome CDP 驱动前端逐 tab 点 + 抓 console/截图 + 后端端点。
-
----
-
-## A. 账号流程（空数据新用户第一步，之前没测）
-| 功能 | 端点/组件 | 状态 | 备注 |
-|------|-----------|------|------|
-| 落地页 | Landing | ⬜ | 客户端应默认登录+可切注册 |
-| **手机注册** | sendCode/phoneRegister | ⬜ | 全新号注册,SMS_DEV验证码 |
-| **验证码登录** | sendCode/phoneLogin | ⬜ | |
-| **密码登录** | pwdLogin | ⬜ | |
-| 忘记密码 | resetPassword | ⬜ | |
-| 支付宝登录 | (已隐藏) | — | 用户令暂隐藏 |
-| **新用户引导** | Onboard | ⬜ | 注册后的引导流程 |
-| 试用/订阅墙 | Paywall: account/plans/payCreate/payQuery/orders | ⬜ | 试用倒计时+付费流程 |
-
-## B. 问答 tab（Home/Cards/Ask）
-| 功能 | 端点 | 状态 |
-|------|------|------|
-| 首页空态 | today(空数组) | ✅已修(补Empty) |
-| 新建目标/日记卡 | createCard | ✅ |
-| 卡片改状态/编辑 | cardStatus/cardEdit | ✅ |
-| 卡片关联历史 | cardRelated | ⬜ |
-| 删卡 | deleteCard | ⬜ |
-| **真实问答** | ask(LLM) | ✅真实DeepSeek |
-| 连接发现 | links/entityLinks | ✅ |
-| 产出PPT/Word/Excel | generate(officecli) | ✅officecli真出文件 |
-| 今日发现 | today/news | ✅ |
-| 发现红点 | discoveries | ⬜ |
-
-## C. 探索 tab（Explore/StarCloud/NodeDetail）
-| 功能 | 端点 | 状态 |
-|------|------|------|
-| 星海图 | starmap | ✅(空态"还没星图") |
-| 文档图 | graph | ✅ |
-| 主题星系 | chatTopicGalaxy | ✅ |
-| 搜索 | search | ⬜ |
-| 节点详情 | chatNode/connections/docSummary/similar | ⬜部分 |
-
-## D. 画像 tab（Persona）
-| persona 真实生成 | ✅ |
-
-## E. 人脉 tab（Relationships/ContactGraph/GroupGraph/RelationTimeline）
-| 功能 | 端点 | 状态 |
-|------|------|------|
-| 关系卡列表 | relationships | ✅ |
-| 关系力导图 | relGraph | ✅ |
-| 关系路径 | relPath | ⬜ |
-| 见面简报 | briefing | ⬜ |
-| 深聊 | deepen | ⬜(LLM,空库测不了) |
-| 群图谱 | groupGraph | ⬜ |
-| 关系时间线 | relationTimeline | ⬜ |
-| dismiss各种 | dismissLoop/dismissReach | ✅ |
-
-## F. 雷达 tab（Radar）
-| commitments/matches/favors/cooling/dormant/numberLedger | ✅全200 |
-| dismissCommitment | ✅ |
-
-## G. 洞察 tab（Insights）
-| balance/panorama/checkup/portrait | ✅ |
-
-## H. 好友 tab（Friends）
-| people | ✅ |
-| friend加/删 | ✅(404正确校验) |
-| match/{other} | ⬜(LLM) |
-
-## I. 冥想 tab（Life）
-| lifestory/lifesong/songMake/songStatus | 🔴→✅ lifesong曾崩已修 |
-| stats/getSettings | ⬜ |
-
-## J. 文库 tab（Library/Reader/Search/Gallery）
-| library/mylibrary | ✅ |
-| doc详情/mediaStructure/wechatMessages | ⬜部分 |
-| search | ⬜ |
-
-## K. 入库 tab（Ingest/WechatSync）—— ★重点,两个子tab
-| 功能 | 状态 | ★问题 |
-|------|------|-------|
-| 文档上传 | ✅真入库(EPUB/PDF) | |
-| URL入库 | ✅ | |
-| 文件夹上传 | ⬜ | |
-| **「实时同步」子tab(微信助手)** | ✅链路(handoff消费) | 需真机开助手测 |
-| **「iPhone导入历史」子tab(iOS导入)** | ✅解析链路真机验证(47G备份→38会话) | 🔴**执行者import_iphone.py不在打包助手/sidecar里,前端点了谁执行?——下轮必查** |
-| 微信助手下载 | ✅本地/dl | |
-| 实时同步徽章 | ✅心跳门控 | |
-
-## L. 设置 tab（Settings）
-| getSettings/saveSettings | ✅ |
-| **testSettings测连通** | ✅真回DeepSeek |
-| getProfile/updateProfile | ✅ |
-| setPassword | ⬜ |
-| setAvatar/getAvatars | ✅ |
-
-## M. 说明 tab（Help/Guide）
-| 全平台手册/图文引导 | ⬜ |
+> **上一轮为什么失败**:把"有前端 UI = ✅"当完成,整块打勾,漏了"打包/部署到底带没带执行体"这一维,
+> 导致 iOS 导入、edge-tts、音视频入库三块前端有、功能死,却被标绿。见 `PACKAGING_MIGRATION_PITFALLS_2026-08-28.md`。
+>
+> **本版原则(用户令,颗粒度到最细)**:
+> 1. **原子级**:每个 tab 拆到每个按钮/每个文件类型/每个状态(空/加载/错误/成功),各给一个可追踪 ID。
+> 2. **测打包产物,不测源码**:下最新 CI 的 DMG 真机装,不允许本机抽临时 sidecar 冒充。
+> 3. **空数据新用户**:从注册登录 → 每 tab 每功能走一遍,空态/引导/崩溃是重点;再用有数据账号测 LLM 类。
+> 4. **静默失败必抓**:凡 `try/except` 包裹的依赖(sherpa/edge-tts/officecli),要验证"有依赖时真出结果",不是"没崩就过"。
+> 5. **每条三态验证**:空态不崩 + 操作成功 + 错误态友好报错。
+>
+> 状态图例:⬜未测 / ✅通过 / 🔴失败 / ⚠️部分 / — 不适用
 
 ---
 
-## ★ 下一轮审计要补的盲区（我觉得不够全的地方）
-1. **账号全流程完全没测**（注册/登录/引导/支付墙）——空数据新用户的第一步
-2. **iOS导入执行链路断裂嫌疑**：import_iphone.py 不在打包产物里,前端有UI但可能无执行者
-3. **微信助手「实时同步」子tab**需真机开助手端到端
-4. LLM类端点(deepen/match/report/briefing)空库测不到真实输出,需有数据的账号
-5. **前端全tab CDP截图**要在**空数据新账号**上重跑(之前用旧库测,掩盖了空态问题)
-6. 说明/引导tab完全没测
-7. **多轮审计**:每轮补一类盲区,不是一次测完
+## 0. 打包完整性（前置门控,装机前先验,对应 R1/R2）
 
-## 可复用脚本
-`sidecar/client_smoke_test.py`(需扩展:加账号流程 + 空账号模式 + CDP前端截图)
+selftest 已门控;真机装后进 `~/Library/Application Support/Compound/brain` 或包内 `_internal` 抽查。
+
+| ID | 检查项 | 期望 | 状态 |
+|----|--------|------|------|
+| PKG-01 | `--selftest` 全绿 | SELFTEST PASS | ✅ CI 33155822652 |
+| PKG-02 | cacert.pem 在包 | https 鉴权通 | ✅ |
+| PKG-03 | schema_full.sql 在包 | 空 DB 建全 45 表 | ✅ |
+| PKG-04 | bge-m3 权重在包 | 离线嵌入 | ✅ |
+| PKG-05 | rapidocr onnx×3 在包 | 图片 OCR | ✅ |
+| PKG-06 | 微信助手安装包×3 在包 | /dl 离线发包 | ✅ |
+| PKG-07 | **wxsync/*.py(iOS 导入执行体)在包** | `/api/iphone/*` 有执行者 | ⬜ 需抽包确认 `_internal/wxsync/import_iphone.py` |
+| PKG-08 | **SenseVoice ASR 模型在包** | 音频转写 | ✅ selftest |
+| PKG-09 | **ffmpeg 二进制在包** | 抽音轨 | ✅ selftest |
+| PKG-10 | **silero VAD / 3dspeaker / pyannote 在包** | 断句+说话人 | ✅ selftest |
+| PKG-11 | **import sherpa_onnx / edge_tts** | 音视频+旁白 | ✅ selftest |
+| PKG-12 | officecli 二进制在包 | 产出 PPT/Word/Excel | ⬜ 需真出文件确认 |
+
+---
+
+## A. 登录前 —— 账号流程（空数据新用户第一步,上一轮完全没测）
+
+| ID | 功能 | 操作 | 期望 | 状态 |
+|----|------|------|------|------|
+| A-01 | 落地页 | 启动客户端 | 默认登录页,可切注册,无白屏 | ⬜ |
+| A-02 | 发验证码 | 输新手机号点发码 | SMS 发出(DEV 环境回显验证码) | ⬜ |
+| A-03 | 手机注册 | 输码+密码注册 | 建号成功,进引导 | ⬜ |
+| A-04 | 验证码登录 | 已注册号+码登录 | 登录成功 | ⬜ |
+| A-05 | 密码登录 | 手机号+密码登录 | 登录成功 | ⬜ |
+| A-06 | 密码错误 | 错密码登录 | 友好报错(非 500) | ⬜ |
+| A-07 | 忘记密码 | 走 resetPassword | 改密成功可登录 | ⬜ |
+| A-08 | 新用户引导 Onboard | 注册后 | 引导流程完整,可跳过/完成 | ⬜ |
+| A-09 | 引导填画像 | 填行业/职业 | 存档,后续画像用 | ⬜ |
+| A-10 | 试用倒计时 | 新号进主页 | 显示试用剩余天数 | ⬜ |
+| A-11 | 订阅墙 Paywall | 试用到期/点付费 | plans 列出,payCreate 出二维码 | ⬜ |
+| A-12 | 支付查询 | payQuery 轮询 | 支付成功后解锁 | ⬜ |
+| A-13 | 订单记录 | 设置看 orders | 列出历史订单,可删 | ⬜ |
+| A-14 | 支付宝登录 | (用户令隐藏) | 不显示 | — |
+
+---
+
+## B. 问答 tab（home）—— Home + Cards + Ask
+
+| ID | 功能 | 操作 | 期望 | 状态 |
+|----|------|------|------|------|
+| B-01 | 首页空态 | 空号进首页 | 显示 Empty 引导,不崩 | ✅已修 |
+| B-02 | 今日发现空态 | today 空 | 空态文案 | ⬜ |
+| B-03 | 新建目标卡 | createCard(目标) | 卡片出现 | ⬜ |
+| B-04 | 新建日记卡 | createCard(日记) | 卡片出现 | ⬜ |
+| B-05 | 卡片改状态 | cardStatus | 状态切换持久 | ⬜ |
+| B-06 | 卡片编辑 | cardEdit | 内容更新 | ⬜ |
+| B-07 | 删卡 | deleteCard | 卡片消失 | ⬜ |
+| B-08 | 卡片关联历史 | cardRelated | 语义搜出相关素材 | ⬜(需数据) |
+| B-09 | 真实问答 LLM | ask 提问 | DeepSeek 真回答+出处 | ⬜(需 key+数据) |
+| B-10 | 问答无 key | 未配 key 提问 | 友好报错"未配置 AI key" | ✅ |
+| B-11 | 连接发现 | links/entityLinks | 列出实体连接 | ⬜(需数据) |
+| B-12 | 产出 PPT | generate(ppt) | officecli 真出 .pptx 文件可下 | ⬜ PKG-12 |
+| B-13 | 产出 Word | generate(docx) | 真出 .docx | ⬜ |
+| B-14 | 产出 Excel | generate(xlsx) | 真出 .xlsx | ⬜ |
+| B-15 | 今日新闻 | news | 列出(或空态) | ⬜ |
+| B-16 | 发现红点 | discoveries | 有新发现亮红点 | ⬜ |
+
+---
+
+## C. 探索 tab（explore）—— Explore/StarCloud/NodeDetail/Search
+
+| ID | 功能 | 操作 | 期望 | 状态 |
+|----|------|------|------|------|
+| C-01 | 星海图空态 | 空号 | "还没星图"提示,不崩 | ✅ |
+| C-02 | 星海图有数据 | 嵌够向量 | 星云成形可交互 | ⬜(需嵌入) |
+| C-03 | 文档图 graph | 切文档图 | 力导图渲染 | ⬜ |
+| C-04 | 主题星系 | chatTopicGalaxy | 16 簇 KMeans 秒开 | ⬜(需微信数据) |
+| C-05 | 全局搜索 | search 关键词 | 命中文档/片段 | ⬜ |
+| C-06 | 节点详情 | chatNode | 详情抽屉 | ⬜ |
+| C-07 | 节点连接 | connections | 关联节点列表 | ⬜ |
+| C-08 | 文档摘要 | docSummary | LLM 摘要 | ⬜ |
+| C-09 | 相似文档 | similar | 语义近邻 | ⬜ |
+
+---
+
+## D. 画像 tab（persona）
+
+| ID | 功能 | 操作 | 期望 | 状态 |
+|----|------|------|------|------|
+| D-01 | 画像空态 | 空号 | 引导"多入库才有画像",不崩 | ⬜ |
+| D-02 | 画像真实生成 | persona(有数据) | LLM 读全库生成画像 | ⬜(需数据) |
+| D-03 | 画像刷新 | 重新生成 | 更新不重复 | ⬜ |
+
+---
+
+## E. 人脉 tab（renmai）—— Relationships/ContactGraph/GroupGraph/RelationTimeline
+
+| ID | 功能 | 操作 | 期望 | 状态 |
+|----|------|------|------|------|
+| E-01 | 关系卡空态 | 空号 | 空态引导,不崩 | ⬜ |
+| E-02 | 关系卡列表 | relationships | 联系人卡瀑布流 | ⬜(需微信) |
+| E-03 | 关系力导图 | relGraph | 力导图可拖(nodePointerAreaPaint) | ⬜ |
+| E-04 | 关系路径 | relPath | 两人间路径 | ⬜ |
+| E-05 | 见面简报 | briefing | LLM 履约信用简报 | ⬜(LLM) |
+| E-06 | 深聊 deepen | deepen | LLM 深度分析 | ⬜(LLM) |
+| E-07 | 群图谱 | groupGraph | flash 出结构化 JSON+浮层 | ⬜(需群数据) |
+| E-08 | 关系时间线 | relationTimeline | 1:1 走势时间线 | ⬜ |
+| E-09 | 起草回复 | draftReply | LLM 拟回复 | ⬜(LLM) |
+| E-10 | dismiss 循环/触达 | dismissLoop/dismissReach | 消除持久 | ✅ |
+
+---
+
+## F. 雷达 tab（radar）
+
+| ID | 功能 | 操作 | 期望 | 状态 |
+|----|------|------|------|------|
+| F-01 | 雷达空态 | 空号 | 不转圈死,空态 | ⬜ |
+| F-02 | 承诺雷达 | commitments | 列出承诺(缓存,不同步跑 LLM) | ⬜(需数据) |
+| F-03 | 供需撮合 | matches | flash 出撮合 | ⬜ |
+| F-04 | 人情账 | favors | 列出 | ⬜ |
+| F-05 | 降温预警 | cooling | 列出 | ⬜ |
+| F-06 | 沉睡联系人 | dormant | 列出 | ⬜ |
+| F-07 | 数字台账 | numberLedger | 数字台账 | ⬜ |
+| F-08 | dismiss 承诺 | dismissCommitment | 消除 | ✅ |
+
+---
+
+## G. 洞察 tab（insights）
+
+| ID | 功能 | 操作 | 期望 | 状态 |
+|----|------|------|------|------|
+| G-01 | 洞察空态 | 空号 | 不崩 | ⬜ |
+| G-02 | 收支平衡 | balance | 数据卡 | ⬜ |
+| G-03 | 全景 | panorama | 全景视图 | ⬜ |
+| G-04 | 体检 | checkup | 关系体检 | ⬜ |
+| G-05 | 画像洞察 | portrait | LLM 画像 | ⬜(LLM) |
+| G-06 | 报告 | report | 生成报告 | ⬜(LLM) |
+
+---
+
+## H. 好友 tab（friends）
+
+| ID | 功能 | 操作 | 期望 | 状态 |
+|----|------|------|------|------|
+| H-01 | 好友空态 | 空号 | 不崩 | ⬜ |
+| H-02 | 好友列表 | people | 列出 | ⬜ |
+| H-03 | 加好友 | friend 加 | 成功 | ⬜ |
+| H-04 | 加不存在好友 | friend 错号 | 404 友好校验 | ✅ |
+| H-05 | 删好友 | friend 删 | 成功 | ⬜ |
+| H-06 | 姻缘 match | match/{other} | LLM 匹配分析 | ⬜(LLM) |
+
+---
+
+## I. 冥想 tab（life）—— ★edge-tts 语音本轮补,必测出声
+
+| ID | 功能 | 操作 | 期望 | 状态 |
+|----|------|------|------|------|
+| I-01 | 冥想 tab 不崩 | 进 life | 不崩(曾因 api.lifesong 缺失崩) | ✅已修 |
+| I-02 | 一生故事生成 | lifestory | LLM 出旁白脚本+分镜 | ⬜(需数据) |
+| I-03 | **旁白语音出声** | lifestory 播放 | **edge-tts 真合成 mp3,能听到人声** | ⬜ ★本轮补,必验 |
+| I-04 | 声线选择 | 不同 voice | 温柔/磁性等声线生效 | ⬜ |
+| I-05 | 主题曲生成 | songMake | Suno 出曲 | ⬜ |
+| I-06 | 主题曲状态 | songStatus | 轮询到完成 | ⬜ |
+| I-07 | 冥想设置 | getSettings | 分层生成门控 | ⬜ |
+| I-08 | 冥想统计 | stats | 数据 | ⬜ |
+
+---
+
+## J. 文库 tab（library）—— Library/Reader/Search/Gallery
+
+| ID | 功能 | 操作 | 期望 | 状态 |
+|----|------|------|------|------|
+| J-01 | 文库空态 | 空号 | 空态引导,不崩 | ⬜ |
+| J-02 | 我的文库 | mylibrary | 已入库文档列表 | ⬜ |
+| J-03 | 文档详情 | doc | 打开阅读器 | ⬜ |
+| J-04 | 阅读器翻页 | Reader | 分页正常 | ⬜ |
+| J-05 | 文库搜索 | search | 命中 | ⬜ |
+| J-06 | 图库 Gallery | 图片文档 | 缩略图墙 | ⬜ |
+| J-07 | 音视频结构 | mediaStructure | 转写时间轴+说话人 | ⬜ ★音视频入库后必验 |
+| J-08 | 微信消息查看 | wechatMessages | 聊天记录可读 | ⬜(需微信) |
+
+---
+
+## K. 入库 tab（ingest）—— ★★核心,每种文件类型单独一条(上一轮只测了 PDF/EPUB)
+
+### K.1 文档类（FITZ 直读:PyMuPDF）
+| ID | 文件类型 | 期望 | 状态 |
+|----|---------|------|------|
+| K-PDF | .pdf | 抽全文入库+可搜 | ⚠️(测过 PDF) |
+| K-EPUB | .epub | 抽全文 | ⚠️(测过 EPUB) |
+| K-MOBI | .mobi | 抽全文 | ⬜ |
+| K-FB2 | .fb2 | 抽全文 | ⬜ |
+| K-XPS | .xps | 抽全文 | ⬜ |
+| K-CBZ | .cbz | 漫画页 | ⬜ |
+
+### K.2 电子书转换类（CONVERT）
+| ID | 文件类型 | 期望 | 状态 |
+|----|---------|------|------|
+| K-AZW3 | .azw3 | 转换后抽全文 | ⬜ |
+| K-AZW | .azw | 转换后抽全文 | ⬜ |
+
+### K.3 Office/文本类（OFFICE 抽取）
+| ID | 文件类型 | 期望 | 状态 |
+|----|---------|------|------|
+| K-DOCX | .docx | 抽正文 | ⬜ |
+| K-PPTX | .pptx | 抽每页文字 | ⬜ |
+| K-XLSX | .xlsx | 抽单元格 | ⬜ |
+| K-XLSM | .xlsm | 抽单元格 | ⬜ |
+| K-MD | .md/.markdown | 抽正文 | ⬜ |
+| K-TXT | .txt | 抽正文 | ⬜ |
+| K-HTML | .html/.htm | 抽正文 | ⬜ |
+| K-CSV | .csv | 抽表格 | ⬜ |
+| K-JSON | .json | 抽内容 | ⬜ |
+| K-EML | .eml | 抽邮件 | ⬜ |
+| K-MBOX | .mbox | 抽邮箱 | ⬜ |
+
+### K.4 图片类（OCR:rapidocr / 高精 paddle）
+| ID | 文件类型 | 期望 | 状态 |
+|----|---------|------|------|
+| K-PNG | .png | OCR 出文字 | ⬜ |
+| K-JPG | .jpg/.jpeg | OCR | ⬜ |
+| K-WEBP | .webp | OCR | ⬜ |
+| K-BMP | .bmp | OCR | ⬜ |
+| K-TIFF | .tiff/.tif | OCR | ⬜ |
+| K-GIF | .gif | OCR | ⬜ |
+| K-HEIC | .heic | OCR(iPhone 照片) | ⬜ ★重要 |
+
+### K.5 音频类（ASR:SenseVoice + silero VAD + 说话人分离）★本轮补
+| ID | 文件类型 | 期望 | 状态 |
+|----|---------|------|------|
+| K-MP3 | .mp3 | 转写文字+时间轴入库 | ⬜ ★必验 |
+| K-WAV | .wav | 转写 | ⬜ |
+| K-M4A | .m4a | 转写(iPhone 语音备忘) | ⬜ ★重要 |
+| K-FLAC | .flac | 转写 | ⬜ |
+| K-AAC | .aac | 转写 | ⬜ |
+| K-OGG | .ogg | 转写 | ⬜ |
+| K-WMA | .wma | 转写 | ⬜ |
+| K-AMR | .amr | 转写(微信语音) | ⬜ ★重要 |
+
+### K.6 视频类（抽音轨 ASR + 抽帧 OCR）★本轮补
+| ID | 文件类型 | 期望 | 状态 |
+|----|---------|------|------|
+| K-MP4 | .mp4 | 音轨转写+画面 OCR | ⬜ ★必验 |
+| K-MOV | .mov | 转写(iPhone 录像) | ⬜ ★重要 |
+| K-MKV | .mkv | 转写 | ⬜ |
+| K-AVI | .avi | 转写 | ⬜ |
+| K-WEBM | .webm | 转写 | ⬜ |
+| K-FLV | .flv | 转写 | ⬜ |
+| K-TS | .ts | 转写 | ⬜ |
+
+### K.7 其他入库入口
+| ID | 功能 | 期望 | 状态 |
+|----|------|------|------|
+| K-URL | URL 入库 uploadUrl | 抓网页正文入库 | ⬜ |
+| K-DIR | 文件夹批量 | 递归入库所有支持类型 | ⬜ |
+| K-PROG | 入库进度 ingestProgress | 五段/百分比实时 | ⬜ |
+| K-DUP | 重复入库 | 去重不重复 | ⬜ |
+| K-BAD | 损坏/空文件 | 友好报错不崩 | ⬜ |
+| K-UNSUP | 不支持类型(如 .exe) | 友好拒绝 | ⬜ |
+
+---
+
+## K-IOS. iPhone 导入历史（WechatSync 子 tab）★★上一轮标 ✅ 其实执行体没打包,逐步骤重测
+
+| ID | 步骤 | 操作/条件 | 期望 | 状态 |
+|----|------|----------|------|------|
+| IOS-01 | 未连手机 | 不插 | 状态灯灰,提示"请用数据线连 iPhone" | ⬜ |
+| IOS-02 | 已连未信任 | 插但没点信任 | 提示手机上点"信任" | ⬜ |
+| IOS-03 | 信任配对 | 手机点信任 | 状态灯绿"已连接" | ⬜ |
+| IOS-04 | 加密备份检测 | 备份加密开着 | 提示需关加密/输密码 | ⬜ |
+| IOS-05 | 供电临界提示 | 2015 老 Mac | 前端提示"息屏+飞行模式省电" | ✅前端已加 |
+| IOS-06 | 点开始导入 | 点按钮 | `/api/iphone/import` 起后台线程 | ⬜ ★执行体在包才行(PKG-07) |
+| IOS-07 | 段①连接手机 | 五段动画 | wx-pipe 第1段亮 | ⬜ |
+| IOS-08 | 段②备份聊天 | idevicebackup2 --full | 进度爬升(可能几十分钟/几十 G) | ⬜ |
+| IOS-09 | 段③解析数据 | 解析 Manifest.db | 找到微信 DB | ⬜ |
+| IOS-10 | 段④识别联系人 | 认人 name map | 联系人名正确(非乱码) | ⬜ |
+| IOS-11 | 段⑤写入大脑 | POST /api/wechat/ingest | 会话入库 | ⬜ |
+| IOS-12 | 导入完成 | 全段完成 | 提示成功+会话数 | ⬜ |
+| IOS-13 | 数据可见 | 完成后 | 文库/人脉/雷达能看到微信数据 | ⬜ |
+| IOS-14 | 中断恢复 | 中途拔线 | 友好报错,可重试 | ⬜ |
+| IOS-15 | 备份清理 | keep_backup=False | 导入后清临时备份不占盘 | ⬜ |
+
+> 真机链路已验证过(47G 备份→38 会话),但那是源码跑;**本轮必须在 DMG 装机版重跑 IOS-06→13**。
+
+---
+
+## K-WX. 微信实时同步（WechatSync 子 tab,与 iOS 导入是两个独立功能）
+
+| ID | 功能 | 期望 | 状态 |
+|----|------|------|------|
+| WX-01 | 助手下载 | /dl 本地发包 | ⬜ |
+| WX-02 | 助手连接 | wechatWatch | 8767 开关连通 | ⬜ |
+| WX-03 | 实时同步开 | realtimeToggle on | handoff 消费新消息 | ⬜ |
+| WX-04 | 同步徽章 | realtimeStatus | 心跳门控,不空转 | ✅ |
+| WX-05 | 实时同步关 | realtimeToggle off | 真停(不再同步) | ✅已修 |
+| WX-06 | 助手退出真停 | 助手 quit | 卸载常驻代理 | ✅已修 |
+
+---
+
+## L. 设置 tab（settings）
+
+| ID | 功能 | 期望 | 状态 |
+|----|------|------|------|
+| L-01 | 读设置 | getSettings | 载入当前 | ⬜ |
+| L-02 | 存设置 | saveSettings | 持久 | ⬜ |
+| L-03 | 双模型配置 | 质量/快 两档多厂商 | 各厂商 URL 生效 | ⬜ |
+| L-04 | 测连通 | testSettings | 真回 DeepSeek | ✅ |
+| L-05 | 模型下线报错 | 配失效模型 | 友好报错 | ⬜ |
+| L-06 | 读画像 | getProfile | 载入 | ⬜ |
+| L-07 | 改画像 | updateProfile | 持久 | ⬜ |
+| L-08 | 设密码 | setPassword | 强度校验+改成功 | ⬜ |
+| L-09 | 头像选择 | setAvatar/getAvatars | 生效 | ✅ |
+| L-10 | 订单记录 | orders/orderDelete | 列出+删 | ⬜ |
+
+---
+
+## M. 说明 tab（help）—— 上一轮完全没测
+
+| ID | 功能 | 期望 | 状态 |
+|----|------|------|------|
+| M-01 | 说明页渲染 | Help/Guide | 全平台手册显示 | ⬜ |
+| M-02 | 导入图文引导 | Guide 4 份导入说明 | 可见(曾因 tile:false 藏了) | ⬜ |
+| M-03 | 常驻导航 | 说明入口 | 全平台可发现 | ⬜ |
+
+---
+
+## N. 全局/跨 tab
+
+| ID | 功能 | 期望 | 状态 |
+|----|------|------|------|
+| N-01 | 全 tab 切换不崩 | 逐个点 11 tab | ErrorBoundary 兜底,无白屏 | ⬜ |
+| N-02 | 分析中%进度 | AnalysisStatus | 后台嵌入爬升,不卡死 | ⬜ |
+| N-03 | 无 emoji | 全站 | 纯文字/SVG,无 emoji 图标 | ⬜ |
+| N-04 | 动画科幻 | 各动画 | 精致+科幻(用户铁律) | ⬜ |
+| N-05 | 退出登录 | logout | 回登录页,清 token | ⬜ |
+| N-06 | 账户页 | account | 用户信息+试用/订阅 | ⬜ |
+
+---
+
+## O. 多账号协作场景（★单账号测不了,必须甲/乙/丙 三个真号互动）
+
+**准备**:注册 3 个测试账号 —— **甲**(主,有较多微信/文档数据)、**乙**(有部分数据)、**丙**(空号)。
+好友/姻缘/撮合/群等社交功能是账号间交互,单号跑不出真实链路。
+
+| ID | 功能 | 参与账号 | 操作链 | 期望 | 状态 |
+|----|------|---------|--------|------|------|
+| O-01 | 加好友(对方存在) | 甲→乙 | 甲搜乙手机号→加 | 乙出现在甲好友列表 | ⬜ |
+| O-02 | 加好友(对方不存在) | 甲→假号 | 甲加不存在号 | 404 友好提示 | ✅ |
+| O-03 | 好友请求可见 | 甲→乙 | 甲加乙后,乙端 | 乙能看到甲的请求/关系 | ⬜ |
+| O-04 | 双向好友 | 甲↔乙 | 互加 | 双方列表都有对方 | ⬜ |
+| O-05 | 删好友双向 | 甲删乙 | 甲删 | 甲列表无乙(乙端相应更新) | ⬜ |
+| O-06 | 姻缘 match(双有数据) | 甲×乙 | 甲对乙 match | LLM 基于双方画像出匹配分析 | ⬜ |
+| O-07 | 姻缘 match(一方空) | 甲×丙 | 甲对空号丙 match | 友好提示"对方数据不足",不发 LLM | ⬜ |
+| O-08 | 姻缘 match 无画像 | 丙×丙 | 空号互测 | 不发 LLM,引导先入库 | ⬜ |
+| O-09 | 供需撮合跨账号 | 甲/乙 | 各填供需,撮合雷达 | 撮合出甲乙互补机会 | ⬜ |
+| O-10 | 群图谱多人 | 甲(群数据) | groupGraph | 多人群熟络度结构化 | ⬜ |
+| O-11 | 账号隔离(安全) | 甲/乙 | 甲 token 读乙数据 | **拒绝越权**(IDOR 防护) | ⬜ ★安全必测 |
+| O-12 | 数据不串号 | 甲/乙 | 各自画像/文库 | 互不可见,严格隔离 | ⬜ ★安全必测 |
+
+---
+
+## P. 多状态/多按钮 展开（★每个操作、每种情况一条,不合并)
+
+> 上一轮把"卡片"整块打勾就是错——一张卡有新建/编辑/改状态/删/关联至少 5 个操作 × 目标/日记 2 类型。
+> 下面示范几个高频多操作功能的原子拆分,其余 tab 按此粒度补。
+
+### P.1 卡片（B tab）全操作矩阵
+| ID | 类型×操作 | 期望 | 状态 |
+|----|----------|------|------|
+| P-C01 | 目标卡·新建 | 出现 | ⬜ |
+| P-C02 | 目标卡·编辑标题 | 更新 | ⬜ |
+| P-C03 | 目标卡·改状态(进行中→完成) | 持久 | ⬜ |
+| P-C04 | 目标卡·关联历史 | 语义搜素材 | ⬜ |
+| P-C05 | 目标卡·删除 | 消失+确认 | ⬜ |
+| P-C06 | 日记卡·新建 | 出现 | ⬜ |
+| P-C07 | 日记卡·编辑 | 更新 | ⬜ |
+| P-C08 | 日记卡·删除 | 消失 | ⬜ |
+| P-C09 | 空标题提交 | 校验拦截 | ⬜ |
+| P-C10 | 超长内容 | 不溢出/不崩 | ⬜ |
+
+### P.2 入库上传(K tab)多入口 × 多情况
+| ID | 入口×情况 | 期望 | 状态 |
+|----|----------|------|------|
+| P-I01 | 单文件·点选 | 入库 | ⬜ |
+| P-I02 | 多文件·多选 | 批量入库 | ⬜ |
+| P-I03 | 拖拽上传 | 入库 | ⬜ |
+| P-I04 | 文件夹·递归 | 全类型入库 | ⬜ |
+| P-I05 | URL·单条 | 抓正文 | ⬜ |
+| P-I06 | 上传中取消 | 中断干净 | ⬜ |
+| P-I07 | 超大文件 | 进度不假死 | ⬜ |
+| P-I08 | 并发多文件进度 | 各自进度正确 | ⬜ |
+
+### P.3 设置(L tab)双模型 × 多厂商 × 多档
+| ID | 情况 | 期望 | 状态 |
+|----|------|------|------|
+| P-S01 | 质量档·DeepSeek | 测连通过 | ⬜ |
+| P-S02 | 快档·DeepSeek-flash | 生效 | ⬜ |
+| P-S03 | 换厂商(通义/Kimi/自定义URL) | URL 生效 | ⬜ |
+| P-S04 | 自定义 API base | 通用 URL 接入 | ⬜ |
+| P-S05 | 只对 deepseek-flash 开 thinking 门控 | 门控正确 | ⬜ |
+| P-S06 | 质量模型 180s 超时 | 超时友好报错 | ⬜ |
+| P-S07 | 空 key 保存 | 校验/提示 | ⬜ |
+
+> **其余 tab(探索/人脉/雷达/洞察/冥想…)凡有多个按钮或多种情况的,一律按 P 的粒度拆开补充。**
+
+---
+
+## 测试执行方法（可复用）
+
+1. **下 DMG**:`gh run download <id> -n compound-mac-intel-lite`,真机装(macOS12/Intel)。
+2. **空号**:全新手机号注册,不导任何数据,先走 A + 各 tab 空态(B-01/C-01/D-01/E-01/F-01…)。
+3. **CDP 驱动前端**:Chrome CDP 连 webview,逐 tab 点 + 抓 console 报错 + 截图。先最大化窗口。
+4. **入库全类型**:K.1~K.7 每种类型准备一个样本文件,逐个传,验入库+可搜+文库可见。
+5. **iOS 导入**:真机插 iPhone 走 IOS-01→15。
+6. **有数据账号**:导入微信+文档后,测 LLM 类(B-09/D-02/E-05/H-06/I-02…)。
+7. **多账号(甲/乙/丙)**:注册 3 号,甲乙有数据、丙空,跑 O 章社交+安全隔离(O-01→12)。
+8. **每条记**:状态(✅/🔴/⚠️)+证据(截图/端点响应/文件)。
+
+## 覆盖度自查（交付前必核,防上一轮"整块打勾"复发）
+- [ ] 每条 case 有独立 ID 且状态非空
+- [ ] 入库 K.1~K.7 **每种文件类型**都有样本实测(不是只测 PDF/EPUB)
+- [ ] iOS 导入 IOS-06→13 在**DMG 装机版**跑过(不是源码)
+- [ ] 音视频/edge-tts/officecli 这类**静默失败**功能验的是"真出结果",不是"没崩"
+- [ ] 多账号 O 章跑过(单号功能与多号功能都覆盖)
+- [ ] 多操作功能按 P 章粒度拆开(卡片/上传/设置…每个按钮每种情况一条)
+- [ ] 安全隔离 O-11/O-12 跑过(越权拒绝)
+
+## 脚本
+`sidecar/client_smoke_test.py`(待扩展:账号流程 + 空号模式 + 全文件类型入库 + CDP 截图)。
