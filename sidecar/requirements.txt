@@ -31,3 +31,6 @@ certifi
 beautifulsoup4
 mobi
 yt-dlp
+edge-tts        # ★冥想TTS语音朗读(之前漏,日志报No module named edge_tts 37次)
+sherpa-onnx     # ★音视频转文字入库(SenseVoice ASR+说话人分离;前端支持录音/视频)
+soundfile       # sherpa-onnx 读写音频依赖

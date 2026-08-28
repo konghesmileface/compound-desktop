@@ -1553,6 +1553,87 @@ def wechat_watch(authorization: str = Header(None)):
     return {"ok": True}
 
 
+# ── iPhone 历史导入(iOS,与微信助手无关):点「开始导入(连手机)」→ 这里后台跑
+#    idevicebackup2 全量备份 → 解析微信库 → 认人 → 推 /api/wechat/ingest。进度写 ingest_progress
+#    (job_id 以 iphone- 开头,前端 iOS tab 的五段式动画读它)。执行代码 = sidecar/wxsync/import_iphone。
+_IPHONE_IMPORT = {"running": False}
+
+@app.get("/api/iphone/status")
+def iphone_status(authorization: str = Header(None)):
+    """iOS 导入是否在跑 + 环境是否就绪(idevicebackup2 是否可用、有没有连手机)。"""
+    _me(authorization)
+    import shutil as _sh, subprocess as _sp
+    have_tool = bool(_sh.which("idevicebackup2") and _sh.which("idevice_id"))
+    connected = False
+    if have_tool:
+        try:
+            out = _sp.check_output(["idevice_id", "-l"], text=True, timeout=8)
+            connected = bool([x for x in out.splitlines() if x.strip()])
+        except Exception:
+            connected = False
+    return {"running": _IPHONE_IMPORT["running"], "tool_ready": have_tool, "connected": connected}
+
+
+@app.post("/api/iphone/import")
+def iphone_import(authorization: str = Header(None)):
+    """启动 iPhone 历史导入(后台线程)。立刻返回;前端轮询 /api/ingest/progress 看五段式进度。"""
+    me = _me(authorization)
+    tok = (authorization or "").replace("Bearer ", "")
+    if _IPHONE_IMPORT["running"]:
+        return {"ok": True, "already_running": True}
+
+    import shutil as _sh
+    if not (_sh.which("idevicebackup2") and _sh.which("idevice_id")):
+        raise HTTPException(400, "未检测到 iPhone 备份工具(idevicebackup2)。请先安装:brew install libimobiledevice")
+
+    _port = os.environ.get("WEB_PORT", "8200")
+    _self = "http://127.0.0.1:%s" % _port
+
+    def _run():
+        _IPHONE_IMPORT["running"] = True
+        # 让 import_iphone 的 uploader/status 推给 sidecar 自己(config 支持 WXSYNC_* 环境变量覆盖)
+        os.environ["WXSYNC_BACKEND"] = _self
+        os.environ["WXSYNC_TOKEN"] = tok
+        try:
+            import sys as _sys
+            _wp = os.path.join(getattr(_sys, "_MEIPASS", os.path.dirname(os.path.abspath(__file__))), "wxsync")
+            if _wp not in _sys.path:
+                _sys.path.insert(0, _wp)
+            import import_iphone as _imp
+            # 进度回调 → ingest_progress(job_id=iphone-import,前端五段式动画读)
+            def _cb(stage, percent, detail="", contact="全部微信聊天", state=None):
+                try:
+                    c2 = _con()
+                    try:
+                        _st = state or ("done" if percent >= 100 else "importing")
+                        c2.execute("INSERT OR REPLACE INTO ingest_progress(owner,job_id,contact,state,percent,message,ts) "
+                                   "VALUES(?,?,?,?,?,?,?)",
+                                   (me, "iphone-import", contact, _st, int(percent), stage + (" · " + detail if detail else ""), _time.time()))
+                        c2.commit()
+                    finally:
+                        c2.close()
+                except Exception:
+                    pass
+            _imp.run_import(on_status=_cb, min_lines=2, keep_backup=False)
+        except Exception as e:
+            try:
+                c2 = _con()
+                try:
+                    c2.execute("INSERT OR REPLACE INTO ingest_progress(owner,job_id,contact,state,percent,message,ts) "
+                               "VALUES(?,?,?,?,?,?,?)",
+                               (me, "iphone-import", "全部微信聊天", "failed", 0, "导入失败:" + str(e)[:200], _time.time()))
+                    c2.commit()
+                finally:
+                    c2.close()
+            except Exception:
+                pass
+        finally:
+            _IPHONE_IMPORT["running"] = False
+
+    threading.Thread(target=_run, daemon=True).start()
+    return {"ok": True, "started": True}
+
+
 @app.post("/api/realtime/toggle")
 def realtime_toggle(payload: dict = Body(...), authorization: str = Header(None)):
     """网页开关实时同步。客户端靠轮询 heartbeat 返回的 enabled 跟随。"""

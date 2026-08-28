@@ -20,6 +20,13 @@ if os.path.isfile(_sf):
 _occ = os.path.join(here, "bin", "officecli")
 if os.path.isfile(_occ):
     datas.append((_occ, "bin"))
+# ★iOS 历史导入模块(sidecar/wxsync:import_iphone/config/status/uploader)。app.py 的
+#   /api/iphone/import 端点把 _MEIPASS/wxsync 加进 sys.path 后 import import_iphone 执行。
+_wxs = os.path.join(here, "wxsync")
+if os.path.isdir(_wxs):
+    for _f in os.listdir(_wxs):
+        if _f.endswith(".py"):
+            datas.append((os.path.join(_wxs, _f), "wxsync"))
 # ★opencv-python-headless:collect_submodules('cv2') 会在 cv2.gapi 崩(AttributeError),
 #   改为显式收 cv2 的动态库 + 数据(.so + config),并作为 plain hidden import,交给内置 hook 处理其余。
 try:

@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react'
 import { api } from './api'
+import { toast } from './ui'
 import { SYNC_DL, syncHref, onSyncDownload } from './Guide'
 
 // ===== 「数据入脑 · 神经流」canvas 场景 =====
@@ -179,11 +180,14 @@ function iosStageIndex(pct) {
 export default function WechatSync({ onGuide }) {
   const [rt, setRt] = useState(null)          // realtime status
   const [prog, setProg] = useState(null)      // ingest progress
+  const [iosEnv, setIosEnv] = useState(null)  // iOS 导入环境:tool_ready/connected/running
+  const [iosStarting, setIosStarting] = useState(false)
   const timer = useRef(null)
 
   const refresh = () => {
     api.realtimeStatus().then(setRt).catch(() => {})
     api.ingestProgress().then(setProg).catch(() => {})
+    api.iphoneStatus().then(setIosEnv).catch(() => {})
   }
   useEffect(() => {
     api.wechatWatch().catch(() => {})   // 启动 sidecar 本地 handoff 消费线程(读 ~/.wxsync/handoff 入库+心跳)
@@ -191,6 +195,16 @@ export default function WechatSync({ onGuide }) {
     timer.current = setInterval(refresh, 4000)
     return () => clearInterval(timer.current)
   }, [])
+
+  // 「开始导入(连手机)」:客户端本机跑 idevicebackup2 备份→解析微信→入库(与微信助手无关)
+  const startIphoneImport = () => {
+    if (iosStarting) return
+    setIosStarting(true)
+    api.iphoneImport()
+      .then(() => { toast('开始从 iPhone 导入,保持手机解锁别拔线', 'ok'); refresh() })
+      .catch((e) => { toast(String(e && e.message).includes('400') ? '未检测到 iPhone 备份工具,请先装 libimobiledevice' : '启动导入失败,请重试', 'err') })
+      .finally(() => setTimeout(() => setIosStarting(false), 3000))
+  }
 
   const items = (prog && prog.items) || []
   const nowSec = Date.now() / 1000
@@ -315,12 +329,27 @@ export default function WechatSync({ onGuide }) {
                 <svg viewBox="0 0 24 24" width="30" height="30" fill="none" stroke="currentColor" strokeWidth="1.4"><rect x="6.5" y="2.5" width="11" height="19" rx="2.6"/><path d="M10.5 5.5h3"/></svg>
               </div>
               <div className="wx-ios-idle-t">把电脑版登录<b>之前</b>的老聊天,一次性补进来</div>
-              <div className="wx-ios-idle-s">用数据线把 iPhone 连上电脑,在同步助手里点「连手机导入历史」,这里就会实时显示进度。做一次即可,平时不用连。</div>
+              <div className="wx-ios-idle-s">用数据线把 iPhone 连上这台电脑,点下面「开始导入」,就会自动把手机里的历史微信补进第二大脑。做一次即可,平时不用连。</div>
+              {/* 连接状态灯:未连手机/未装工具时按钮禁用并提示 */}
+              <div className={'wx-ios-plug ' + (iosEnv && iosEnv.connected ? 'on' : '')}>
+                <span className="wx-ios-plug-dot" />
+                {!iosEnv ? '检测中…'
+                  : !iosEnv.tool_ready ? '未检测到 iPhone 备份工具(需装 libimobiledevice)'
+                    : iosEnv.connected ? 'iPhone 已连接 · 可以开始' : '请用数据线把 iPhone 连上电脑'}
+              </div>
+              <button
+                className="wx-ios-go"
+                disabled={iosStarting || !(iosEnv && iosEnv.tool_ready && iosEnv.connected)}
+                onClick={startIphoneImport}>
+                <span className="wx-ios-go-ring" />
+                <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M12 3v12M8 11l4 4 4-4" /><rect x="4" y="18" width="16" height="3" rx="1.2" /></svg>
+                {iosStarting ? '正在启动…' : '开始导入(连手机)'}
+              </button>
               <div className="wx-ios-warn">
                 <b>导入全程请:</b>① iPhone <b>保持解锁</b>(建议「设置→显示与亮度→自动锁定→永不」)· ② <b>不要拔数据线</b> · ③ 首次弹「信任此电脑」点信任并输锁屏密码。<br />
                 <b>如果中途反复中断</b>(多为供电不足,老电脑/非原装线常见):把 iPhone <b>屏幕亮度调到最低</b>、开<b>飞行模式</b>省电,再直插电脑机身 USB 口(别用扩展坞),就能稳定传完。备份较慢(几分钟到几十分钟),断了会自动继续。
               </div>
-              <button className="btn btn-primary" onClick={() => onGuide && onGuide('ios')}>看 iPhone 导入图文步骤 →</button>
+              <button className="wx-ios-guide-link" onClick={() => onGuide && onGuide('ios')}>看 iPhone 导入图文步骤 →</button>
             </div>
           ) : (
             <>
