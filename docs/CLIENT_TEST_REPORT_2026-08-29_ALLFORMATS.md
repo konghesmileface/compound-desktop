@@ -75,6 +75,27 @@ extract.py Office+文本 / cupsfilter PDF 文本层)均经多格式实测。
 | 电子书变体 mobi/azw3/azw/fb2/xps/cbz | — | 本地无法合成合规样件;走 fitz/mobi 同 epub 路径,风险低但未逐一实测(诚实标注) |
 | LLM 类(问答/撮合/简报/产出PPT-Word-Excel) | — | key 已配(DeepSeek 连通测试通),下一步测真实输出 |
 
+## 五·B、LLM 功能测试(key 配好后当场测,不需重构建)
+
+| 功能 | 结果 | 证据 |
+|------|------|------|
+| DeepSeek 连通 | ✅ | /api/settings/test 真回话 |
+| RAG 问答 /api/ask | ✅ | 检索 8 跨格式出处,LLM 带引用综合作答,诚实指出是测试样本 |
+| 产出 Word /api/generate | ✅ | 真 .docx(Word 2007+),14 段,可下载 |
+| 产出 Excel | ✅ | 真 .xlsx,四列结构(维度/关键发现/事实/建议),内容引用测试数据 |
+| **产出 PPT** | ❌→已修 | **见 §六:officecli resident 未 flush,前端立刻下载拿到空 deck** |
+
+## 六、★本轮第二个真机 bug:产出文档 officecli 未 flush 竞态(PPT 空 deck)
+
+- **现象**:生成 PPT 立刻下载 → 0 张幻灯片(只有母版/版式)。同文件十几秒后再看磁盘 = 6 张(自动刷补上)。
+- **根因**:`generate.py` 三个 `render_*_officecli` 用 `create`+`batch`/`add`/`import` 后**直接 return**,
+  未 `close`。officecli 后台 resident 持有文件仅改内存,adaptive 2–10s 才自动落盘。API 在 resident 落盘前
+  就把文件读出发给前端 → 空/残缺。PPT 因批量加页耗时短、我下载得快,稳定复现;Word/Excel 同 race,
+  测时多走几个来回拖了几秒侥幸刷完,不代表用户不会踩(用户点完立刻下载就中招)。
+- **修复**:`generate.py` 加 `_occ_flush(path)`(officecli `close` 触发 flush),三个 render_*_officecli
+  落盘前都调用。**本地验证**:create→batch→close→立刻读 = 2 张幻灯片当场就位(之前 0)。
+- **待新构建端到端复测**(这次改的是打包内 generate.py,需重构建进包)。
+
 ## 五、其它
 - DeepSeek key 已配入客户端,`/api/settings/test` 真回话通。**注:LLM 回复自带 emoji(😊),
   与「全站禁 emoji」铁律冲突,产出类 prompt 需兜底清洗(既有待办)**。

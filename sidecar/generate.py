@@ -251,10 +251,24 @@ def render_ppt_officecli(data: dict, tag: str) -> str:
             os.remove(cf)
         except OSError:
             pass
+    _occ_flush(path)   # ★close 触发落盘,否则前端立刻下载拿到空 deck
     if not os.path.exists(path):
         raise RuntimeError("officecli 未产出文件")
     _occ_preview(fn)
     return path
+
+
+def _occ_flush(path):
+    """★officecli create/add/batch 后文件被后台 resident 持有,仅在内存改动,不落盘(adaptive 2-10s 才自动刷)。
+    非 officecli 程序(这里是 API 直接读文件发给前端)必须先 close 触发 flush,否则用户一点生成立刻下载
+    → 拿到空/残缺文件(PPT 复现:0 张幻灯片;docx/xlsx 同 race,只是刷得快侥幸没暴露)。"""
+    import subprocess
+    if not OCC:
+        return
+    try:
+        subprocess.run(OCC + ["close", path], check=True, capture_output=True, timeout=60)
+    except Exception:
+        pass
 
 
 def _occ_preview(fn):
@@ -288,6 +302,7 @@ def render_docx_officecli(data: dict, tag: str) -> str:
     subprocess.run(OCC + ["create", path], check=True, capture_output=True, timeout=90)
     subprocess.run(OCC + ["add", path, "/body", "--type", "markdown", "--prop", "text=" + md],
                    check=True, capture_output=True, timeout=120)
+    _occ_flush(path)   # ★close 触发落盘,否则前端立刻下载拿到空/残缺 docx
     if not os.path.exists(path):
         raise RuntimeError("officecli 未产出 docx")
     _occ_preview(fn)
@@ -318,6 +333,7 @@ def render_xlsx_officecli(data: dict, tag: str) -> str:
             os.remove(cf)
         except OSError:
             pass
+    _occ_flush(path)   # ★close 触发落盘,否则前端立刻下载拿到空/残缺 xlsx
     if not os.path.exists(path):
         raise RuntimeError("officecli 未产出 xlsx")
     _occ_preview(fn)
