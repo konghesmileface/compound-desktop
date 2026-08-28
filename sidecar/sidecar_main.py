@@ -117,6 +117,24 @@ def main():
         n_dl = len(_glob.glob(os.path.join(base, "downloads", "*")))
         print(f"  {'OK  ' if n_dl else 'FAIL'} 数据:微信助手安装包({n_dl} 个)")
         ok = ok and n_dl > 0
+        # ★音视频入库:SenseVoice ASR + Mac ffmpeg(缺了音视频转文字入库跑不了)
+        _sv = os.path.join(base, "models", "sherpa-onnx-sense-voice-zh-en-ja-ko-yue-2024-07-17", "model.int8.onnx")
+        print(f"  {'OK  ' if os.path.isfile(_sv) else 'FAIL'} 数据:SenseVoice ASR 模型")
+        ok = ok and os.path.isfile(_sv)
+        _ff = os.path.join(base, "bin", "ffmpeg")
+        print(f"  {'OK  ' if os.path.isfile(_ff) else 'FAIL'} 数据:ffmpeg 二进制")
+        ok = ok and os.path.isfile(_ff)
+        for _mn, _mp in (("silero VAD", os.path.join(base, "models", "silero_vad.onnx")),
+                         ("3dspeaker 声纹", os.path.join(base, "models", "3dspeaker_speech_eres2net_base_sv_zh-cn_3dspeaker_16k.onnx")),
+                         ("pyannote 分割", os.path.join(base, "models", "sherpa-onnx-pyannote-segmentation-3-0", "model.onnx"))):
+            print(f"  {'OK  ' if os.path.isfile(_mp) else 'FAIL'} 数据:{_mn}")
+            ok = ok and os.path.isfile(_mp)
+        # sherpa_onnx / edge_tts 能 import(音视频ASR / 一生旁白)
+        for _m2 in ("sherpa_onnx", "edge_tts"):
+            try:
+                __import__(_m2); print(f"  OK  import {_m2}")
+            except Exception as e:
+                ok = False; print(f"  FAIL import {_m2}: {e}")
         # C) onnxruntime 真能加载(catch .so 符号/minos 问题;CI 上 import 成功即基本 OK)
         try:
             import onnxruntime as _ort

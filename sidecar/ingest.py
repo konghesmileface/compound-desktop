@@ -287,6 +287,14 @@ def process_image(con, backend, img_path, vault_dir, render_dpi, force=False, pr
 def process_any(con, backend, path, vault_dir, render_dpi, force=False, progress_cb=None):
     """按扩展名分发:Kindle azw3 先转 epub;Office/文本走提取;其余走 fitz。"""
     ext = os.path.splitext(path)[1].lower()
+    # ★音/视频 → 转写(SenseVoice ASR + 画面OCR)入库。media_ingest 重(sherpa),延迟 import;
+    #   模型/ffmpeg 缺失时 media_ingest 内部优雅降级(返回 error,不崩)。
+    try:
+        import media_ingest as _MI
+        if ext in _MI.AUDIO_EXTS or ext in _MI.VIDEO_EXTS:
+            return _MI.process_media(con, path, vault_dir, force=force, progress_cb=progress_cb)
+    except ImportError:
+        pass   # media_ingest 或 sherpa 没打包 → 音视频走后面(当PDF会失败,但不崩整个流程)
     if ext in IMG_EXTS:
         # 单张图片 → 直接 OCR 识别成一页文本入库
         return process_image(con, backend, path, vault_dir, render_dpi, force=force, progress_cb=progress_cb)
@@ -338,7 +346,12 @@ CONVERT_EXTS = (".azw3", ".azw")
 # Office / 文本 / 数据 / 网页 / 邮件:走 extract.py 提取
 OFFICE_EXTS = (".docx", ".pptx", ".xlsx", ".xlsm", ".md", ".markdown", ".txt",
                ".html", ".htm", ".csv", ".json", ".eml", ".mbox")
-DOC_EXTS = FITZ_EXTS + CONVERT_EXTS + OFFICE_EXTS
+# ★音/视频扩展名(与 media_ingest.AUDIO_EXTS/VIDEO_EXTS 一致;直接字面量,避免 import media_ingest
+#   触发 sherpa 加载)。process_any 里对这些走 media_ingest.process_media(转写入库)。
+#   ★T430→106 迁移时丢了这段接线,导致音视频入库断链;此处补回(不回退其它代码)。
+_MEDIA_EXTS = (".mp3", ".wav", ".m4a", ".flac", ".aac", ".ogg", ".wma", ".amr",
+               ".mp4", ".mov", ".mkv", ".avi", ".webm", ".flv", ".ts")
+DOC_EXTS = FITZ_EXTS + CONVERT_EXTS + OFFICE_EXTS + _MEDIA_EXTS
 
 
 def find_docs(folder: str) -> list[str]:

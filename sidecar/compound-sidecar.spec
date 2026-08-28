@@ -60,6 +60,26 @@ if os.path.isdir(_bge):
             full = os.path.join(root, f)
             datas.append((full, os.path.relpath(root, here)))
 
+# ★音视频入库模型(~1.2G):SenseVoice ASR + silero VAD + pyannote分割 + 3dspeaker声纹。
+#   CI 从 sherpa-onnx 官方 releases 下到 models/(与 T430 实测同版本);media_ingest 从 _MEIPASS/models 找。
+#   没下则跳过(运行时模型缺失 media_ingest 优雅降级)。
+for _mv in ("sherpa-onnx-sense-voice-zh-en-ja-ko-yue-2024-07-17",
+            "sherpa-onnx-pyannote-segmentation-3-0"):
+    _mp = os.path.join(here, "models", _mv)
+    if os.path.isdir(_mp):
+        for root, _, files in os.walk(_mp):
+            for f in files:
+                datas.append((os.path.join(root, f), os.path.relpath(root, here)))
+for _mf in ("silero_vad.onnx", "3dspeaker_speech_eres2net_base_sv_zh-cn_3dspeaker_16k.onnx"):
+    _fp = os.path.join(here, "models", _mf)
+    if os.path.isfile(_fp):
+        datas.append((_fp, "models"))
+# ★ffmpeg(Mac Intel 静态二进制):音视频抽音轨用。CI 从 evermeet.cx 下到 bin/ffmpeg;
+#   缺则 media_ingest 回落系统 which('ffmpeg')。
+_ff = os.path.join(here, "bin", "ffmpeg")
+if os.path.isfile(_ff):
+    datas.append((_ff, "bin"))
+
 # ★微信同步助手安装包(WxSync .dmg/.exe):打进包,客户端 sidecar /dl 就地发(离线下载,不出本地)。
 #   CI 构建前从 106 下载中心拉到 downloads/。本机快速构建没拉则跳过。
 _dl = os.path.join(here, "downloads")
@@ -74,7 +94,8 @@ for pkg in ("sentence_transformers", "transformers", "sklearn",
             "uvicorn.loops.auto", "anyio", "fitz", "docx", "pptx", "openpyxl",
             "rapidocr", "onnxruntime", "PIL", "certifi",
             "jieba", "requests", "numpy", "sklearn.utils._typedefs",
-            "sklearn.cluster", "sklearn.neighbors", "sklearn.feature_extraction.text"):
+            "sklearn.cluster", "sklearn.neighbors", "sklearn.feature_extraction.text",
+            "sherpa_onnx", "soundfile", "edge_tts", "media_ingest"):   # ★音视频入库 + 一生旁白TTS
     try:
         hiddenimports += collect_submodules(pkg)
     except Exception:

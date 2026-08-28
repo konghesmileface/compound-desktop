@@ -9,12 +9,27 @@ import subprocess
 import tempfile
 
 BASE = os.environ.get("BRAIN_DATA", "/home/kb/brain")
-FF = os.path.join(BASE, "bin", "ffmpeg")
-_M = os.path.join(BASE, "models", "sherpa-onnx-sense-voice-zh-en-ja-ko-yue-2024-07-17")
-_VAD = os.path.join(BASE, "models", "silero_vad.onnx")
+# ★模型解析:打包客户端里模型在 _MEIPASS(包内),源码/服务器在 BASE/models。两处都找。
+import sys as _sys, shutil as _shutil
+_MEI = getattr(_sys, "_MEIPASS", os.path.dirname(os.path.abspath(__file__)))
+
+def _find_model(*rel):
+    """在 _MEIPASS(打包) 和 BASE(数据目录/服务器) 两处找模型资源,返回第一个存在的路径。"""
+    for root in (_MEI, BASE):
+        p = os.path.join(root, "models", *rel)
+        if os.path.exists(p):
+            return p
+    return os.path.join(BASE, "models", *rel)   # 都没有:返回 BASE 路径(_rec 里 os.path.exists 判空优雅降级)
+
+# ffmpeg:打包客户端用包内 bin/ffmpeg(Mac版);没有则回落系统 which('ffmpeg')
+FF = os.path.join(_MEI, "bin", "ffmpeg")
+if not os.path.exists(FF):
+    FF = _shutil.which("ffmpeg") or os.path.join(BASE, "bin", "ffmpeg")
+_M = _find_model("sherpa-onnx-sense-voice-zh-en-ja-ko-yue-2024-07-17")
+_VAD = _find_model("silero_vad.onnx")
 # 说话人分离(A②): pyannote分割 + 3D-Speaker声纹, 纯CPU/ONNX, 复用已装的 sherpa_onnx
-_DIAR_SEG = os.path.join(BASE, "models", "sherpa-onnx-pyannote-segmentation-3-0", "model.onnx")
-_DIAR_EMB = os.path.join(BASE, "models", "3dspeaker_speech_eres2net_base_sv_zh-cn_3dspeaker_16k.onnx")
+_DIAR_SEG = _find_model("sherpa-onnx-pyannote-segmentation-3-0", "model.onnx")
+_DIAR_EMB = _find_model("3dspeaker_speech_eres2net_base_sv_zh-cn_3dspeaker_16k.onnx")
 
 AUDIO_EXTS = (".mp3", ".wav", ".m4a", ".flac", ".aac", ".ogg", ".wma", ".amr")
 VIDEO_EXTS = (".mp4", ".mov", ".mkv", ".avi", ".webm", ".flv", ".ts")
