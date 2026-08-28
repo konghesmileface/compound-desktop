@@ -53,6 +53,17 @@
 ## 7. 真库当前污染(待清)
 真账号 18201972547 库里 doc1-36 是本轮测试垃圾(SENTINEL*/ocr_test/audio_test/生成物/`微信_与助手实时测试群`),doc37+ 是真实 iOS 微信(45会话含6群)。**改用独立账号后真库不再加污染**;这批旧垃圾要不要清由用户定(见对话,倾向清)。
 
+## 7.5 新 DMG(build 33194145983)复测结果(2026-08-29 深夜)
+新包=`~/Downloads/compound-dmg3/compound-mac-intel-lite/Compound_0.1.0_x64.dmg`(koly✓,selftest PASS 含 `OK pillow-heif HEIC 编解码`)。测法=挂副本库(`/tmp/compound-test-brain`=真库拷贝)跑新 sidecar(端口59000),真库不碰。
+- **★P0 三修复全部端到端验证通过**:
+  - HEIC:上传 t.heic → doc71 **status ok**(旧包 error),OCR 出「紫金矿业债券投资测试 OCR FIX VERIFY 2026」✓
+  - PPT:生成后**立刻下载 = 9 张幻灯片**(旧包 = 0 空 deck)✓
+  - 嵌入:**load 全程 4.5–8.3(旧包 186!)+ page_embeddings 39→47→55 持续爬(旧包卡死)**✓ 机器不再冻、能进展。慢(8G+bge-m3 物理极限,~8页/批,283页要~1.5hr)但达标。
+- **P1 部分**:cooling ✅ 真数据(林深见鹿 降温严重 178天);relationships/commitments/favors/dormant/people/number_ledger **空——因为「分析」intel pass 没跑**(chat_intel/relationship_cards/persona_cache=0,kb_entities=42),非bug。这些要 LLM 逐会话分析,8G 上慢。analysis_status:embed~9-17%/intel 0%/entities 部分。
+- **P2 被并发拖垮不可信**:驱动机制单独验过 OK(Chrome 加载 dist,页面「第二大脑」渲染正常);但**嵌入占 201%CPU 时跑 Chrome→click 超时(机器卡,非UI bug)**。
+- **★★核心结论:8G 机上无法「一边分析/嵌入一边测前端」,俩抢资源全卡。P1/P2 完整跑必须等分析完成(嵌入~1.5hr + intel LLM pass 数十分钟+DeepSeek费)或换强机。**
+- 待续:让分析跑完再干净跑 P1(真数据洞察)+ P2(425按钮 CDP)。测试 sidecar 已停,副本 `/tmp/compound-test-brain` 可复用(嵌到 ~55)。
+
 ## 8. 测试方法论教训(用户两次点破,必记)
 1. 按「产品全功能清单」搭 case,不是「上轮待办清单」(漏了微信助手)。
 2. 「旧包测过 ≠ 新包测过」,每功能当前包重测。
