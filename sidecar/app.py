@@ -42,8 +42,13 @@ import insights as INS      # noqa: E402  P1/P2洞察(降温/人情/沉默线索
 import llm as LLM           # noqa: E402
 import generate as G        # noqa: E402
 
-UPLOADS = os.path.join(ROOT, "uploads")
-os.makedirs(UPLOADS, exist_ok=True)
+# ★uploads 落可写数据目录(BRAIN_DATA),不能落包内 ROOT——冻结客户端从只读位置(DMG/签名.app)
+#   运行时 ROOT 是只读包目录,makedirs 会 OSError: Read-only file system 直接崩(与 generate.py 同类坑)。
+UPLOADS = os.path.join(os.environ.get("BRAIN_DATA", ROOT), "uploads")
+try:
+    os.makedirs(UPLOADS, exist_ok=True)
+except OSError:
+    pass
 
 BACKENDS = ["auto", "text", "rapidocr"]
 # 高精 paddle:仅当本机 paddle worker 已起(高精版客户端 sidecar_main 会拉起并设 PADDLE_OCR_URL)才列出
