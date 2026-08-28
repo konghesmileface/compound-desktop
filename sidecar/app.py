@@ -113,6 +113,8 @@ def _start_bg_embedder():
                 try:
                     con = _con()
                     try:
+                        # ★按机器内存动态分档(embed_profile):8G机小批限量节流护机器,强机全速。
+                        #   每轮限量→调用短返回快,靠下面 sleep 给机器喘气,不一口气占死(load 186 空转事故根修)。
                         n = S.embed_pending(con)
                     finally:
                         con.close()
@@ -120,7 +122,7 @@ def _start_bg_embedder():
                     print(f"[bg-embed] {e}")
                 finally:
                     _BG_EMBED_LOCK.release()
-            _time.sleep(2 if n else 30)   # 有待嵌页→2s连续嵌;嵌完→30s轻巡
+            _time.sleep(2 if n else 30)   # 有待嵌页→2s喘一下再嵌下一段;嵌完→30s轻巡
     threading.Thread(target=_loop, daemon=True).start()
 
 
@@ -4032,14 +4034,23 @@ def test_settings(authorization: str = Header(None)):
 
 
 @app.post("/api/embed")
-def embed():
-    """给还没嵌入的页补算向量(首次会加载模型,稍慢)。"""
-    con = _con()
+def embed(authorization: str = Header(None)):
+    """给还没嵌入的页补算向量(首次会加载模型,稍慢)。
+    ★单飞锁:后台嵌入线程也用 _BG_EMBED_LOCK。若不加锁,手动 embed 会和后台线程同时各加载一份
+    bge-m3(2.3G×2)→ 8G 机内存翻倍颠簸死(2026-08-29 事故:手动 embed 把 load 顶到 186)。
+    正在嵌入时直接返回 busy,不再起第二份。"""
+    _me(authorization)   # 写向量需登录
+    if not _BG_EMBED_LOCK.acquire(blocking=False):
+        return {"embedded_pages": 0, "busy": True, "detail": "后台正在嵌入,稍后自动完成"}
     try:
-        n = S.embed_pending(con)
-        return {"embedded_pages": n}
+        con = _con()
+        try:
+            n = S.embed_pending(con)   # 按机器内存动态分档(embed_profile)
+            return {"embedded_pages": n}
+        finally:
+            con.close()
     finally:
-        con.close()
+        _BG_EMBED_LOCK.release()
 
 
 # ----------------------------- 入库任务(带进度)---------------------------

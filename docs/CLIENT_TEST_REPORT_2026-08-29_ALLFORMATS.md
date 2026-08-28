@@ -96,6 +96,30 @@ extract.py Office+文本 / cupsfilter PDF 文本层)均经多格式实测。
   落盘前都调用。**本地验证**:create→batch→close→立刻读 = 2 张幻灯片当场就位(之前 0)。
 - **待新构建端到端复测**(这次改的是打包内 generate.py,需重构建进包)。
 
+## 七、★★真机 iOS 导入 + 微信助手 + 嵌入(2026-08-29 深夜)
+
+### 7.1 iOS 历史导入 ✅ 端到端通(IOS-06→13)
+- iPhone "kong"/iOS 18.6.2 连机+信任 → `idevicebackup2 --full` 备份(峰值~47G,磁盘最低15G安全)→ 抽微信库
+  → 认人 → **39/39 会话成功**(含 6 群)→ 入库(文档36→70,微信322页)→ 备份自动清空回收磁盘。
+  FTS 搜「罗仲平」30 条命中(真实业务聊天带时间戳),内容完整。
+- ★完整性待核:备份已自动删,无法回查手机微信库比对是否 100% 全量;下轮用 keep_backup 留库逐表核。
+
+### 7.2 微信助手(实时同步 handoff)✅ 消费链路通
+- wxsync.py(launchd com.wxsync.decrypt)在跑,历史 handoff 已 100% 消费。注入哨兵消息到
+  `~/.wxsync/handoff/messages-*.ndjson` → sidecar 消费线程 **3s 内入库**(微信页322→323,搜 SENTINELHELPER 命中,
+  成 `微信_与助手实时测试群.txt`)+ 心跳更新。★上轮漏测此功能(误当 iOS 导入=微信覆盖),本轮补。
+
+### 7.3 ★★第三个真 bug:bge-m3 嵌入拖垮 8G 机(load 186 空转)
+- **现象**:iOS 导入 322 页微信后,后台嵌入线程 CPU 121%/内存46%,**load 冲到 186**,机器快冻死;
+  且 page_embeddings 卡在 39 **不涨**(空转)。
+- **根因**:①bge-m3(2.3G)+ 一批 48 页的 encode 激活内存,在 8G 机顶爆物理内存 → macOS 疯狂 swap →
+  **单批永远跑不完、永不 commit** → 数字不动(空转真相=颠簸,CPU 烧在换页不在算向量)。②`/api/embed` 端点
+  无锁无鉴权,手动触发会和后台线程各加载一份 bge-m3(2.3G×2)→ 内存翻倍(我复现时正是它把 load 顶到 186)。
+- **修复(semantic.py + app.py)**:①batch 48→8(峰值内存降,小批能真跑完增量 commit);②embed_pending 加
+  max_pages,后台线程每轮只嵌 24 页+批间 0.3s 节流,调用短返回快靠 sleep 给机器喘气,不再一口气占死;
+  ③`/api/embed` 加 _BG_EMBED_LOCK 单飞锁+鉴权,正在嵌入返回 busy,杜绝双份模型。
+- **待新构建验证**(改的是打包内代码)。★8G 是这机型硬伤,修后能progress+不冻机,但仍慢;云端嵌入是后续选项。
+
 ## 五、其它
 - DeepSeek key 已配入客户端,`/api/settings/test` 真回话通。**注:LLM 回复自带 emoji(😊),
   与「全站禁 emoji」铁律冲突,产出类 prompt 需兜底清洗(既有待办)**。

@@ -79,14 +79,57 @@ def _from_blob(b: bytes, dim: int) -> np.ndarray:
     return np.frombuffer(b, dtype=np.float32, count=dim)
 
 
-def embed_pending(con, batch: int = 48, char_limit: int = 1400) -> int:
-    """给还没有向量的页算嵌入(已归一)。返回新嵌入页数。"""
+def _phys_ram_gb() -> float:
+    """物理内存(GB),跨平台零依赖。macOS/Linux 都支持 SC_PHYS_PAGES;取不到给个保守 8。"""
+    try:
+        return os.sysconf("SC_PHYS_PAGES") * os.sysconf("SC_PAGE_SIZE") / (1024 ** 3)
+    except Exception:
+        return 8.0
+
+
+def embed_profile() -> dict:
+    """★按机器实际内存动态分档嵌入参数(2026-08-29 用户令:别写死拖慢强机)。
+    老 8G Mac 温柔(小批+限量+节流,保机器不冻);现代 16/32/64G 全速。环境变量可覆盖任一项。"""
+    gb = _phys_ram_gb()
+    if gb <= 10:          # 8G 档:护机器第一,慢但不冻(load 186 事故那台)
+        p = {"batch": 8,  "max_pages": 24,  "throttle": 0.3}
+    elif gb <= 20:        # 16G 档
+        p = {"batch": 24, "max_pages": 96,  "throttle": 0.05}
+    elif gb <= 40:        # 32G 档
+        p = {"batch": 48, "max_pages": 192, "throttle": 0.0}
+    else:                 # 64G+ 强机:全速
+        p = {"batch": 96, "max_pages": 384, "throttle": 0.0}
+    # 环境变量覆盖(调优/特殊机型)
+    try:
+        if os.environ.get("EMBED_BATCH"):     p["batch"] = int(os.environ["EMBED_BATCH"])
+        if os.environ.get("EMBED_MAX_PAGES"): p["max_pages"] = int(os.environ["EMBED_MAX_PAGES"])
+        if os.environ.get("EMBED_THROTTLE"):  p["throttle"] = float(os.environ["EMBED_THROTTLE"])
+    except Exception:
+        pass
+    return p
+
+
+def embed_pending(con, batch: int = None, char_limit: int = 1400,
+                  max_pages: int = None, throttle: float = None) -> int:
+    """给还没有向量的页算嵌入(已归一)。返回新嵌入页数。
+
+    ★参数按机器内存动态分档(embed_profile);不传则自动取档(2026-08-29 真机 8G load 186 空转事故根修):
+    - batch:bge-m3(2.3G)一次 encode 太多段的激活内存会顶爆小内存机 → macOS swap → 单批永跑不完永不
+      commit、page_embeddings 卡死不动(空转真相=颠簸)。8G 用 8,强机用到 96。
+    - max_pages:每次只嵌一小段 → 调用短返回快,让外层循环 sleep 给机器喘气,不一口气占死。
+    - throttle:批间小睡,弱机用 0.3s 喘气,强机 0 全速。
+    """
+    prof = embed_profile()
+    if batch is None:     batch = prof["batch"]
+    if max_pages is None: max_pages = prof["max_pages"]
+    if throttle is None:  throttle = prof["throttle"]
     ensure_schema(con)
-    rows = con.execute(
-        """SELECT p.id, p.text FROM pages p
-           LEFT JOIN page_embeddings e ON e.page_id = p.id
-           WHERE e.page_id IS NULL AND length(trim(p.text)) > 0"""
-    ).fetchall()
+    _sql = ("""SELECT p.id, p.text FROM pages p
+               LEFT JOIN page_embeddings e ON e.page_id = p.id
+               WHERE e.page_id IS NULL AND length(trim(p.text)) > 0""")
+    if max_pages:
+        _sql += " LIMIT %d" % int(max_pages)
+    rows = con.execute(_sql).fetchall()
     if not rows:
         return 0
     model = get_model()
@@ -101,6 +144,8 @@ def embed_pending(con, batch: int = 48, char_limit: int = 1400) -> int:
                 (pid, int(len(v)), _to_blob(v)))
         con.commit()
         n += len(chunk)
+        if throttle:
+            import time as _t; _t.sleep(throttle)
     return n
 
 
