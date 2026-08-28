@@ -107,6 +107,57 @@
 
 ---
 
+## 四·补(2026-08-28 真机装机测试新发现两个 bug)
+
+> 用户令"测客户端就装客户端测,不测源码"。装 DMG 到 /Applications 启动真客户端,空号+复用 webview token
+> 测,当场测出两个 CI 测不出的 bug(都是"CI 环境 ≠ 用户环境"造成 selftest 盲区)。
+
+### D1 — uploads makedirs 写只读包 → 启动崩(只读位置)
+- **现象**:从只读位置(DMG 挂载/签名公证 .app)启动 sidecar,`app.py:45 UPLOADS=os.path.join(ROOT,"uploads")`
+  + 模块级 `makedirs` → `OSError: [Errno 30] Read-only file system` 启动即崩。
+- **根因**:ROOT 在冻结客户端=只读包目录。与 generate.py 那个"写进包"同类,当时漏了 app.py 这处。
+- **为什么 CI/普通装没暴露**:拖到 /Applications(用户可写)时 makedirs 侥幸成功;只有只读挂载/公证密封才崩。
+- **修**:`UPLOADS=os.path.join(BRAIN_DATA, "uploads")` + try 包裹。全扫其余写目录确认都已 BRAIN_DATA。
+
+### D2 — ★sherpa-onnx 在 macOS12 import 崩(MLComputePlan)+ silero 版本 + 吞真错(音视频转写全废)
+- **现象**:真客户端上传音频 → 入库失败"格式不支持/内容为空"。日志真相:`🎙 转写中` 后
+  `Failed to open ... as type mp3`(其实是 mp3 掉进 FITZ 被当 PDF 开的误导错)。
+- **根因三连**:
+  1. `sherpa-onnx≥1.11.2` 捆绑的 `libonnxruntime.dylib` 引用 `_OBJC_CLASS_$_MLComputePlan`(仅新 macOS
+     的 CoreML 符号)→ 用户 **macOS12.7** `import sherpa_onnx` 即 `Symbol not found` 崩。**与 onnxruntime
+     1.23→1.19.2 完全同一类坑**(新版 native 库在 macOS12 全废)。
+  2. `ingest.py` 接线 `except ImportError: pass` 把这个 ImportError 吞了 → 音频 fell through 到 FITSZ →
+     `fitz.open(mp3)` 报 "as type mp3" → 用户只看到"格式不支持",**真根因被藏**。
+  3. selftest 的 `import sherpa_onnx` 在 **CI(macos-latest 新系统)通过**,却在用户 macOS12 崩 = CI 盲区。
+- **真机 macOS12 验证的修复组合**(本机 Darwin21.6 当试验台):
+  - `sherpa-onnx==1.11.1`:import 通 + SenseVoice 转写逐字准确 + silero VAD + pyannote/3dspeaker 全加载。
+  - **silero 必须 v4**(1.8M):≤1.11.1 不认新版 silero(643854)报 `Unsupported silero vad model`。
+  - **1.11.x 是 macOS 专属 wheel**;Linux/106 无 1.11.x,用 1.13.6 + silero v4 也验证兼容(向下兼容旧 silero)。
+- **修**:①requirements 钉 1.11.1 ②CI 下 silero v4 ③ingest.py 音视频分支捕获所有异常+打真错+返回 error
+  (绝不 fall through 到 FITZ)④selftest 真加载 VAD+SenseVoice(不只 import),silero 版本不匹配 CI 就卡住。
+
+### D2·补 — sherpa 版本×平台×silero 三方约束(最终定版)
+- **1.11.x 只有 arm64 mac wheel,无 x86_64/Intel** → 钉 1.11.1 导致 CI(x86_64 Rosetta)构建失败
+  `No matching distribution`。x86_64 CI 可用:1.8.11/1.9.30/1.10.45/1.10.46/1.12.26+/1.13.x。
+- **最终定版**:客户端(Intel)钉 `sherpa-onnx==1.10.46`(CI 可用列表里最高的 macOS12 兼容版,≥1.11.2 才
+  引入 MLComputePlan 崩)。真机 x86_64 macOS12 验证 1.10.46+silero v4:转写逐字准确+VAD+说话人分离全通。
+- **106(Linux)**用 1.13.6+silero v4(Linux 无 MLComputePlan 问题,亦验证兼容)。三处 silero 统一 v4。
+
+### D3 — 单图 OCR 崩:rapidocr 新 API 返回对象不可解包
+- **现象**:真机上传 PNG → DB 存 `method=error, text="图片OCR失败: cannot unpack non-iterable RapidOCROutput"`。
+- **根因**:新 rapidocr 返回 `RapidOCROutput` 对象(含 `.txts`,不可解包),但 `ingest.py` process_image 单图
+  路径仍用旧式 `result, _ = ocr(...)` 解包 → 崩。**backends.py 的 PDF 页 OCR 路径早已适配新 API,唯独单图漏了**。
+- **为什么没早发现**:之前"OCR 通过"测的是 PDF 页路径(backends.py),没测单图上传路径。
+- **修**:process_image 与 backends.py 对齐——`hasattr(res,"txts")` 优先 + 旧 tuple 兜底。106 同步。
+
+### 新增防复发规则
+**R8 — macOS12 兼容只能真机测,CI 测不出**:凡引入带 native 库的新依赖(onnxruntime/sherpa/torch 类),
+CI(macos-latest 新系统)import 通过 **≠** 用户 macOS12 能跑。native 库常引用新 macOS SDK 符号
+(MLComputePlan 等)→ 老系统 `Symbol not found`。**必须在真 macOS12 机装包实测**才算过。已中招两次
+(onnxruntime、sherpa),形成铁律:selftest 尽量把"真加载"也做了,但最终以 macOS12 真机为准。
+**R9 — 静默降级不许藏真错**:任何 `try/except` 兜底(尤其 except 宽泛或 except ImportError),必须打印真实
+异常再降级;绝不能让一种文件类型"掉进"另一种处理器(音频掉进 PDF)产生误导错误。
+
 ## 五、遗留/待验证
 
 - [ ] iOS 导入:打包产物真机实测(代码链路已真机验证过 47G→38 会话,现需在 DMG 装机版复测)
