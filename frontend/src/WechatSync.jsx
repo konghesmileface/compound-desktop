@@ -316,6 +316,10 @@ export default function WechatSync({ onGuide }) {
               </div>
               <div className="wx-ios-idle-t">把电脑版登录<b>之前</b>的老聊天,一次性补进来</div>
               <div className="wx-ios-idle-s">用数据线把 iPhone 连上电脑,在同步助手里点「连手机导入历史」,这里就会实时显示进度。做一次即可,平时不用连。</div>
+              <div className="wx-ios-warn">
+                <b>导入全程请:</b>① iPhone <b>保持解锁</b>(建议「设置→显示与亮度→自动锁定→永不」)· ② <b>不要拔数据线</b> · ③ 首次弹「信任此电脑」点信任并输锁屏密码。<br />
+                <b>如果中途反复中断</b>(多为供电不足,老电脑/非原装线常见):把 iPhone <b>屏幕亮度调到最低</b>、开<b>飞行模式</b>省电,再直插电脑机身 USB 口(别用扩展坞),就能稳定传完。备份较慢(几分钟到几十分钟),断了会自动继续。
+              </div>
               <button className="btn btn-primary" onClick={() => onGuide && onGuide('ios')}>看 iPhone 导入图文步骤 →</button>
             </div>
           ) : (
@@ -346,6 +350,8 @@ export default function WechatSync({ onGuide }) {
                   })}
                 </div>
               </div>
+              {!iosDone && !iosFailed && <div className="wx-ios-keep">● 导入进行中 —— 请<b>保持 iPhone 解锁常亮、不要拔线</b>,断开会中断需重来</div>}
+              {iosFailed && <div className="wx-ios-msg fail">导入中断了(多为手机锁屏或供电不足)。请:①重新解锁 iPhone 保持常亮 ②<b>屏幕亮度调最低+开飞行模式省电</b> ③数据线<b>直插电脑机身</b>(别用扩展坞)插紧 ④重新点「连手机导入历史」。断点会自动续传,不用从头。</div>}
               {iosOverall && iosOverall.message && !iosDone && !iosFailed && <div className="wx-ios-msg">{iosOverall.message}</div>}
               {iosSessions.filter((x) => x.state !== 'done').slice(0, 4).map((it, i) => (
                 <div key={i} className="wx-ios-sess">

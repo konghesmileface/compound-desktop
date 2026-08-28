@@ -3883,3 +3883,10 @@ button.oc-node { background: none; border: none; padding: 0; margin: 0; cursor: 
 .lp-auth-switch { text-align: center; margin-top: 14px; font-size: 13px; color: #7a8290; }
 .lp-auth-switch a { color: var(--accent); cursor: pointer; font-weight: 600; }
 .lp-auth-switch a:hover { text-decoration: underline; }
+
+/* iOS 导入须知/保持连接提示(真机测试:iOS18备份需全程解锁不拔线) */
+.wx-ios-warn { margin: 12px auto 0; max-width: 460px; font-size: 12px; line-height: 1.7; color: var(--text-2, #b7bec9); background: rgba(56,189,248,0.06); border: 1px solid rgba(56,189,248,0.18); border-radius: 10px; padding: 10px 14px; text-align: left; }
+.wx-ios-warn b { color: #7dd3fc; }
+.wx-ios-keep { margin-top: 12px; font-size: 12.5px; color: #7dd3fc; text-align: center; }
+.wx-ios-keep b { color: #aef3ff; }
+.wx-ios-msg.fail { color: #fca5a5; background: rgba(248,113,113,0.06); border: 1px solid rgba(248,113,113,0.2); border-radius: 10px; padding: 10px 14px; line-height: 1.7; text-align: left; }

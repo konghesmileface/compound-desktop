@@ -118,11 +118,15 @@ export default function Ingest({ onDone }) {
           <input className="auth-in" style={{ marginBottom: 0, flex: 1 }} placeholder="或粘贴一个网址(B站/网页/播客链接), 视频语音自动转文字入库" value={url} onChange={(e) => setUrl(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') grabUrl() }} />
           <button className="btn" disabled={busy} onClick={grabUrl}>抓取入库</button>
         </div>
-        {/* 自动同步勾选(#2)*/}
+        {/* ★「实时同步此文件夹」暂时隐藏:后端无文件夹监听实现(勾选只存 localStorage 标记、
+            upload 也没带 autosync 参数),露出即误导用户以为新增文件会自动入库。待用 Tauri fs-watch
+            插件 + 后端 watch 线程真实现后再放出。要恢复:去掉下面的 false && 。 */}
+        {false && (
         <label className="autosync" onClick={(e) => e.stopPropagation()}>
           <input type="checkbox" checked={autoSync} onChange={toggleAuto} />
           <span>实时同步此文件夹(勾选后,文件夹里新增的文件会自动入库)</span>
         </label>
+        )}
         <input ref={fileRef} type="file" webkitdirectory="" directory="" multiple style={{ display: 'none' }} onChange={pick} />
         <input ref={oneRef} type="file" multiple style={{ display: 'none' }} onChange={pick} />
       </div>
