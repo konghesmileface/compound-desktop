@@ -32,7 +32,9 @@ beautifulsoup4
 mobi
 yt-dlp
 edge-tts        # ★冥想TTS语音朗读(之前漏,日志报No module named edge_tts 37次)
-sherpa-onnx==1.11.1  # ★钉1.11.1:≥1.11.2捆绑的onnxruntime引用MLComputePlan(新macOS符号),
-#   在macOS12.7 import即崩(Symbol not found)→与onnxruntime1.19.2同类坑。1.11.1真机验证转写/VAD/说话人分离全通。
-#   ★配套:必须用 silero v4 模型(≤1.11.1不认新版silero,报Unsupported silero vad model)。CI下v4。
+sherpa-onnx==1.10.46  # ★钉1.10.46(x86_64 Intel专属最优):≥1.11.2捆绑的onnxruntime引用MLComputePlan
+#   (新macOS的CoreML符号)→macOS12.7 import即崩Symbol not found,与onnxruntime1.19.2同类坑。
+#   ★1.11.x无x86_64/Intel wheel(只arm64有);Intel目标从CI可用列表里1.10.46是最高的macOS12兼容版。
+#   真机x86_64 macOS12验证:1.10.46+silero v4→SenseVoice转写逐字准确+VAD+pyannote/3dspeaker说话人分离全通。
+#   ★配套:必须silero v4(≤1.11.x不认新版silero报Unsupported silero vad model)。CI已下v4。106(Linux)用1.13.6+v4亦验证兼容。
 soundfile       # sherpa-onnx 读写音频依赖
