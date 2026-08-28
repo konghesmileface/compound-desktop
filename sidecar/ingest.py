@@ -259,6 +259,13 @@ def process_image(con, backend, img_path, vault_dir, render_dpi, force=False, pr
     try:
         import numpy as np
         from PIL import Image
+        # ★HEIC/HEIF(iPhone 默认照片格式):裸 PIL 打不开 → "cannot identify image file"。
+        #   IMG_EXTS 声称支持 .heic,必须注册 pillow-heif 打开器,否则用户导 iPhone 照片必崩。
+        try:
+            from pillow_heif import register_heif_opener
+            register_heif_opener()
+        except Exception:
+            pass
         ocr = B.RapidOCRBackend()._engine_lazy()
         im = Image.open(img_path).convert("RGB")
         res = ocr(np.array(im))

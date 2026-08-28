@@ -1,0 +1,81 @@
+# 客户端真机测试报告 第三轮 · 全格式矩阵(2026-08-29)
+
+**测法**:装含全部修复的新 DMG(`compound-dmg2`,构建 33161003044)到 /Applications 启动**真客户端**,
+sidecar 动态端口(本轮 53790,注:端口每次启动随机,非文档写死的 60380)。复用 webview localStorage
+里已登录 token(用户 18201972547)打真客户端 sidecar API。真机 = macOS 12.7.6 / Intel(x86_64),8GB 内存。
+**全程盯内存**:整轮稳定在 2.8–3.7G 可用,未复现下午死机。
+
+---
+
+## 一、上一轮 3 个真机 bug — 新包端到端复测全部通过
+
+| Bug | 复测结果 | 证据 |
+|-----|---------|------|
+| Bug1 uploads 只读崩 | ✅ | 装机启动正常,数据落 BRAIN_DATA |
+| Bug2 音视频转写 macOS12 全废 | ✅ | wav(doc17)转写逐字准确,method `asr:sensevoice` |
+| Bug3 单图 OCR 解包崩 | ✅ | png(doc16)method `ocr:rapidocr`,识别中英文全对 |
+
+---
+
+## 二、全格式矩阵(每种造带唯一哨兵词的文件 → 上传 → 搜哨兵验证内容真提取)
+
+| 类 | 格式 | doc | 结果 | 验证方式 |
+|----|------|-----|------|---------|
+| 文本 | txt | 1 | ✅ | 上轮已测 |
+| 文本 | md | — | ✅ | 上轮已测 |
+| 文本 | html | 18 | ✅ | SENTINELHTML 命中 |
+| 文本 | csv | 19 | ✅ | SENTINELCSV 命中 |
+| 文本 | json | 20 | ✅ | SENTINELJSON 命中 |
+| 邮件 | eml | 21 | ✅ | SENTINELEML 命中(method email) |
+| 邮件 | mbox | 22 | ✅ | SENTINELMBOX 命中 |
+| Office | docx | 23 | ✅ | SENTINELDOCX 命中 |
+| Office | xlsx | 24 | ✅ | SENTINELXLSX 命中 |
+| Office | pptx | 25 | ✅ | SENTINELPPTX 命中(officecli 造件) |
+| PDF | pdf(文本层) | 26 | ✅ | SENTINELPDF 命中(method text-layer) |
+| 电子书 | epub | 31 | ✅ | SENTINELEPUB 命中(fitz) |
+| 图片OCR | png | 16 | ✅ | ocr:rapidocr |
+| 图片OCR | jpg | 27 | ✅ | ocr:rapidocr |
+| 图片OCR | bmp | 28 | ✅ | ocr:rapidocr |
+| 图片OCR | webp | 29 | ✅ | ocr:rapidocr |
+| 图片OCR | gif | 30 | ✅ | ocr:rapidocr |
+| **图片OCR** | **heic** | 35 | ❌→已修 | **见 §三:iPhone 默认照片格式入库崩** |
+| 音频 | wav | 17 | ✅ | asr:sensevoice |
+| 音频 | mp3 | 33 | ✅ | asr:sensevoice,转写准确 |
+| 音频 | m4a | 34 | ✅ | asr:sensevoice,转写准确 |
+| 视频 | mp4 | 32 | ✅ | ffmpeg 抽轨 + asr:sensevoice |
+| 视频 | mov | 36 | ✅ | ffmpeg 抽轨 + asr:sensevoice |
+| 网页URL | url | — | ✅ | 上轮已测 |
+
+**结论**:除 heic 外,所有格式内容提取全部命中哨兵。各提取代码路径(fitz / OCR / ffmpeg+ASR /
+extract.py Office+文本 / cupsfilter PDF 文本层)均经多格式实测。
+
+---
+
+## 三、★本轮真机测出并已修的 bug:HEIC(iPhone 默认照片)入库崩
+
+- **现象**:上传 t.heic → DB `<!-- 图片 OCR 失败: cannot identify image file '.../t.heic' -->`,method 记为
+  error。`ocr:rapidocr` 计数不含它。
+- **根因**:`ingest.py:263` 用裸 `PIL.Image.open()`,打包环境只有 Pillow、无 pillow-heif → 打不开 HEIF。
+  而 `IMG_EXTS` 明列 `.heic`(声称支持)→ **假支持**。iPhone 默认拍照就是 HEIC,用户导照片必踩。
+- **修复(4 处)**:
+  1. `ingest.py` process_image:开图前 `from pillow_heif import register_heif_opener; register_heif_opener()`(try 包裹)
+  2. `requirements.txt`:加 `pillow-heif`
+  3. `compound-sidecar.spec`:`collect_dynamic_libs("pillow_heif")` 收原生 libheif + hiddenimport
+  4. `sidecar_main.py` selftest:真编码→解码一张 HEIF,验证 libheif 打进冻结包(缺则 SELFTEST FAIL,CI 卡住)
+- **本地验证**:装 pillow-heif 后,原本崩的 t.heic 成功打开(800×300)。**待新构建出包端到端复测**。
+
+---
+
+## 四、待验证(需条件)
+
+| 测项 | 阻塞 | 说明 |
+|------|------|------|
+| HEIC 端到端 | 新构建 | 源码已修+本地验证,待新 DMG 复测装机真包 |
+| iOS 微信全量导入 IOS-06→13 | 手机 | 等连 iPhone;当前库仅 14 条测试残留微信,非全量 |
+| 电子书变体 mobi/azw3/azw/fb2/xps/cbz | — | 本地无法合成合规样件;走 fitz/mobi 同 epub 路径,风险低但未逐一实测(诚实标注) |
+| LLM 类(问答/撮合/简报/产出PPT-Word-Excel) | — | key 已配(DeepSeek 连通测试通),下一步测真实输出 |
+
+## 五、其它
+- DeepSeek key 已配入客户端,`/api/settings/test` 真回话通。**注:LLM 回复自带 emoji(😊),
+  与「全站禁 emoji」铁律冲突,产出类 prompt 需兜底清洗(既有待办)**。
+- eml/mbox 提取正文正常,尾部几个乱码字符系测试文件本身编码,非提取 bug。

@@ -34,6 +34,13 @@ try:
     datas += collect_data_files("cv2")
 except Exception:
     pass
+# ★pillow-heif:HEIC/HEIF(iPhone 默认照片)解码。含原生 libheif 动态库,必须显式收 binaries,
+#   否则 frozen 包缺 libheif → iPhone 照片入库 "cannot identify image file"(裸 PIL 打不开)。
+try:
+    binaries += collect_dynamic_libs("pillow_heif")
+    datas += collect_data_files("pillow_heif")
+except Exception:
+    pass
 # 随包数据:嵌入/OCR/证书。★rapidocr 必须收 datas(内置 onnx 检测/识别模型+config.yaml),
 # 否则 frozen 包里 rapidocr 目录缺失,内置 OCR 静默失效。★certifi:CA 证书,否则 https 验证失败。
 # ★jieba:词典 dict.txt 必须随包。
@@ -92,7 +99,7 @@ hiddenimports = ["cv2"]  # cv2 走上面显式收库,这里只作 plain hidden i
 for pkg in ("sentence_transformers", "transformers", "sklearn",
             "fastapi", "uvicorn", "uvicorn.protocols", "uvicorn.lifespan",
             "uvicorn.loops.auto", "anyio", "fitz", "docx", "pptx", "openpyxl",
-            "rapidocr", "onnxruntime", "PIL", "certifi",
+            "rapidocr", "onnxruntime", "PIL", "pillow_heif", "certifi",
             "jieba", "requests", "numpy", "sklearn.utils._typedefs",
             "sklearn.cluster", "sklearn.neighbors", "sklearn.feature_extraction.text",
             "sherpa_onnx", "soundfile", "edge_tts", "media_ingest"):   # ★音视频入库 + 一生旁白TTS

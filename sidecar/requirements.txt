@@ -11,6 +11,7 @@ python-docx
 python-pptx
 openpyxl
 Pillow
+pillow-heif
 jieba
 scikit-learn
 sentence-transformers==3.4.1

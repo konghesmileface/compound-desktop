@@ -150,6 +150,21 @@ def main():
             print("  OK  sherpa VAD+SenseVoice 真加载(silero/模型版本匹配)")
         except Exception as e:
             ok = False; print(f"  FAIL sherpa 加载(silero版本不匹配?): {e}")
+        # ★HEIC/HEIF(iPhone 默认照片):pillow-heif + 原生 libheif 必须在冻结包里真能工作,
+        #   否则用户导 iPhone 照片入库报 "cannot identify image file"(裸 PIL 打不开)。
+        #   真编码→再解码一张,验证 libheif 打进包且可用(只 import 不够,原生库缺了在此才暴露)。
+        try:
+            import io as _io
+            from PIL import Image as _Img
+            from pillow_heif import register_heif_opener as _rho
+            _rho()
+            _buf = _io.BytesIO()
+            _Img.new("RGB", (8, 8), (1, 2, 3)).save(_buf, format="HEIF")
+            _buf.seek(0)
+            _Img.open(_buf).convert("RGB").load()
+            print("  OK  pillow-heif HEIC 编解码(libheif 已打包)")
+        except Exception as e:
+            ok = False; print(f"  FAIL pillow-heif HEIC(libheif 没打进包?): {e}")
         # C) onnxruntime 真能加载(catch .so 符号/minos 问题;CI 上 import 成功即基本 OK)
         try:
             import onnxruntime as _ort
