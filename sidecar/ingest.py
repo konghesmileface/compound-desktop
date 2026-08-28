@@ -287,14 +287,18 @@ def process_image(con, backend, img_path, vault_dir, render_dpi, force=False, pr
 def process_any(con, backend, path, vault_dir, render_dpi, force=False, progress_cb=None):
     """按扩展名分发:Kindle azw3 先转 epub;Office/文本走提取;其余走 fitz。"""
     ext = os.path.splitext(path)[1].lower()
-    # ★音/视频 → 转写(SenseVoice ASR + 画面OCR)入库。media_ingest 重(sherpa),延迟 import;
-    #   模型/ffmpeg 缺失时 media_ingest 内部优雅降级(返回 error,不崩)。
-    try:
-        import media_ingest as _MI
-        if ext in _MI.AUDIO_EXTS or ext in _MI.VIDEO_EXTS:
+    # ★音/视频 → 转写(SenseVoice ASR + 画面OCR)入库。media_ingest 重(sherpa),延迟 import。
+    #   ★音视频必须在这里终结(成功或干净报错),绝不能 fall through 到后面的 FITZ——否则把 mp3 当 PDF
+    #   打开会报误导性的 "Failed to open as type mp3"。历史坑:sherpa 在 macOS12 import 崩(MLComputePlan),
+    #   旧代码 except ImportError 把真错吞了、音频掉进 FITZ,用户只看到"格式不支持",根因被藏。现在:捕获所有
+    #   异常、打印真实错误、返回 error(不掉 FITZ)。
+    if ext in _MEDIA_EXTS:
+        try:
+            import media_ingest as _MI
             return _MI.process_media(con, path, vault_dir, force=force, progress_cb=progress_cb)
-    except ImportError:
-        pass   # media_ingest 或 sherpa 没打包 → 音视频走后面(当PDF会失败,但不崩整个流程)
+        except Exception as _me:
+            print(f"  ⚠️  音视频入库失败({type(_me).__name__}): {_me}")
+            return "error"
     if ext in IMG_EXTS:
         # 单张图片 → 直接 OCR 识别成一页文本入库
         return process_image(con, backend, path, vault_dir, render_dpi, force=force, progress_cb=progress_cb)

@@ -43,7 +43,7 @@ jobs:
           mkdir -p models bin
           curl -fsSL -o /tmp/sv.tar.bz2 https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models/sherpa-onnx-sense-voice-zh-en-ja-ko-yue-2024-07-17.tar.bz2
           tar xjf /tmp/sv.tar.bz2 -C models/
-          curl -fsSL -o models/silero_vad.onnx https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models/silero_vad.onnx
+          curl -fsSL -o models/silero_vad.onnx https://github.com/snakers4/silero-vad/raw/v4.0/files/silero_vad.onnx  # ★v4:sherpa1.11.1兼容
           curl -fsSL -o /tmp/seg.tar.bz2 https://github.com/k2-fsa/sherpa-onnx/releases/download/speaker-segmentation-models/sherpa-onnx-pyannote-segmentation-3-0.tar.bz2
           tar xjf /tmp/seg.tar.bz2 -C models/
           curl -fsSL -o models/3dspeaker_speech_eres2net_base_sv_zh-cn_3dspeaker_16k.onnx https://github.com/k2-fsa/sherpa-onnx/releases/download/speaker-recongition-models/3dspeaker_speech_eres2net_base_sv_zh-cn_3dspeaker_16k.onnx

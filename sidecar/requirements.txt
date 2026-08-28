@@ -32,5 +32,7 @@ beautifulsoup4
 mobi
 yt-dlp
 edge-tts        # ★冥想TTS语音朗读(之前漏,日志报No module named edge_tts 37次)
-sherpa-onnx     # ★音视频转文字入库(SenseVoice ASR+说话人分离;前端支持录音/视频)
+sherpa-onnx==1.11.1  # ★钉1.11.1:≥1.11.2捆绑的onnxruntime引用MLComputePlan(新macOS符号),
+#   在macOS12.7 import即崩(Symbol not found)→与onnxruntime1.19.2同类坑。1.11.1真机验证转写/VAD/说话人分离全通。
+#   ★配套:必须用 silero v4 模型(≤1.11.1不认新版silero,报Unsupported silero vad model)。CI下v4。
 soundfile       # sherpa-onnx 读写音频依赖

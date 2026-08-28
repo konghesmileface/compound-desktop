@@ -55,8 +55,8 @@ jobs:
           # SenseVoice ASR(sherpa-onnx 官方,与 T430 实测同版本)
           curl -fsSL -o /tmp/sv.tar.bz2 https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models/sherpa-onnx-sense-voice-zh-en-ja-ko-yue-2024-07-17.tar.bz2
           tar xjf /tmp/sv.tar.bz2 -C models/
-          # silero VAD
-          curl -fsSL -o models/silero_vad.onnx https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models/silero_vad.onnx
+          # silero VAD ★必须 v4(sherpa-onnx 1.11.1 不认新版 silero,报 Unsupported silero vad model)
+          curl -fsSL -o models/silero_vad.onnx https://github.com/snakers4/silero-vad/raw/v4.0/files/silero_vad.onnx
           # 说话人分离:pyannote 分割 + 3dspeaker 声纹
           curl -fsSL -o /tmp/seg.tar.bz2 https://github.com/k2-fsa/sherpa-onnx/releases/download/speaker-segmentation-models/sherpa-onnx-pyannote-segmentation-3-0.tar.bz2
           tar xjf /tmp/seg.tar.bz2 -C models/

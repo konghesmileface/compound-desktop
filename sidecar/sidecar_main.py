@@ -135,6 +135,21 @@ def main():
                 __import__(_m2); print(f"  OK  import {_m2}")
             except Exception as e:
                 ok = False; print(f"  FAIL import {_m2}: {e}")
+        # ★真加载 VAD+recognizer(不只 import):silero 版本与 sherpa 不匹配会在此暴露(报 Unsupported
+        #   silero vad model),而不是等用户机音频入库时静默失败。历史坑:sherpa≥1.11.2 + 新silero 组合
+        #   在 macOS12 崩;必须 sherpa==1.11.1 + silero v4。CI 构建时就卡住,不流到用户。
+        try:
+            import sherpa_onnx as _so
+            _vc = _so.VadModelConfig(); _vc.silero_vad.model = os.path.join(base, "models", "silero_vad.onnx")
+            _vc.sample_rate = 16000
+            _so.VoiceActivityDetector(_vc, buffer_size_in_seconds=180)
+            _svm = os.path.join(base, "models", "sherpa-onnx-sense-voice-zh-en-ja-ko-yue-2024-07-17")
+            _so.OfflineRecognizer.from_sense_voice(
+                model=os.path.join(_svm, "model.int8.onnx"),
+                tokens=os.path.join(_svm, "tokens.txt"), use_itn=True)
+            print("  OK  sherpa VAD+SenseVoice 真加载(silero/模型版本匹配)")
+        except Exception as e:
+            ok = False; print(f"  FAIL sherpa 加载(silero版本不匹配?): {e}")
         # C) onnxruntime 真能加载(catch .so 符号/minos 问题;CI 上 import 成功即基本 OK)
         try:
             import onnxruntime as _ort
