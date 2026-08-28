@@ -261,8 +261,16 @@ def process_image(con, backend, img_path, vault_dir, render_dpi, force=False, pr
         from PIL import Image
         ocr = B.RapidOCRBackend()._engine_lazy()
         im = Image.open(img_path).convert("RGB")
-        result, _ = ocr(np.array(im))
-        text = "\n".join(item[1] for item in (result or []))
+        res = ocr(np.array(im))
+        # ★新 rapidocr:返回 RapidOCROutput 对象(含 .txts,不可解包);旧包:返回 (result_list, elapse)。
+        #   旧式 `result, _ = ocr(...)` 在新包上崩 "cannot unpack non-iterable RapidOCROutput"。与 backends.py 对齐。
+        if hasattr(res, "txts"):
+            txts = list(res.txts) if res.txts else []
+        elif isinstance(res, tuple) and res and res[0]:
+            txts = [item[1] for item in res[0]]
+        else:
+            txts = []
+        text = "\n".join(txts)
         method = "ocr:rapidocr" if text.strip() else "ocr:rapidocr(empty)"
     except Exception as e:
         text, method = f"<!-- 图片 OCR 失败: {e} -->", "error"
