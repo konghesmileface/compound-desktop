@@ -417,6 +417,69 @@ selftest 已门控;真机装后进 `~/Library/Application Support/Compound/brain
 
 ---
 
+## Q. 覆盖度审计补充（★逐 109 后端路由回扫,发现上一轮漏网的功能）
+
+> 方法:把 `sidecar/app.py` 109 个 `@app` 路由逐个映射到矩阵,凡没对应 case 的就是漏网。下面是回扫结果。
+
+### Q.1 探索——两个星系是不同功能(上一轮只测了一个)
+| ID | 端点 | 功能 | 期望 | 状态 |
+|----|------|------|------|------|
+| C-10 | chat_galaxy | **联系人语义星系**(全1:1联系人按聊天相似度,区别于主题星系/机构关系网) | 星云成形 | ⬜ ★漏网 |
+| C-11 | network_portrait | 关系网画像(refresh 参数) | 生成+刷新 | ⬜ ★漏网 |
+
+### Q.2 冥想——一生故事完整渲染链(上一轮只测 lifestory/song,配图/视频/播放全漏)
+| ID | 端点 | 功能 | 期望 | 状态 |
+|----|------|------|------|------|
+| I-09 | genimg/{name} | 一生故事**配图**(CogView-3-Flash 生成图,绕墙缓存) | 每镜出图,不 429 死 | ⬜ ★漏网 |
+| I-10 | genvid/{name} | 一生故事**视频**渲染 | 出视频可播 | ⬜ ★漏网 |
+| I-11 | music-list | 主题曲列表(me*.mp3+歌词) | 列出用户全部主题曲 | ⬜ ★漏网 |
+| I-12 | music/{fname}、theme/{fname} | 主题曲/主题 mp3 **播放** | 音频可播 | ⬜ ★漏网 |
+| I-13 | tts/{fname} | **旁白 TTS 音频文件服务** | edge-tts 产的 mp3 能取能播 | ⬜ ★漏网(与 I-03 配套) |
+
+### Q.3 问答——产出后续操作(上一轮只测 generate 出文件,预览/下载漏)
+| ID | 端点/组件 | 功能 | 期望 | 状态 |
+|----|----------|------|------|------|
+| B-17 | preview/{fname} | 产出**预览**(Home 有"预览"按钮,file.preview) | 预览渲染 | ⬜ ★漏网 |
+| B-18 | download/{fname} | 产出**下载** | 下到本地可打开 | ⬜ ★漏网 |
+
+### Q.4 全局跨 tab 组件(不属单一 tab,上一轮完全没列)
+| ID | 组件/端点 | 功能 | 期望 | 状态 |
+|----|----------|------|------|------|
+| GL-01 | **AskDrawer**·普通问答 | 全局问TA抽屉,任意入口带 query | 抽屉出,LLM 答 | ⬜ ★漏网 |
+| GL-02 | AskDrawer·对某联系人(1:1) | contact 传入 | 针对该人问答 | ⬜ |
+| GL-03 | AskDrawer·对群(isGroup) | isGroup=true | 群维度问答 | ⬜ |
+| GL-04 | AskDrawer·initialAction 深聊 | action=deepen | 走深聊 | ⬜ |
+| GL-05 | AskDrawer·initialAction 起草回复 | action=draftReply | 起草 | ⬜ |
+| GL-06 | AskDrawer·initialAction 简报 | action=briefing | 出简报 | ⬜ |
+| GL-07 | AskDrawer·产出文档二级菜单 | 抽屉内 generate | 出 PPT/Word/Excel | ⬜ |
+| GL-08 | **ReportPanel**(Reader 内) | 对某联系人出关系报告 | report 面板渲染 | ⬜ ★漏网 |
+| GL-09 | **DiscoveryBell**(全局铃) | 有新发现亮红点 | 点开看发现列表 | ⬜ ★漏网 |
+| GL-10 | **ComingSoon** 占位 | 未上线功能 | 显示 roadmap 不误导 | ⬜ |
+
+### Q.5 内部/系统端点(不一定有前端按钮,但要保证不崩)
+| ID | 端点 | 功能 | 期望 | 状态 |
+|----|------|------|------|------|
+| SY-01 | embed | 补嵌入(服务内驱动,不 standalone 抖 CPU) | 增量嵌入正常 | ⬜ |
+| SY-02 | ingest/status | 入库状态回写 | 进度正确 | ⬜ |
+| SY-03 | realtime/heartbeat | 助手心跳 | 门控不空转 | ✅ |
+| SY-04 | go/wechat-export | 微信导出跳转 | 正确跳转 | ⬜ |
+| SY-05 | job/{job_id} | 异步任务查询 | 状态可查 | ⬜ |
+| SY-06 | analysis_status | 分析进度 | %爬升 | ⬜ |
+| SY-07 | auth/me | 当前用户 | 返回身份 | ⬜ |
+| SY-08 | health | 健康检查 | ok | ✅ |
+
+### Q.6 覆盖度台账（109 路由 → 矩阵映射结果）
+| 状态 | 数量 | 说明 |
+|------|------|------|
+| 有 case 覆盖 | ~95 | A~N + O + P + Q 各章 |
+| 本次回扫补入(★漏网) | ~14 | C-10/11, I-09~13, B-17/18, GL-01~10, SY-* |
+| 仍需下一轮再回扫 | 逐路由核 | 每加新端点必回此表登记(防再漏) |
+
+> **规则**:此台账是"端点↔case"的对账单。**任何新增 `@app` 路由,必须同步在此表加一条 case**,
+> 否则视为"功能没做完"。这是防"有端点没测"复发的机制(对应复盘 R1)。
+
+---
+
 ## 测试执行方法（可复用）
 
 1. **下 DMG**:`gh run download <id> -n compound-mac-intel-lite`,真机装(macOS12/Intel)。
