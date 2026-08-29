@@ -21,10 +21,11 @@ def _find_model(*rel):
             return p
     return os.path.join(BASE, "models", *rel)   # 都没有:返回 BASE 路径(_rec 里 os.path.exists 判空优雅降级)
 
-# ffmpeg:打包客户端用包内 bin/ffmpeg(Mac版);没有则回落系统 which('ffmpeg')
-FF = os.path.join(_MEI, "bin", "ffmpeg")
+# ffmpeg:打包客户端用包内 bin/ffmpeg(Windows 为 ffmpeg.exe);没有则回落系统 which('ffmpeg')
+_FFX = ".exe" if _sys.platform == "win32" else ""
+FF = os.path.join(_MEI, "bin", "ffmpeg" + _FFX)
 if not os.path.exists(FF):
-    FF = _shutil.which("ffmpeg") or os.path.join(BASE, "bin", "ffmpeg")
+    FF = _shutil.which("ffmpeg") or os.path.join(BASE, "bin", "ffmpeg" + _FFX)
 _M = _find_model("sherpa-onnx-sense-voice-zh-en-ja-ko-yue-2024-07-17")
 _VAD = _find_model("silero_vad.onnx")
 # 说话人分离(A②): pyannote分割 + 3D-Speaker声纹, 纯CPU/ONNX, 复用已装的 sherpa_onnx

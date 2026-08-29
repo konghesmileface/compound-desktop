@@ -203,11 +203,12 @@ def render_xlsx(data: dict, tag: str) -> str:
 #   PATH 里的 officecli→都没有则 OCC=None,render_*_officecli 抛错→generate() 回落 python 库。
 def _resolve_occ():
     import sys as _sys, shutil, stat
+    _ox = ".exe" if _sys.platform == "win32" else ""   # ★Windows officecli.exe
     cands = []
     base = getattr(_sys, "_MEIPASS", None)
     if base:
-        cands.append(os.path.join(base, "bin", "officecli"))
-    cands.append(os.path.join(os.path.dirname(os.path.abspath(__file__)), "bin", "officecli"))
+        cands.append(os.path.join(base, "bin", "officecli" + _ox))
+    cands.append(os.path.join(os.path.dirname(os.path.abspath(__file__)), "bin", "officecli" + _ox))
     w = shutil.which("officecli")
     if w:
         cands.append(w)

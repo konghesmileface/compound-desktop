@@ -121,7 +121,7 @@ def main():
         _sv = os.path.join(base, "models", "sherpa-onnx-sense-voice-zh-en-ja-ko-yue-2024-07-17", "model.int8.onnx")
         print(f"  {'OK  ' if os.path.isfile(_sv) else 'FAIL'} 数据:SenseVoice ASR 模型")
         ok = ok and os.path.isfile(_sv)
-        _ff = os.path.join(base, "bin", "ffmpeg")
+        _ff = os.path.join(base, "bin", "ffmpeg" + (".exe" if sys.platform == "win32" else ""))
         print(f"  {'OK  ' if os.path.isfile(_ff) else 'FAIL'} 数据:ffmpeg 二进制")
         ok = ok and os.path.isfile(_ff)
         for _mn, _mp in (("silero VAD", os.path.join(base, "models", "silero_vad.onnx")),

@@ -3,10 +3,11 @@
 # 产物: dist/compound-sidecar/ (含 compound-sidecar 可执行 + 库)
 # 瘦身版:不打嵌入模型(bge-m3 2.3G),首次语义检索时按 hf-mirror 下载。OCR(rapidocr onnx)已打进。
 # 蓝本:WM kb-sidecar.spec(rapidocr datas / torch upx=False / onedir / certifi 均沿用)。
-import os
+import os, sys
 from PyInstaller.utils.hooks import collect_submodules, collect_data_files, collect_dynamic_libs
 
 here = os.path.abspath(".")
+_EXE = ".exe" if sys.platform == "win32" else ""   # ★Windows 原生二进制带 .exe(ffmpeg/officecli)
 
 datas = []
 binaries = []
@@ -17,7 +18,7 @@ if os.path.isfile(_sf):
 # ★officecli 二进制(officecli.ai 单文件原生,专业排版 PPT/Word/Excel;非Docker,离线无依赖)。
 #   打进 bin/,generate.py _resolve_occ 找 _MEIPASS/bin/officecli 调用;缺则回落 python-pptx。
 #   ★平台专属:仓库里的是 Intel x86_64;arm/win 各自二进制需另放(缺则该平台自动回落)。
-_occ = os.path.join(here, "bin", "officecli")
+_occ = os.path.join(here, "bin", "officecli" + _EXE)
 if os.path.isfile(_occ):
     datas.append((_occ, "bin"))
 # ★iOS 历史导入模块(sidecar/wxsync:import_iphone/config/status/uploader)。app.py 的
@@ -83,7 +84,7 @@ for _mf in ("silero_vad.onnx", "3dspeaker_speech_eres2net_base_sv_zh-cn_3dspeake
         datas.append((_fp, "models"))
 # ★ffmpeg(Mac Intel 静态二进制):音视频抽音轨用。CI 从 evermeet.cx 下到 bin/ffmpeg;
 #   缺则 media_ingest 回落系统 which('ffmpeg')。
-_ff = os.path.join(here, "bin", "ffmpeg")
+_ff = os.path.join(here, "bin", "ffmpeg" + _EXE)
 if os.path.isfile(_ff):
     datas.append((_ff, "bin"))
 
