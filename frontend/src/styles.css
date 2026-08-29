@@ -3922,3 +3922,48 @@ button.oc-node { background: none; border: none; padding: 0; margin: 0; cursor: 
 .wx-ios-guide-link { display: inline-block; margin: 12px auto 0; background: none; border: none;
   color: var(--text-3); font-size: 12.5px; cursor: pointer; }
 .wx-ios-guide-link:hover { color: #7dd3fc; }
+
+/* ═══════════ 首启模型下载页(科幻星海风)═══════════ */
+.mdl-root{position:fixed;inset:0;z-index:9999;background:radial-gradient(ellipse at 50% 40%,#0a1030 0%,#05070f 60%,#020309 100%);display:flex;align-items:center;justify-content:center;overflow:hidden;font-family:inherit}
+.mdl-bg{position:absolute;inset:0;width:100%;height:100%;pointer-events:none}
+.mdl-inner{position:relative;z-index:2;width:min(560px,90vw);text-align:center;padding:24px;animation:mdlFadeUp .8s cubic-bezier(.2,.8,.2,1)}
+@keyframes mdlFadeUp{from{opacity:0;transform:translateY(18px)}to{opacity:1;transform:none}}
+
+/* 神经核心 + 进度环 */
+.mdl-core{position:relative;width:150px;height:150px;margin:0 auto 26px}
+.mdl-ring{position:absolute;inset:0;width:100%;height:100%;transform:rotate(-90deg)}
+.mdl-ring-bg{fill:none;stroke:rgba(120,150,255,.12);stroke-width:3}
+.mdl-ring-fg{fill:none;stroke:url(#none);stroke:#5ee0ff;stroke-width:3.5;stroke-linecap:round;transition:stroke-dashoffset .6s ease;filter:drop-shadow(0 0 6px #5ee0ff) drop-shadow(0 0 14px rgba(94,224,255,.6))}
+.mdl-core-glow{position:absolute;inset:26px;border-radius:50%;background:radial-gradient(circle,rgba(94,224,255,.35),rgba(139,120,255,.15) 55%,transparent 72%);animation:mdlPulse 2.4s ease-in-out infinite}
+@keyframes mdlPulse{0%,100%{transform:scale(.92);opacity:.75}50%{transform:scale(1.08);opacity:1}}
+.mdl-core-ic{position:absolute;inset:0;margin:auto;width:52px;height:52px;color:#bfe9ff;animation:mdlSpin 18s linear infinite;filter:drop-shadow(0 0 8px rgba(94,224,255,.8))}
+@keyframes mdlSpin{to{transform:rotate(360deg)}}
+.mdl-pct{position:absolute;left:0;right:0;bottom:-4px;top:0;display:flex;align-items:center;justify-content:center;font-size:30px;font-weight:750;color:#eaf6ff;letter-spacing:-1px;text-shadow:0 0 12px rgba(94,224,255,.5)}
+.mdl-pct span{font-size:15px;font-weight:600;opacity:.7;margin-left:2px;margin-top:6px}
+
+.mdl-title{font-size:23px;font-weight:750;color:#eaf2ff;margin:0 0 12px;letter-spacing:.5px;text-shadow:0 0 24px rgba(94,120,255,.4)}
+.mdl-sub{font-size:13px;line-height:1.7;color:#a8b6d8;margin:0 auto 26px;max-width:440px}
+.mdl-sub b{color:#dbe8ff;font-weight:650}
+.mdl-eta{color:#5ee0ff!important;text-shadow:0 0 8px rgba(94,224,255,.4)}
+
+/* 能力模块 */
+.mdl-mods{display:grid;gap:12px;text-align:left;margin-bottom:22px}
+.mdl-mod{display:flex;gap:13px;align-items:flex-start;padding:14px 16px;border-radius:14px;background:rgba(20,30,60,.5);border:1px solid rgba(94,120,255,.14);backdrop-filter:blur(8px);transition:all .4s;position:relative;overflow:hidden}
+.mdl-mod.active{border-color:rgba(94,224,255,.5);background:rgba(24,40,78,.62);box-shadow:0 0 0 1px rgba(94,224,255,.15),0 8px 30px -12px rgba(94,224,255,.4)}
+.mdl-mod.done{border-color:rgba(74,222,128,.4);background:rgba(20,44,36,.5)}
+.mdl-mod.wait{opacity:.5}
+.mdl-mod.active::before{content:"";position:absolute;top:0;left:-100%;width:70%;height:100%;background:linear-gradient(90deg,transparent,rgba(94,224,255,.08),transparent);animation:mdlScan 2s linear infinite}
+@keyframes mdlScan{to{left:130%}}
+.mdl-mod-ic{flex:none;width:40px;height:40px;border-radius:11px;display:flex;align-items:center;justify-content:center;background:rgba(94,120,255,.14);color:#8fb4ff;transition:all .4s}
+.mdl-mod.active .mdl-mod-ic{color:#5ee0ff;background:rgba(94,224,255,.18);box-shadow:0 0 16px rgba(94,224,255,.45);animation:mdlPulse 1.8s ease-in-out infinite}
+.mdl-mod.done .mdl-mod-ic{color:#4ade80;background:rgba(74,222,128,.16)}
+.mdl-mod-body{flex:1;min-width:0}
+.mdl-mod-head{display:flex;justify-content:space-between;align-items:baseline;gap:8px}
+.mdl-mod-name{font-size:14px;font-weight:650;color:#e6eeff}
+.mdl-mod-size{font-size:11.5px;color:#7f93bd;font-variant-numeric:tabular-nums;flex:none}
+.mdl-mod.done .mdl-mod-size{color:#4ade80}
+.mdl-mod-unlock{font-size:11.5px;color:#8ea0c8;margin:3px 0 9px;line-height:1.4}
+.mdl-mod-bar{height:4px;border-radius:3px;background:rgba(120,150,255,.12);overflow:hidden}
+.mdl-mod-bar i{display:block;height:100%;border-radius:3px;background:linear-gradient(90deg,#5e9dff,#5eeaff);box-shadow:0 0 8px rgba(94,224,255,.7);transition:width .5s ease}
+.mdl-mod.done .mdl-mod-bar i{background:linear-gradient(90deg,#3ec17a,#5ee0a0);box-shadow:0 0 8px rgba(74,222,128,.6)}
+.mdl-foot{font-size:11px;color:#5b6b8f;letter-spacing:.3px}
