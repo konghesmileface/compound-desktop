@@ -316,6 +316,13 @@ export default function WechatSync({ onGuide }) {
                 </a>
               ))}
             </div>
+            {/* ★显著步骤:第3步「抓密钥」不做会同步到空(2026-08-29 真机验证:直接点开始同步 keys:0 → handoff 空) */}
+            <ol className="wx-dlbox-steps">
+              <li><b>下载</b>对应系统的助手(上方按钮)</li>
+              <li><b>安装并打开</b>「微信同步助手」</li>
+              <li className="wx-step-key"><b>点「抓取 / 更新密钥」</b> —— 按提示登录注入版微信、在搜索框搜个词触发全库。<mark>关键:不做这步会同步到空!</mark></li>
+              <li><b>点「开始实时同步」</b> —— 此后手机上聊的每条,几秒内自动进大脑</li>
+            </ol>
           </div>
         </div>
       )}
