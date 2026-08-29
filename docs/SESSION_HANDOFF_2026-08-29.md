@@ -64,6 +64,17 @@
 - **★★核心结论:8G 机上无法「一边分析/嵌入一边测前端」,俩抢资源全卡。P1/P2 完整跑必须等分析完成(嵌入~1.5hr + intel LLM pass 数十分钟+DeepSeek费)或换强机。**
 - 待续:让分析跑完再干净跑 P1(真数据洞察)+ P2(425按钮 CDP)。测试 sidecar 已停,副本 `/tmp/compound-test-brain` 可复用(嵌到 ~55)。
 
+## 7.7 白天续:重建含 bg-analyzer 的新版 + flow_tests 套件 + 真机验证(2026-08-29 白天)
+- **新增真机 bug(用户在 B 走流程发现)**:
+  1. 微信助手下载处漏「抓密钥」步 + 抓密钥无进度 → 改 WechatSync/Guide(客户端)+ panel.py 进度横幅(助手,commit 5be5bec 已推)
+  2. Windows 打包连修 4 坑:Unicode print(reconfigure utf-8)→ 前端 VITE_TAURI 内联 env Windows cmd 不认(移到 workflow env)→ NSIS 装不了 2.3G bge-m3(单文件)→ **NSIS 2GB 总包硬限**(改用 MSI/WiX,★不瘦身破坏 Mac/Windows 一致性——用户令:Mac 用 DMG 无大小限,Windows 该换装包器不该瘦身)。Windows 仍在磨。
+  3. **★承诺雷达/人脉图谱不自动分析**:客户端只有 bg-embed 后台驱动,intel/entities 无驱动 + 打开页 refresh=0 只读缓存不生成 + 雷达页根本没「重新分析」按钮 + 没配 AI key 时无引导 → 加 `_start_bg_analyzer` 后台线程(app.py),自动逐会话 build_intel + extract_doc_entities,节流幂等,只在配了 key 时跑。
+- **★flow_tests.py 测试套件**(回应"case不完整也没流程"):A 完整性=源码机械枚举 109 路由逐条登记流程/deferred,漏一个亮红(已抓出我漏的 auth/login/register/friend);B 流程化=10 条端到端旅程每步验证 + 5 条 deferred。跑法 `python3 flow_tests.py --port <口> --token <token>`。
+- **★新版(33238855139,含全部修复+bg-analyzer)已装 B 并验证**:
+  - bg-analyzer **真机生效**:导入微信后 承诺雷达 0→64%、人脉图谱 0→22% **自动爬升**(无需手点)。用户"为什么没进度"问题**修复确认**。
+  - flow_tests 对新版 B:完整性 109/109 + 流程 **33/37 通过**。雷达有真数据了(承诺5015字节)。4 个未过=个人画像空(需 persona 生成)+ 产出文档×3 err-1(150s超时,harness 非产品——手测 PPT 9张幻灯片是好的,并发+连续3生成超时;下轮调大 timeout)。
+- **待续(用户令,构建好继续测)**:助手包传 106+客户端再构建(带最新助手,106 SSH 曾被拦需用户);Windows MSI 出包后装 Win 机测;flow_tests 产出 timeout 调大。★数据在:A 测试库 `/tmp/compound-test-brain`,B 真客户端 `~/Applications/Compound.app`(端口每次随机,lsof/ps 找 --port)。
+
 ## 8. 测试方法论教训(用户两次点破,必记)
 1. 按「产品全功能清单」搭 case,不是「上轮待办清单」(漏了微信助手)。
 2. 「旧包测过 ≠ 新包测过」,每功能当前包重测。

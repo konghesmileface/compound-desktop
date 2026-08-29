@@ -152,7 +152,7 @@ def flow_insights(c):
 def flow_generate(c):
     steps = []
     for fmt in ["word", "excel", "ppt"]:
-        st, b = call(c, "POST", "/api/generate", {"topic": "债券投资要点", "format": fmt, "theme": "deep"}, timeout=150)
+        st, b = call(c, "POST", "/api/generate", {"topic": "债券投资要点", "format": fmt, "theme": "deep"}, timeout=280)
         f = json.loads(b).get("file") if st == 200 else None
         ok = bool(f)
         if f:  # 立刻下载验证非空(PPT空deck回归)
