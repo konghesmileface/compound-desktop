@@ -10,6 +10,15 @@ import os
 import sys
 import argparse
 
+# ★Windows 控制台默认 cp1252/GBK,sidecar 大量中文 print(selftest/进度/日志)会 UnicodeEncodeError 崩
+#   (Tauri 捕获 stdout;CI selftest 也栽这)。启动即把 stdout/stderr 重配 utf-8,一劳永逸。
+if sys.platform.startswith("win"):
+    try:
+        sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+        sys.stderr.reconfigure(encoding="utf-8", errors="replace")
+    except Exception:
+        pass
+
 
 def _data_dir() -> str:
     if sys.platform == "darwin":
