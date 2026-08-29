@@ -126,6 +126,63 @@ def _start_bg_embedder():
     threading.Thread(target=_loop, daemon=True).start()
 
 
+# ★★后台分析驱动:承诺雷达(intel)+ 人脉图谱(entities)也自动跑(2026-08-29 用户真机发现:
+#   客户端只有 bg-embed 自动,intel/entities 无后台驱动、打开页面(refresh=0)也只读缓存不生成→
+#   右下角这两层永远 0%,killer 功能不会自动出,违背"第二大脑自动通读分析"承诺)。仿 bg-embed:
+#   逐个未分析的微信会话 build_intel(LLM)/ extract_doc_entities(LLM),节流,只在配了 key 时跑。
+_BG_ANALYZE_LOCK = threading.Lock()
+
+@app.on_event("startup")
+def _start_bg_analyzer():
+    def _loop():
+        _time.sleep(25)   # 让嵌入先起步(语义层优先)
+        import chat_intel as _CI, entities as _EN
+        while True:
+            worked = False
+            if _BG_ANALYZE_LOCK.acquire(blocking=False):
+                try:
+                    con = _con()
+                    try:
+                        cfg = LLM.load_cfg()
+                        if cfg.get("llm_key"):   # intel/entities 都要 LLM,没 key 不跑
+                            con.execute("CREATE TABLE IF NOT EXISTS analysis_processed(owner TEXT, layer TEXT, doc_id INTEGER, PRIMARY KEY(owner,layer,doc_id))")
+                            for (owner,) in con.execute("SELECT DISTINCT owner FROM documents WHERE filename LIKE '微信_与%'").fetchall():
+                                # 承诺雷达 intel:每轮处理 ≤3 个未缓存微信会话
+                                pend = con.execute(
+                                    "SELECT d.id, d.filename FROM documents d WHERE d.owner=? AND d.filename LIKE '微信_与%' AND d.pages>=2 "
+                                    "AND NOT EXISTS(SELECT 1 FROM chat_intel ci WHERE ci.username=d.owner AND ci.contact=REPLACE(REPLACE(d.filename,'微信_与',''),'.txt','')) LIMIT 3",
+                                    (owner,)).fetchall()
+                                for did, fn in pend:
+                                    contact = fn.replace("微信_与", "").replace(".txt", "")
+                                    text = "\n".join(p[0] for p in con.execute("SELECT text FROM pages WHERE doc_id=? ORDER BY page_no", (did,)).fetchall())
+                                    try:
+                                        intel = _CI.build_intel(contact, text)
+                                        if intel:
+                                            con.execute("INSERT OR REPLACE INTO chat_intel(username,contact,doc_id,msgcount,day,data) VALUES(?,?,?,?,?,?)",
+                                                        (owner, contact, did, text.count("\n"), _dt.date.today().isoformat(), json.dumps(intel, ensure_ascii=False)))
+                                            con.commit(); worked = True
+                                    except Exception as _e: print(f"[bg-analyze] intel {contact}: {_e}")
+                                # 人脉图谱 entities:每轮处理 ≤3 个未抽实体的文档
+                                pend2 = con.execute(
+                                    "SELECT d.id FROM documents d WHERE d.owner=? "
+                                    "AND NOT EXISTS(SELECT 1 FROM analysis_processed ap WHERE ap.owner=d.owner AND ap.layer='entities' AND ap.doc_id=d.id) LIMIT 3",
+                                    (owner,)).fetchall()
+                                for (did,) in pend2:
+                                    text = "\n".join(p[0] for p in con.execute("SELECT text FROM pages WHERE doc_id=? ORDER BY page_no", (did,)).fetchall())[:6000]
+                                    try: _EN.extract_doc_entities(con, did, owner, text)
+                                    except Exception as _e: print(f"[bg-analyze] entities {did}: {_e}")
+                                    con.execute("INSERT OR IGNORE INTO analysis_processed(owner,layer,doc_id) VALUES(?,?,?)", (owner, "entities", did))
+                                    con.commit(); worked = True
+                    finally:
+                        con.close()
+                except Exception as e:
+                    print(f"[bg-analyze] {e}")
+                finally:
+                    _BG_ANALYZE_LOCK.release()
+            _time.sleep(3 if worked else 60)   # 有活→3s喘一下继续;没活→60s轻巡
+    threading.Thread(target=_loop, daemon=True).start()
+
+
 @app.get("/health")
 def health():
     return {"status": "ok", "db": I.DEFAULT_DB, "vault": I.DEFAULT_VAULT,
