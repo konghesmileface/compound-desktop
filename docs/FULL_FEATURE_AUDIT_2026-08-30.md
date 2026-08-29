@@ -15,7 +15,7 @@
 | 粘贴 URL 抓取(网页/视频 yt-dlp) | ✅ | 视频 >800MB 截断;需登录/反爬站失败;有 SSRF 防护 |
 | 微信实时同步(handoff 消费) | ✅ | 依赖外部助手;助手没起时"等待客户端"永转无明确提示 |
 | iOS 历史导入(idevicebackup2) | ⚠️🔒 | 强依赖 libimobiledevice(用户自装);全量备份占磁盘;失败率高 |
-| **★定期更新固定文件夹(autosync)** | ❌ | **空壳!前端`{false&&}`隐藏+后端零实现,勾选只存localStorage,新文件不会自动入库。等于没做。** |
+| **★定期更新固定文件夹(autosync)** | ✅ | **已真实现(2026-08-30)。** 106 那个 checkbox 是「能勾但没用」的摆设(勾选只写 localStorage、上传不带参、后端零监听);桌面版真做出来:Tauri 原生目录对话框(`pick_folder` Rust 命令)拿文件夹绝对路径 → `/api/autosync/add` 注册 → 后端 `_start_bg_autosync` 线程按 mtime/size 变化轮询 → 走同一条 `_run_ingest_job` 入库(嵌入/抽实体/预热全复用),per_round=12 限量护 8G 机。逻辑测 6/6 通过。 |
 | **文件类型**:pdf/epub/mobi/azw3/docx/pptx/xlsx/md/txt/csv/json/html/eml/mbox + png/jpg/webp/bmp/tiff/gif/heic + mp3/wav/m4a/mp4/mov/... (45种) | ✅ | HEIC 需 pillow-heif;azw3 需 mobi 转换 |
 | **OCR**:auto(文字层+rapidocr兜底)/rapidocr本地/**t430远程**/paddle高精/unlimited导出 | ⚠️ | **★T430:能配(backend=t430+T430_OCR_URL)但连不上不自动回落本地→入库成空(t430-unreachable)用户不知**;paddle 需本机 worker(轻量版没打) |
 | **音视频**:ffmpeg抽轨→silero VAD→SenseVoice转写→[视频]关键帧OCR→说话人分离 | ✅ | 模型缺失优雅降级但用户不知为何空;macOS12 曾崩 |
@@ -83,7 +83,7 @@
 ## ★★ 高优缺口汇总(建议修复优先级)
 | P | 缺口 | 影响 |
 |---|---|---|
-| **P0** | 定期更新固定文件夹=空壳 | 用户以为有此功能,实际新文件不入库 |
+| ~~P0~~ ✅ | ~~定期更新固定文件夹=空壳~~ **已修(2026-08-30):Tauri目录对话框+后端轮询线程+add/list/remove 端点,真自动入库** | — |
 | **P0** | 跨设备:资料/头像/AI key 只本地 | 换设备全丢,多设备体验断裂 |
 | **P0** | personas.emb 填充不明 | 姻缘匹配可能静默降级 |
 | **P1** | T430/paddle OCR 失败不回落 | 入库成空,用户不知 |

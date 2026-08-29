@@ -168,6 +168,21 @@ body {
 .autosync input { width: 15px; height: 15px; accent-color: var(--accent); cursor: pointer; }
 .autosync:hover { color: var(--text-2); }
 
+/* 定期同步文件夹 */
+.autosync-box { margin-top: 16px; padding: 16px 18px; border-radius: 14px; }
+.asx-head { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
+.asx-title { font-size: 14.5px; font-weight: 600; color: var(--text-1); }
+.asx-sub { font-size: 12.5px; color: var(--text-3); margin-top: 4px; line-height: 1.5; max-width: 560px; }
+.asx-list { margin-top: 14px; display: flex; flex-direction: column; gap: 8px; }
+.asx-item { display: flex; align-items: center; gap: 11px; padding: 10px 12px; border-radius: 10px; background: var(--surface-2, rgba(255,255,255,0.03)); border: 1px solid var(--border, rgba(255,255,255,0.06)); }
+.asx-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--accent); flex: none; box-shadow: 0 0 8px var(--accent); }
+.asx-missing .asx-dot { background: var(--bad, #e0685a); box-shadow: none; }
+.asx-info { flex: 1; min-width: 0; }
+.asx-path { font-size: 12.5px; color: var(--text-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.asx-meta { font-size: 11.5px; color: var(--text-3); margin-top: 2px; }
+.asx-rm { flex: none; width: 26px; height: 26px; border-radius: 7px; border: none; background: transparent; color: var(--text-3); cursor: pointer; font-size: 13px; }
+.asx-rm:hover { background: rgba(224,104,90,0.12); color: var(--bad, #e0685a); }
+
 .dropzone {
   border: 1.5px dashed var(--border-2); border-radius: var(--r-lg);
   padding: 60px; text-align: center; cursor: pointer;

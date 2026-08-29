@@ -20,7 +20,8 @@ export default function Ingest({ onDone }) {
   const [guideKey, setGuideKey] = useState(null)
   const [busy, setBusy] = useState(false)
   const [job, setJob] = useState(null)
-  const [autoSync, setAutoSync] = useState(() => localStorage.getItem('autoSync') === '1')
+  const [syncFolders, setSyncFolders] = useState([])
+  const isTauri = typeof window !== 'undefined' && window.__TAURI__ && window.__TAURI__.core
 
   const poll = useCallback((id, { resumed = false } = {}) => {
     setBusy(true)
@@ -84,7 +85,25 @@ export default function Ingest({ onDone }) {
     } catch { setBusy(false); setJob({ phase: 'error', error: '上传失败,请重试' }) }
   }
 
-  const toggleAuto = () => setAutoSync((v) => { const n = !v; localStorage.setItem('autoSync', n ? '1' : '0'); return n })
+  // 定期同步文件夹:列表 + Tauri 原生目录选择器 + 增删
+  const loadSync = useCallback(async () => {
+    try { const r = await api.autosyncList(); setSyncFolders(r.folders || []) } catch { /* 后端未就绪,忽略 */ }
+  }, [])
+  useEffect(() => { loadSync() }, [loadSync])
+  async function addSyncFolder() {
+    if (!isTauri) { toast('此功能需在桌面客户端里使用(浏览器拿不到文件夹真实路径)', 'err'); return }
+    let path
+    try { path = await window.__TAURI__.core.invoke('pick_folder') } catch { toast('打开文件夹选择器失败', 'err'); return }
+    if (!path) return   // 用户取消
+    try {
+      const r = await api.autosyncAdd(path)
+      toast(r.ingested_now ? `已开始定期同步,本次入库 ${r.ingested_now} 个文件` : '已加入定期同步,新增文件会自动入库', 'ok')
+      loadSync(); onDone && onDone()
+    } catch (e) { toast('添加失败:' + (e.message || ''), 'err') }
+  }
+  async function removeSyncFolder(path) {
+    try { await api.autosyncRemove(path); loadSync() } catch { /* noop */ }
+  }
 
   const filePct = job && job.files_total ? Math.round(((job.file_index || 0) / job.files_total) * 100) : 0
   const pagePct = job && job.page_total ? Math.round((job.page / job.page_total) * 100) : 0
@@ -118,17 +137,37 @@ export default function Ingest({ onDone }) {
           <input className="auth-in" style={{ marginBottom: 0, flex: 1 }} placeholder="或粘贴一个网址(B站/网页/播客链接), 视频语音自动转文字入库" value={url} onChange={(e) => setUrl(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') grabUrl() }} />
           <button className="btn" disabled={busy} onClick={grabUrl}>抓取入库</button>
         </div>
-        {/* ★「实时同步此文件夹」暂时隐藏:后端无文件夹监听实现(勾选只存 localStorage 标记、
-            upload 也没带 autosync 参数),露出即误导用户以为新增文件会自动入库。待用 Tauri fs-watch
-            插件 + 后端 watch 线程真实现后再放出。要恢复:去掉下面的 false && 。 */}
-        {false && (
-        <label className="autosync" onClick={(e) => e.stopPropagation()}>
-          <input type="checkbox" checked={autoSync} onChange={toggleAuto} />
-          <span>实时同步此文件夹(勾选后,文件夹里新增的文件会自动入库)</span>
-        </label>
-        )}
         <input ref={fileRef} type="file" webkitdirectory="" directory="" multiple style={{ display: 'none' }} onChange={pick} />
         <input ref={oneRef} type="file" multiple style={{ display: 'none' }} onChange={pick} />
+      </div>
+
+      {/* 定期同步固定文件夹:选一个文件夹长期监听,新增/改动文件自动入库 */}
+      <div className="autosync-box glass">
+        <div className="asx-head">
+          <div>
+            <div className="asx-title">定期同步文件夹</div>
+            <div className="asx-sub">选一个文件夹长期监听 —— 以后往里放新文件(下载、截图、录音…)会<b>自动入库</b>,不用每次手动选。</div>
+          </div>
+          <button className="btn btn-primary" disabled={busy} onClick={addSyncFolder}>+ 添加文件夹</button>
+        </div>
+        {syncFolders.length > 0 && (
+          <div className="asx-list">
+            {syncFolders.map((f) => (
+              <div key={f.path} className={`asx-item${f.exists ? '' : ' asx-missing'}`}>
+                <span className="asx-dot" />
+                <div className="asx-info">
+                  <div className="asx-path" title={f.path}>{f.path}</div>
+                  <div className="asx-meta">
+                    已同步 <b>{f.synced}</b> 个文件
+                    {f.exists ? '' : ' · ⚠ 文件夹已不存在'}
+                    {f.last_scan ? ` · 上次扫描 ${f.last_scan.replace('T', ' ')}` : ''}
+                  </div>
+                </div>
+                <button className="asx-rm" onClick={() => removeSyncFolder(f.path)} title="取消同步此文件夹">✕</button>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
 
       {job && (

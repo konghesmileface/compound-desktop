@@ -75,7 +75,18 @@
   - flow_tests 对新版 B:完整性 109/109 + 流程 **33/37 通过**。雷达有真数据了(承诺5015字节)。4 个未过=个人画像空(需 persona 生成)+ 产出文档×3 err-1(150s超时,harness 非产品——手测 PPT 9张幻灯片是好的,并发+连续3生成超时;下轮调大 timeout)。
 - **待续(用户令,构建好继续测)**:助手包传 106+客户端再构建(带最新助手,106 SSH 曾被拦需用户);Windows MSI 出包后装 Win 机测;flow_tests 产出 timeout 调大。★数据在:A 测试库 `/tmp/compound-test-brain`,B 真客户端 `~/Applications/Compound.app`(端口每次随机,lsof/ps 找 --port)。
 
-## 8. 测试方法论教训(用户两次点破,必记)
+## 7.8 白天续2:定期同步文件夹(autosync)从空壳→真实现(2026-08-30)
+- **用户问「106上那个checkbox是没做还是打包忘记了」→ 查证结论**:106 dist 里 checkbox **无 `!1&&` 守卫、无条件渲染**(用户没记错,106 确实显示),但它是**纯摆设**——toggle 只 `localStorage.setItem("autoSync")`、上传 FormData 不带此参、后端零文件夹监听(grep watchdog/inotify/fswatch 全空)→ 勾了也不会自动入库。客户端则用 `{false&&}` 把这摆设藏了。**真相=前后端从头没做**,不是打包漏。
+- **按用户铁律「后端没实现也算bug→修→复测」真实现了**:
+  - **后端**(app.py,`_autosync_*` + `_start_bg_autosync` 线程 + `/api/autosync/{list,add,remove}`):`autosync_folders`+`autosync_seen` 两表;轮询按 mtime/size 变化检测新增/改动 → 走同一条 `_run_ingest_job` 入库(嵌入/抽实体/预热缓存全复用);`per_round=12` 限量护 8G 机;remove 按文件夹前缀清 seen(逻辑测抓出的坑,已修)。
+  - **Rust**(main.rs):新增 `pick_folder` 命令(`tauri-plugin-dialog` 弹原生目录选择器,返回**绝对路径**——浏览器 webkitdirectory 拿不到真实路径,这正是当初做不了的根因)+ Cargo 加 `tauri-plugin-dialog="2"` + 注册 plugin。
+  - **前端**(Ingest.jsx/api.js/styles.css):删掉死壳 `{false&&}`,换成「定期同步文件夹」卡片(+添加文件夹按钮→invoke pick_folder→autosyncAdd;列表显示已同步数/上次扫描/移除)。
+  - **测试**:`/tmp/test_autosync.py` 复刻逻辑 6 场景全过(首扫/去重/新增/改动检测/per_round限量/移除清seen)。cargo check 编译验证 Rust API。前端 `npm run build` 通过。
+  - **待真机复测**:装新包后 客户端里 添加文件夹→往里丢文件→看是否自动入库(端到端 OCR/嵌入需实包)。
+
+## 8. 测试方法论教训(用户多次点破,必记)
 1. 按「产品全功能清单」搭 case,不是「上轮待办清单」(漏了微信助手)。
 2. 「旧包测过 ≠ 新包测过」,每功能当前包重测。
 3. 测试数据必须隔离(独立账号),不堆真库,可重置,不污染不重复。
+4. **「后端没实现也算 bug」**:功能清单里空壳/摆设 = bug,要修+复测,不能标「产品决策/跳过」(autosync 教训)。
+5. **别轻易说「106残留该删」**:106 上跑的是真功能(冥想音乐/autosync摆设都被我误判过),要细看代码+实际行为再下结论。

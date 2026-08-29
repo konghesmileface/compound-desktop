@@ -183,6 +183,144 @@ def _start_bg_analyzer():
     threading.Thread(target=_loop, daemon=True).start()
 
 
+# ★★定期同步固定文件夹(autosync):106 上只有个"能勾但没用"的摆设(勾选只写 localStorage、
+#   上传不带参、后端零监听)。桌面版真正做出来:Tauri 目录对话框拿到文件夹绝对路径 → 注册到
+#   autosync_folders → 本线程定期轮询(mtime/size 变化=新增或改动)→ 走同一条 _run_ingest_job
+#   入库管线(自动嵌入/抽实体/预热缓存全复用)。不引 watchdog(轻量、跨平台、打包无新依赖)。
+def _autosync_tables(con):
+    con.execute("CREATE TABLE IF NOT EXISTS autosync_folders(owner TEXT, path TEXT, added_at TEXT, last_scan TEXT, PRIMARY KEY(owner,path))")
+    con.execute("CREATE TABLE IF NOT EXISTS autosync_seen(owner TEXT, path TEXT, mtime REAL, size INTEGER, PRIMARY KEY(owner,path))")
+
+def _autosync_changed(con, owner, path):
+    """文件是否新增/改动(与已入库快照比 mtime+size)。异常(文件消失等)当未变。"""
+    try:
+        stt = os.stat(path); mt, sz = stt.st_mtime, stt.st_size
+    except OSError:
+        return None
+    row = con.execute("SELECT mtime,size FROM autosync_seen WHERE owner=? AND path=?", (owner, path)).fetchone()
+    if row and abs((row[0] or 0) - mt) < 1 and (row[1] or -1) == sz:
+        return None
+    return (mt, sz)
+
+def _autosync_scan_owner(con, owner, per_round=12):
+    """扫该 owner 所有监听文件夹,把新增/改动文件(≤per_round/轮,护 8G 机)入库。返回本轮入库数。"""
+    folders = con.execute("SELECT path FROM autosync_folders WHERE owner=?", (owner,)).fetchall()
+    todo, stamp = [], {}
+    for (folder,) in folders:
+        if not os.path.isdir(folder):
+            continue
+        for f in I.find_docs(folder):
+            ch = _autosync_changed(con, owner, f)
+            if ch:
+                todo.append(f); stamp[f] = ch
+                if len(todo) >= per_round:
+                    break
+        con.execute("UPDATE autosync_folders SET last_scan=? WHERE owner=? AND path=?",
+                    (_dt.datetime.now().isoformat(timespec="seconds"), owner, folder))
+        if len(todo) >= per_round:
+            break
+    con.commit()
+    if not todo:
+        return 0
+    # 走标准入库管线(与手动上传完全一致:嵌入/实体/缓存全复用),进度也能在入库页看到
+    jid = _new_job(len(todo), "auto")
+    _run_ingest_job(jid, todo, "auto", 200, owner)
+    for f in todo:
+        mt, sz = stamp[f]
+        con.execute("INSERT OR REPLACE INTO autosync_seen(owner,path,mtime,size) VALUES(?,?,?,?)", (owner, f, mt, sz))
+    con.commit()
+    return len(todo)
+
+_BG_SYNC_LOCK = threading.Lock()
+
+@app.on_event("startup")
+def _start_bg_autosync():
+    def _loop():
+        _time.sleep(15)
+        while True:
+            worked = 0
+            if _BG_SYNC_LOCK.acquire(blocking=False):
+                try:
+                    con = _con()
+                    try:
+                        _autosync_tables(con)
+                        for (owner,) in con.execute("SELECT DISTINCT owner FROM autosync_folders").fetchall():
+                            try:
+                                worked += _autosync_scan_owner(con, owner)
+                            except Exception as _e:
+                                print(f"[bg-autosync] {owner}: {_e}")
+                    finally:
+                        con.close()
+                except Exception as e:
+                    print(f"[bg-autosync] {e}")
+                finally:
+                    _BG_SYNC_LOCK.release()
+            _time.sleep(5 if worked else 30)   # 有新文件→5s继续消化;没有→30s轻巡文件夹
+    threading.Thread(target=_loop, daemon=True).start()
+
+
+@app.get("/api/autosync/list")
+def autosync_list(authorization: str = Header(None)):
+    """当前用户监听中的文件夹 + 已同步文件数 + 上次扫描时间。"""
+    owner = _me(authorization)
+    con = _con()
+    try:
+        _autosync_tables(con)
+        out = []
+        for path, added_at, last_scan in con.execute(
+                "SELECT path,added_at,last_scan FROM autosync_folders WHERE owner=? ORDER BY added_at DESC", (owner,)).fetchall():
+            cnt = con.execute("SELECT COUNT(*) FROM autosync_seen WHERE owner=? AND path=?", (owner, path)).fetchone()[0]
+            out.append({"path": path, "added_at": added_at, "last_scan": last_scan,
+                        "synced": cnt, "exists": os.path.isdir(path)})
+        return {"folders": out}
+    finally:
+        con.close()
+
+
+@app.post("/api/autosync/add")
+def autosync_add(payload: dict = Body(...), authorization: str = Header(None)):
+    """注册一个要定期同步的文件夹(绝对路径,来自 Tauri 目录对话框)。立即扫一遍现有内容入库。"""
+    owner = _me(authorization)
+    path = (payload.get("path") or "").strip()
+    if not path or not os.path.isdir(path):
+        raise HTTPException(400, "文件夹不存在或路径无效")
+    path = os.path.abspath(path)
+    con = _con()
+    try:
+        _autosync_tables(con)
+        con.execute("INSERT OR IGNORE INTO autosync_folders(owner,path,added_at) VALUES(?,?,?)",
+                    (owner, path, _dt.datetime.now().isoformat(timespec="seconds")))
+        con.commit()
+        # 立即首扫(不阻塞太久:首扫也走 per_round 限量,余量交给后台线程续)
+        n = 0
+        if _BG_SYNC_LOCK.acquire(blocking=False):
+            try:
+                n = _autosync_scan_owner(con, owner)
+            finally:
+                _BG_SYNC_LOCK.release()
+        return {"ok": True, "path": path, "ingested_now": n}
+    finally:
+        con.close()
+
+
+@app.post("/api/autosync/remove")
+def autosync_remove(payload: dict = Body(...), authorization: str = Header(None)):
+    """取消监听一个文件夹(已入库的文档保留,只是不再自动同步新文件)。"""
+    owner = _me(authorization)
+    path = os.path.abspath((payload.get("path") or "").strip())
+    con = _con()
+    try:
+        _autosync_tables(con)
+        con.execute("DELETE FROM autosync_folders WHERE owner=? AND path=?", (owner, path))
+        # seen 按文件绝对路径存(文件夹/文件.ext),故按前缀清,否则残留导致重加后不再入库
+        con.execute("DELETE FROM autosync_seen WHERE owner=? AND (path=? OR path LIKE ?)",
+                    (owner, path, os.path.join(path, "") + "%"))
+        con.commit()
+        return {"ok": True}
+    finally:
+        con.close()
+
+
 @app.get("/health")
 def health():
     return {"status": "ok", "db": I.DEFAULT_DB, "vault": I.DEFAULT_VAULT,

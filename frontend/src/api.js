@@ -125,4 +125,8 @@ export const api = {
     }
     return fetch(`/api/upload?backend=${backend}`, { method: 'POST', headers: authHeaders(), body: fd }).then(j)
   },
+  // 定期同步文件夹(autosync):监听文件夹,新增/改动文件自动入库
+  autosyncList: () => fetch('/api/autosync/list', { headers: authHeaders() }).then(j),
+  autosyncAdd: (path) => fetch('/api/autosync/add', { method: 'POST', headers: { 'Content-Type': 'application/json', ...authHeaders() }, body: JSON.stringify({ path }) }).then(j),
+  autosyncRemove: (path) => fetch('/api/autosync/remove', { method: 'POST', headers: { 'Content-Type': 'application/json', ...authHeaders() }, body: JSON.stringify({ path }) }).then(j),
 }

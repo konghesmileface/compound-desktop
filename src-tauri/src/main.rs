@@ -90,13 +90,26 @@ fn open_external(url: String) {
     let _ = Command::new("xdg-open").arg(&url).spawn();
 }
 
+/// 弹原生目录选择器,返回选中的文件夹**绝对路径**(浏览器 webkitdirectory 拿不到真实路径,
+/// 这是"定期同步固定文件夹"能真正落地的关键)。取消返回 None。
+#[tauri::command]
+fn pick_folder(app: tauri::AppHandle) -> Option<String> {
+    use tauri_plugin_dialog::DialogExt;
+    app.dialog()
+        .file()
+        .blocking_pick_folder()
+        .and_then(|fp| fp.into_path().ok())
+        .map(|p| p.to_string_lossy().to_string())
+}
+
 fn main() {
     let child_slot: Arc<Mutex<Option<Child>>> = Arc::new(Mutex::new(None));
     let child_for_state = child_slot.clone();
 
     tauri::Builder::default()
+        .plugin(tauri_plugin_dialog::init())
         .manage(SidecarState { child: child_for_state })
-        .invoke_handler(tauri::generate_handler![open_external])
+        .invoke_handler(tauri::generate_handler![open_external, pick_folder])
         .setup(move |app| {
             let handle = app.handle().clone();
             let port = free_port();
