@@ -75,6 +75,8 @@ jobs:
           test -x dist/compound-paddle/compound-paddle && echo "✓ paddle worker x86_64 冻结成功"
 
       - name: Tauri 打高精版 .app/.dmg(内嵌主+paddle 两 x86_64 二进制)
+        env:
+          VITE_TAURI: '1'   # ★桌面包:vite base 相对路径(改 env 跨平台,原内联已从 beforeBuildCommand 移除)
         run: |
           npm install
           npm run tauri build -- --config src-tauri/tauri.hd.conf.json --target x86_64-apple-darwin

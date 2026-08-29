@@ -73,6 +73,8 @@ jobs:
           ./dist/compound-sidecar/compound-sidecar.exe --selftest
 
       - name: Tauri 打 Windows 安装包(NSIS .exe,内嵌 sidecar)
+        env:
+          VITE_TAURI: '1'   # ★桌面包:vite base 相对路径(不能内联在 beforeBuildCommand,Windows cmd 不认)
         run: |
           npm install
           npm run tauri build -- --bundles nsis

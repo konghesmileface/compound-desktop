@@ -76,6 +76,8 @@ jobs:
           ./dist/compound-sidecar/compound-sidecar --selftest
 
       - name: Tauri 打 Intel .app/.dmg(交叉编译 x86_64,内嵌 x86_64 sidecar)
+        env:
+          VITE_TAURI: '1'   # ★桌面包:vite base 用相对路径(原内联在 beforeBuildCommand,Windows cmd 不认→改 env 跨平台)
         run: |
           npm install
           npm run tauri build -- --target x86_64-apple-darwin
