@@ -71,16 +71,18 @@ jobs:
           python -m PyInstaller --noconfirm compound-sidecar.spec
           ./dist/compound-sidecar/compound-sidecar.exe --selftest
 
-      - name: Tauri 打 Windows 安装包(NSIS .exe,内嵌 sidecar)
+      # ★用 MSI(WiX)不用 NSIS:NSIS 32位 makensis 有 ~2GB 总包硬限(总模型>2G→mmap out of range 崩)。
+      #   Mac DMG 无此限所以能全打包;换 MSI 保持和 Mac 一致「全打包离线」,不破坏一致性去瘦身(用户令)。
+      - name: Tauri 打 Windows 安装包(MSI/WiX,内嵌 sidecar)
         env:
           VITE_TAURI: '1'   # ★桌面包:vite base 相对路径(不能内联在 beforeBuildCommand,Windows cmd 不认)
         run: |
           npm install
-          npm run tauri build -- --bundles nsis
+          npm run tauri build -- --bundles msi
 
       - name: 上传产物
         uses: actions/upload-artifact@v4
         with:
           name: compound-windows-lite
-          path: src-tauri/target/release/bundle/nsis/*.exe
+          path: src-tauri/target/release/bundle/msi/*.msi
           if-no-files-found: warn
