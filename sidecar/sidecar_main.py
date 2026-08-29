@@ -115,11 +115,19 @@ def main():
             return good
         _need("cacert.pem(CA证书=所有https命根)", os.path.join(base, "certifi", "cacert.pem"))
         _need("schema_full.sql(空DB建全45表)", os.path.join(base, "schema_full.sql"))
-        if _need("bge-m3 模型目录", os.path.join(base, "models", "bge-m3"), is_dir=True):
-            w = (_glob.glob(os.path.join(base, "models", "bge-m3", "*.safetensors"))
-                 + _glob.glob(os.path.join(base, "models", "bge-m3", "pytorch_model.bin")))
+        # ★bge-m3:Mac 打进包(离线);Windows 不打包——NSIS makensis 无法装 >2G 单文件(pytorch_model.bin 2.3G),
+        #   Windows 首次语义检索时从 HF 下载(sidecar_main 已配 EMBED_MODEL 回落 BAAI/bge-m3)。故 Windows 缺 = 不 FAIL。
+        _bge_dir = os.path.join(base, "models", "bge-m3")
+        if os.path.isdir(_bge_dir):
+            w = (_glob.glob(os.path.join(_bge_dir, "*.safetensors"))
+                 + _glob.glob(os.path.join(_bge_dir, "pytorch_model.bin")))
             print(f"  {'OK  ' if w else 'FAIL'} 数据:bge-m3 权重文件")
             ok = ok and bool(w)
+        elif sys.platform.startswith("win"):
+            print("  OK   数据:bge-m3(Windows 不打包,首次语义检索时下载——NSIS 装不了 >2G 单文件)")
+        else:
+            print("  FAIL 数据:bge-m3 模型目录(未打进包)")
+            ok = False
         n_onnx = len(_glob.glob(os.path.join(base, "rapidocr", "**", "*.onnx"), recursive=True))
         print(f"  {'OK  ' if n_onnx else 'FAIL'} 数据:rapidocr onnx 模型({n_onnx} 个)")
         ok = ok and n_onnx > 0

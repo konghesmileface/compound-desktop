@@ -39,12 +39,11 @@ jobs:
           workspaces: './src-tauri -> target'
           cache-on-failure: true
 
-      - name: 下 bge-m3 嵌入模型(打进包→离线开箱即用)
-        working-directory: sidecar
+      # ★Windows 不打包 bge-m3(2.3G):NSIS makensis 无法装 >2G 单文件(pytorch_model.bin)→ makensis mmap 失败。
+      #   Windows 首次语义检索时从 HF 下载(sidecar EMBED_MODEL 回落 BAAI/bge-m3);selftest 已对 Windows 宽容。
+      - name: 准备 pip(Windows 瘦身:不打 bge-m3)
         shell: bash
-        run: |
-          python -m pip install --upgrade pip huggingface_hub
-          python -c "from huggingface_hub import snapshot_download; snapshot_download('BAAI/bge-m3', local_dir='models/bge-m3', ignore_patterns=['onnx/*','*.onnx','colbert*','*.msgpack','*.h5','imgs/*'])"
+        run: python -m pip install --upgrade pip
 
       - name: 下音视频模型 + Windows ffmpeg.exe
         working-directory: sidecar
