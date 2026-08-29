@@ -199,48 +199,85 @@
 
 ---
 
-## TAB 5:人脉(Relationships)
+## TAB 5:人脉(Relationships)★分析后多模块(106上 407人/4531条参照)
 
-### 5.1 关系卡
-- 前置:有微信数据 + LLM key(bg-analyzer 生成)
-- 预期:每位联系人一张卡(身份/事实/未了结/人情)
-- 「重新分析」触发生成
+### 5.1 顶部「待了结 / 该联系了」模块
+- 待了结(loops):从聊天抽出的未闭环事项;点项 → 打开原聊天;删除(✕)→ /api/loops/dismiss
+- 该联系了(reach):该联系但久没联系的人;点 → onAsk 找线索;删除 → /api/reach/dismiss
+- ★8 种 AI chip(找线索/人情账本/找人/跨时间/找关联/关系分析/该联系谁/待办生成)→ 点 → onAsk 出对应分析
 
-### 5.2 问TA / 见面简报 / 深聊
-- 卡片上点 问TA/见面简报/深度分析 → AskDrawer 出对应内容
-- 深聊一层 /api/relationships/deepen(⚠ 之前 -1 超时,复测)
+### 5.2 人脉关系网(rel_graph 力导图)
+- 收起/展开;节点点击 → 打开;人脉枢纽按钮 → onAsk
+- 验证:/api/rel_graph 有节点
 
-### 5.3 关系图 / 时间线 / 找路径
-- 关系图(rel_graph)、群图(group_graph)、关系时间线(relation_timeline)、找路径(rel_path a→b)
+### 5.3 ★关系卡瀑布流(每位联系人一张,分析后生成)
+- 前置:微信数据 + LLM key(bg-analyzer 生成 relationship_cards)
+- 每卡:身份/事实/未了结/人情 + 标签
+- ★卡片操作:问TA(spark icon)→ onAskContact;看原始聊天(chat icon)→ onOpen;标签点 → onAsk;卡头点 → 打开文档;删卡(×)→ /api/relationships/delete(⚠破坏性)
+- 筛选:全部/对话/群聊;排序:最近联系/未了结优先/聊得最多/按名字;搜索
 
-### 5.4 删关系卡(⚠ 破坏性)
+### 5.4 见面简报 modal
+- 触发见面简报 → modal 出;「让第二大脑再帮我深聊一层」→ /api/relationships/deepen(⚠ 之前 -1 超时,复测)+ onAsk
 
----
+### 5.5 找关系路径
+- FROM/TO 两下拉选人 → 找路径 → /api/rel_path 出两人间的关系链
 
-## TAB 6:雷达(Radar)
-
-### 6.1 六层逐个(前置:bg-analyzer 已跑出 chat_intel)
-- 承诺雷达:欠的/等的承诺,到期排序;清除某条
-- 供需撮合:供给×需求跨人匹配;「怎么牵线」
-- 降温预警:互动变冷(纯时间戳算,不需 LLM);排序
-- 人情待还:谁帮过我/暖场话题
-- 沉默线索:21天+未联系有未了结;「看能否复活」
-- 数字台账:报价/额度/期限结构化
-- ★已验证:B 上 bg-analyzer 自动跑到 100%,六层有真数据
-
-### 6.2 AI 动作按钮
-- 催一下/怎么牵线/想开场白/看能否复活 → 都调 ask 出建议
+### 5.6 群图 / 关系时间线
+- 群聊 → group_graph(成员关系网,力导浮层);1:1 → relation_timeline(关系走势里程碑,点里程碑翻原文)
 
 ---
 
-## TAB 7:洞察(Insights)
+## TAB 6:雷达(Radar)★六层每层可点击+AI动作(前置:bg-analyzer 跑出 chat_intel;106上参照)
 
-### 7.1 四项逐个(前置:数据 + 部分需 LLM)
-- 联系人画像(network_portrait):人脉网络图+领域分组+实体标签云
-- 关系资产负债(balance):升温/降温/流失/新增(纯统计)
-- 业务全景(panorama):按事/项目聚合(需 kb_entities)
-- 沟通体检(checkup):谁在等你回/你对谁变冷(纯统计)
-- 重新生成;标签云点击问;联系人点击
+### 6.1 承诺雷达
+- 三层:我欠的(mine)/等对方(theirs)/逾期(overdue);陈旧(>60天)折叠
+- ★点承诺项 → onOpen 打开原聊天;清除(✕)→ /api/commitments/dismiss(只忽略不删聊天)
+- ★「催一下」→ onAsk(生成催办话术)
+
+### 6.2 供需撮合
+- 供给数×需求数;可撮合机会列表(confidence);删卡(本地隐藏)
+- ★「怎么牵线」→ onAsk(牵线话术)
+- 验证:/api/matches;两阶段(向量粗筛+LLM精配)
+
+### 6.3 降温预警(纯时间戳,不需LLM)
+- 「平时X天一聊,现在Y天没动」;排序(由近及远/由远及近);删(本地隐藏)
+- ★点预警项 → onOpen 打开聊天;「想个开场白」→ onAsk
+
+### 6.4 人情待还
+- 谁帮过我/我欠谁 + 暖场话题;排序(人情多/由近及远);删(隐藏)
+- 验证:/api/favors(relationship_cards.favors + chat_intel.warm_topics)
+
+### 6.5 沉默线索复活
+- 21天+未联系且有未了结事项;展示遗留承诺/供给/需求作复活由头
+- ★点项 → onOpen;「看能否复活」→ onAsk;删(隐藏)
+
+### 6.6 数字台账
+- 报价/额度/期限/利率/点差按人整理成表;点台账项头 → onOpen
+- 验证:/api/number_ledger(chat_intel.numbers)
+
+★已验证:B 上 bg-analyzer 自动跑六层到 100%,承诺 5015字节/供需 9141字节真数据
+
+## TAB 7:洞察(Insights)★四模块每个可点击+重新生成(106上参照)
+
+### 7.1 联系人画像(network_portrait)
+- 联系人数/已画像数 + 人脉网络图(ContactGraph)+ 按领域分组 + 机构/项目/地点标签云
+- ★重新生成 → /api/network_portrait?refresh
+- ★点标签云实体 → onAsk(我认识的人里和「X」有关的都有谁)
+- ★点分组里的联系人 → onOpen 打开聊天
+- ⚠ entity 未回填完:「人脉档案正在逐个分析入库」
+
+### 7.2 关系资产负债表(balance,纯统计)
+- 近90天 vs 上90天:升温/降温/流失/新增 + 精力花费(谁收消息最多)
+- ★点升温/降温/流失/新增里的联系人 → onOpen;点精力条 → onOpen
+
+### 7.3 业务全景(panorama)
+- 按事/项目/机构聚合(≥2人的事)→ 每件事涉及哪些联系人
+- ★「理一遍」按钮 → onAsk(把「X」的来龙去脉理一遍)
+- 验证:/api/panorama(kb_entities 聚合)
+
+### 7.4 沟通体检(checkup,纯统计)
+- 对方在等你回/你对谁变冷/你在追TA/TA在追你 四维
+- ★点各维度里的联系人 → onOpen 打开聊天
 
 ---
 
