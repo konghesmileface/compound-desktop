@@ -53,6 +53,7 @@ COVERED = {  # (METHOD, PATH): 流程名
     ("POST","/api/wechat/watch"):"微信助手", ("POST","/api/wechat/ingest"):"微信助手", ("GET","/api/wechat_messages"):"微信助手",
     ("GET","/api/realtime/status"):"微信助手", ("POST","/api/realtime/toggle"):"微信助手", ("POST","/api/realtime/heartbeat"):"微信助手",
     ("POST","/api/ingest/status"):"入库", ("GET","/api/ingest/progress"):"入库",
+    ("GET","/api/autosync/list"):"入库", ("POST","/api/autosync/add"):"入库", ("POST","/api/autosync/remove"):"入库",
     ("GET","/api/lifestory"):"冥想", ("GET","/api/lifesong"):"冥想", ("POST","/api/song/make"):"冥想", ("GET","/api/song/status"):"冥想",
     ("GET","/api/music-list"):"冥想", ("GET","/api/music/{fname}"):"冥想", ("GET","/api/tts/{fname}"):"冥想", ("GET","/api/theme/{fname}"):"冥想",
     ("GET","/api/genimg/{name}"):"冥想", ("GET","/api/genvid/{name}"):"冥想",
