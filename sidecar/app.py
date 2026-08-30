@@ -3183,30 +3183,90 @@ def lifestory(refresh: int = 0, style: str = "cinema", authorization: str = Head
         con.close()
 
 
+# ★★谱曲在服务器(106 compound-brain)完成,客户端只转发(2026-08-30 修打包错搬):
+#   设计=302 key 只在服务端(客户端绝不带 key),106 上 词稿→精修→Suno→themes 一体已做好且在用
+#   (monthly_songs cron 即走它)。打包时错把本地谱曲(song_factory 直连 Suno)搬进客户端→
+#   客户端无 key 必失败、前端永卡"谱曲中"。修=lifesong/song/make/status 转发 106,
+#   谱好后把 mp3+歌词同步下载到本地 themes(mylibrary/播放照旧走本地,离线可听)。不改 106 一行。
+_SONG_CLOUD = os.environ.get("SONG_CLOUD_URL", "http://106.14.189.104:8200")
+_song_sync_lock = threading.Lock()
+
+def _song_cloud_req(method, path, authorization, timeout=30):
+    req = _urlreq.Request(_SONG_CLOUD + path, data=(b"" if method == "POST" else None),
+                          headers={"Authorization": authorization or ""}, method=method)
+    with _cloud_opener.open(req, timeout=timeout) as r:
+        return json.loads(r.read().decode())
+
+def _sync_cloud_songs(me, authorization):
+    """把 106 上属于我的歌(mp3+歌词)拉到本地 themes,本地 mylibrary/播放即见。幂等,已有跳过。"""
+    if not _song_sync_lock.acquire(blocking=False):
+        return 0
+    try:
+        lib = _song_cloud_req("GET", "/api/mylibrary", authorization, timeout=20)
+        os.makedirs(_THEMES_DIR, exist_ok=True)
+        n = 0
+        for s in (lib.get("songs") or []):
+            fn = os.path.basename((s.get("url") or "").split("?")[0])
+            if not (fn.endswith(".mp3") and fn.startswith(me)):
+                continue
+            dst = os.path.join(_THEMES_DIR, fn)
+            if os.path.exists(dst):
+                continue
+            rq = _urlreq.Request(_SONG_CLOUD + "/api/theme/" + fn, headers={"Authorization": authorization or ""})
+            with _cloud_opener.open(rq, timeout=120) as rr, open(dst, "wb") as f:
+                f.write(rr.read())
+            meta = {k: s.get(k) for k in ("title", "genre", "style", "lyrics", "need", "voice", "date") if s.get(k)}
+            if meta:
+                json.dump(meta, open(os.path.splitext(dst)[0] + ".lyrics.json", "w", encoding="utf-8"),
+                          ensure_ascii=False, indent=1)
+            n += 1
+        return n
+    except Exception as e:
+        print("[song-sync]", str(e)[:120])
+        return 0
+    finally:
+        _song_sync_lock.release()
+
+
 @app.post("/api/song/make")
 def song_make(force: int = 0, authorization: str = Header(None)):
-    """歌曲工厂成曲闭环: 词稿(song_cache)→情绪协议→曲风声线→精修→Suno→themes上架。后台线程, 立即返回。"""
-    import song_factory as SONGF
-    me = _me(authorization)
-    if SONGF.gate:
-        con = _con()
+    """成曲(服务端谱曲):转发 106 歌曲工厂。302 key 只在服务端,客户端不带。"""
+    _me(authorization)   # 本地会员/鉴权门控照常
+    try:
+        return _song_cloud_req("POST", "/api/song/make" + ("?force=1" if force else ""), authorization)
+    except _urlerr.HTTPError as e:
         try:
-            SONGF.gate(me, con)   # 付费门控钩子(支付会话接管): 不通过时它自己 raise
-        finally:
-            con.close()
-    return SONGF.start_make(me, force=bool(force))
+            detail = json.loads(e.read().decode()).get("detail", "")
+        except Exception:
+            detail = ""
+        raise HTTPException(e.code, detail or "云端谱曲失败")
+    except Exception:
+        return {"started": False, "status": "error", "note": "谱曲服务连不上,请检查网络后重试"}
 
 
 @app.get("/api/song/status")
 def song_status(authorization: str = Header(None)):
-    import song_factory as SONGF
-    return SONGF.status(_me(authorization))
+    me = _me(authorization)
+    try:
+        st = _song_cloud_req("GET", "/api/song/status", authorization, timeout=15)
+    except Exception:
+        return {"status": "error", "note": "谱曲服务连不上,请检查网络"}
+    if st.get("status") == "done":
+        _sync_cloud_songs(me, authorization)   # 谱好→同步 mp3 到本地(幂等秒返),前端 loadLib 即见
+    return st
 
 
 @app.get("/api/lifesong")
 def lifesong(refresh: int = 0, authorization: str = Header(None)):
-    """按画像自动选曲风 + 写歌词,产出可直接丢进 Suno 的人生主题曲规格。"""
+    """按画像自动选曲风 + 写歌词,产出可直接丢进 Suno 的人生主题曲规格。
+    ★词稿优先在 106 生成(song/make 从 106 的 song_cache 取词,词必须落在服务端才能成曲);
+      106 连不上时回落本地生成(仅展示歌词用,成曲同样需要 106)。"""
     me = _me(authorization)
+    try:
+        return _song_cloud_req("GET", "/api/lifesong" + ("?refresh=1" if refresh else ""),
+                               authorization, timeout=300)
+    except Exception as _ce:
+        print("[lifesong] 云端不可达,本地回落:", str(_ce)[:80])
     con = _con()
     try:
         con.execute("CREATE TABLE IF NOT EXISTS song_cache (username TEXT PRIMARY KEY, data TEXT)")
@@ -3965,10 +4025,15 @@ def theme_file(fname: str):
 
 
 # ========== 作品集:我的专辑(历史歌曲) + 我的故事集(历史动画短片) ==========
+_songs_synced = set()   # 每进程每用户拉一次 106 历史歌(后台,不阻塞列表)
+
 @app.get("/api/mylibrary")
 def mylibrary(authorization: str = Header(None)):
     """当前用户的作品集:AI 为其一生谱写的历史歌曲 + 历史动画短片。"""
     me = _me(authorization)
+    if me not in _songs_synced:   # 首次打开曲库→后台把 106 上已谱的历史歌同步到本地
+        _songs_synced.add(me)
+        threading.Thread(target=_sync_cloud_songs, args=(me, authorization), daemon=True).start()
     import time as _t
     def _ym(path):
         try:

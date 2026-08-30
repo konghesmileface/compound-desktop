@@ -238,6 +238,7 @@ export default function Life({ onGoto }) {
     api.songStatus().then((s) => {
       if (!s || s.status === 'done') { setMaking(false); try { localStorage.setItem('life_first_done', '1') } catch (e) { } loadLib(); if (s && s.title) toast('你的第一首歌谱好了:《' + s.title + '》', 'ok') }
       else if (s.status === 'error') { setMaking(false); toast('谱曲失败:' + (s.note || '稍后再试'), 'err') }
+      else if (s.status === 'idle') { setMaking(false); loadLib() }   // 服务重启任务记忆丢失→别永远转圈,收起并刷新曲库
       else { makeTimer.current = setTimeout(pm, 5000) }
     }).catch(() => { makeTimer.current = setTimeout(pm, 6000) })
   }, [loadLib])
