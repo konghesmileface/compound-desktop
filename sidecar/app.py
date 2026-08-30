@@ -199,6 +199,11 @@ def _start_bg_analyzer():
                                             con.commit(); worked = True
                                     except Exception as _e:
                                         print(f"[bg-analyze] card {_contact}: {_e}")
+                                # ★生成了新卡→失效 relationships 计算缓存,否则 /api/relationships(默认只读缓存,
+                                #   sig 只认文档变化不认卡新增)会一直返回旧的空结果,warmer 生成的卡看不见。
+                                if pend3:
+                                    con.execute("DELETE FROM compute_cache WHERE owner=? AND name='relationships'", (owner,))
+                                    con.commit()
                     finally:
                         con.close()
                 except Exception as e:
