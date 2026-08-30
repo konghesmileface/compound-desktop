@@ -320,7 +320,7 @@ export default function WechatSync({ onGuide }) {
             <ol className="wx-dlbox-steps">
               <li><b>下载</b>对应系统的助手(上方按钮)</li>
               <li><b>安装并打开</b>「微信同步助手」</li>
-              <li className="wx-step-key"><b>点「抓取 / 更新密钥」</b> —— 按提示登录注入版微信、在搜索框搜个词触发全库。<mark>关键:不做这步会同步到空!</mark></li>
+              <li className="wx-step-key"><b>点「抓取 / 更新密钥」</b> —— 会弹出一个微信,<b>①扫码登录 ②在搜索框随便搜一个词</b>(比如常聊的人名),微信会一次性打开所有聊天库、钥匙就全抓到了。<mark>抓这一次就长期有效</mark>,以后自动同步;换微信大版本或加了全新联系人时再点一次。<mark>跳过这步 = 同步到空!</mark></li>
               <li><b>点「开始实时同步」</b> —— 此后手机上聊的每条,几秒内自动进大脑</li>
             </ol>
           </div>
