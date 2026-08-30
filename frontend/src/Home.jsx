@@ -437,7 +437,7 @@ export default function Home({ onOpen, onUnread }) {
                       {l.explain.get && <div className="lx-row"><span className="lx-tag">你能得到</span>{l.explain.get}</div>}
                       {l.explain.do && <div className="lx-row"><span className="lx-tag do">建议</span>{l.explain.do}</div>}
                     </div>
-                  ) : <div className="link-expl pending">正在解读这对资料的具体关联,稍后刷新可见…</div>}
+                  ) : <div className="link-expl pending">大脑解读中 · 稍后自动补上</div>}
                 </div>
               ))}
             </div>
@@ -464,7 +464,7 @@ export default function Home({ onOpen, onUnread }) {
                       {e.explain.get && <div className="lx-row"><span className="lx-tag">你能得到</span>{e.explain.get}</div>}
                       {e.explain.do && <div className="lx-row"><span className="lx-tag do">建议</span>{e.explain.do}</div>}
                     </div>
-                  ) : <div className="ent-expl pending">正在解读这个关键词的具体上下文,稍后刷新可见…</div>}
+                  ) : <div className="ent-expl pending">大脑解读中 · 稍后自动补上</div>}
                   <div className="ent-docs">
                     {e.docs.map((d, j) => (
                       <span key={j} className="ent-doc" onClick={() => onOpen(d.id)} title={d.filename}>{d.filename}</span>
