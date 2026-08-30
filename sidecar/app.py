@@ -269,7 +269,9 @@ def autosync_list(authorization: str = Header(None)):
         out = []
         for path, added_at, last_scan in con.execute(
                 "SELECT path,added_at,last_scan FROM autosync_folders WHERE owner=? ORDER BY added_at DESC", (owner,)).fetchall():
-            cnt = con.execute("SELECT COUNT(*) FROM autosync_seen WHERE owner=? AND path=?", (owner, path)).fetchone()[0]
+            # seen 按文件绝对路径存(文件夹/文件.ext),count 要按前缀匹配文件夹下的文件,不是 path=文件夹
+            cnt = con.execute("SELECT COUNT(*) FROM autosync_seen WHERE owner=? AND (path=? OR path LIKE ?)",
+                              (owner, path, os.path.join(path, "") + "%")).fetchone()[0]
             out.append({"path": path, "added_at": added_at, "last_scan": last_scan,
                         "synced": cnt, "exists": os.path.isdir(path)})
         return {"folders": out}
@@ -291,16 +293,24 @@ def autosync_add(payload: dict = Body(...), authorization: str = Header(None)):
         con.execute("INSERT OR IGNORE INTO autosync_folders(owner,path,added_at) VALUES(?,?,?)",
                     (owner, path, _dt.datetime.now().isoformat(timespec="seconds")))
         con.commit()
-        # 立即首扫(不阻塞太久:首扫也走 per_round 限量,余量交给后台线程续)
-        n = 0
-        if _BG_SYNC_LOCK.acquire(blocking=False):
-            try:
-                n = _autosync_scan_owner(con, owner)
-            finally:
-                _BG_SYNC_LOCK.release()
-        return {"ok": True, "path": path, "ingested_now": n}
     finally:
         con.close()
+    # ★首扫放后台线程:现有文件可能很多、且要嵌入(bge-m3 首次加载数分钟),绝不能阻塞 HTTP
+    #   (否则前端 fetch 超时、用户以为卡死)。与 /api/upload 一样立即返回,进度靠 /api/autosync/list 轮询。
+    #   用 _BG_SYNC_LOCK 与后台巡检线程串行,避免两边同时入库。
+    def _initial_scan(owner=owner):
+        with _BG_SYNC_LOCK:
+            try:
+                c2 = _con()
+                try:
+                    while _autosync_scan_owner(c2, owner) >= 12:   # 大文件夹分批扫完(每轮 per_round=12)
+                        pass
+                finally:
+                    c2.close()
+            except Exception as e:
+                print(f"[autosync-add] {e}")
+    threading.Thread(target=_initial_scan, daemon=True).start()
+    return {"ok": True, "path": path, "scanning": True}
 
 
 @app.post("/api/autosync/remove")

@@ -89,15 +89,16 @@ export default function Ingest({ onDone }) {
   const loadSync = useCallback(async () => {
     try { const r = await api.autosyncList(); setSyncFolders(r.folders || []) } catch { /* 后端未就绪,忽略 */ }
   }, [])
-  useEffect(() => { loadSync() }, [loadSync])
+  // 挂载即拉一次 + 每 8s 轮询(后台首扫/巡检在入库,已同步数会持续涨,轮询让 UI 实时反映)
+  useEffect(() => { loadSync(); const t = setInterval(loadSync, 8000); return () => clearInterval(t) }, [loadSync])
   async function addSyncFolder() {
     if (!isTauri) { toast('此功能需在桌面客户端里使用(浏览器拿不到文件夹真实路径)', 'err'); return }
     let path
     try { path = await window.__TAURI__.core.invoke('pick_folder') } catch { toast('打开文件夹选择器失败', 'err'); return }
     if (!path) return   // 用户取消
     try {
-      const r = await api.autosyncAdd(path)
-      toast(r.ingested_now ? `已开始定期同步,本次入库 ${r.ingested_now} 个文件` : '已加入定期同步,新增文件会自动入库', 'ok')
+      await api.autosyncAdd(path)
+      toast('已加入定期同步,正在后台导入现有文件,之后新增文件会自动入库', 'ok')
       loadSync(); onDone && onDone()
     } catch (e) { toast('添加失败:' + (e.message || ''), 'err') }
   }

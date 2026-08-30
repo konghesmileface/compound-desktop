@@ -82,7 +82,11 @@
   - **Rust**(main.rs):新增 `pick_folder` 命令(`tauri-plugin-dialog` 弹原生目录选择器,返回**绝对路径**——浏览器 webkitdirectory 拿不到真实路径,这正是当初做不了的根因)+ Cargo 加 `tauri-plugin-dialog="2"` + 注册 plugin。
   - **前端**(Ingest.jsx/api.js/styles.css):删掉死壳 `{false&&}`,换成「定期同步文件夹」卡片(+添加文件夹按钮→invoke pick_folder→autosyncAdd;列表显示已同步数/上次扫描/移除)。
   - **测试**:`/tmp/test_autosync.py` 复刻逻辑 6 场景全过(首扫/去重/新增/改动检测/per_round限量/移除清seen)。cargo check 编译验证 Rust API。前端 `npm run build` 通过。
-  - **待真机复测**:装新包后 客户端里 添加文件夹→往里丢文件→看是否自动入库(端到端 OCR/嵌入需实包)。
+  - **★真构建端到端复测(2026-08-30,装 33270111366 的 DMG,packaged sidecar 跑 copy 库)**:
+    - **核心功能真机验证通过**:add 首扫入现有文件 + **运行中丢新文件→bg-autosync 5s 内自动入库**(doc 落库 + FTS 命中 + seen 记录),40s 稳定**无重复入库**。
+    - **抓出并修 2 个真 bug(isolated 逻辑测漏掉的)**:①`autosync_list` synced-count 用 `path=文件夹` 精确匹配(seen 存的是文件路径)→ UI 永远显示"已同步 0 个"(数据对、显示错)→ 改前缀匹配(SQL 实测 0→3)。②`autosync_add` 首扫**同步**跑(含 bge-m3 首次加载数分钟)→ HTTP 阻塞、前端 fetch 超时(实测 30s timeout)→ 改后台线程立即返回(仿 /api/upload),进度靠 list 轮询;前端加 8s 轮询让"已同步 N 个"实时涨。
+    - **教训**:isolated 逻辑测 stub 了 `_run_ingest_job` + 用对了前缀查询 → 漏掉"端点层"的两个 bug;真构建 + 真 sidecar 才暴露。★这类"端点 SQL 写错/同步阻塞"必须真 sidecar 测。
+  - **待续**:2 修复已推,新 Mac 构建出来后**重装修复版到 /Applications** 供用户 GUI 手点验(native 目录对话框 + "已同步 N 个"实时 + add 秒回)。
 
 ## 8. 测试方法论教训(用户多次点破,必记)
 1. 按「产品全功能清单」搭 case,不是「上轮待办清单」(漏了微信助手)。
