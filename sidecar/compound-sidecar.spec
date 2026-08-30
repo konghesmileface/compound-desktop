@@ -103,7 +103,8 @@ for pkg in ("sentence_transformers", "transformers", "sklearn",
             "rapidocr", "onnxruntime", "PIL", "pillow_heif", "certifi",
             "jieba", "requests", "numpy", "sklearn.utils._typedefs",
             "sklearn.cluster", "sklearn.neighbors", "sklearn.feature_extraction.text",
-            "sherpa_onnx", "soundfile", "edge_tts", "media_ingest"):   # ★音视频入库 + 一生旁白TTS
+            "sherpa_onnx", "soundfile", "edge_tts", "media_ingest",   # ★音视频入库 + 一生旁白TTS
+            "dockind", "chat_intel", "entities", "relationships", "chat_topics", "owner_ctx"):   # ★人脉/雷达自驱本地模块(bg-analyze lazy import,显式钉防漏收)
     try:
         hiddenimports += collect_submodules(pkg)
     except Exception:

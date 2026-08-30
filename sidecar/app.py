@@ -136,7 +136,7 @@ _BG_ANALYZE_LOCK = threading.Lock()
 def _start_bg_analyzer():
     def _loop():
         _time.sleep(25)   # 让嵌入先起步(语义层优先)
-        import chat_intel as _CI, entities as _EN
+        import chat_intel as _CI, entities as _EN, dockind as _DK
         while True:
             worked = False
             if _BG_ANALYZE_LOCK.acquire(blocking=False):
@@ -147,6 +147,12 @@ def _start_bg_analyzer():
                         if cfg.get("llm_key"):   # intel/entities 都要 LLM,没 key 不跑
                             con.execute("CREATE TABLE IF NOT EXISTS analysis_processed(owner TEXT, layer TEXT, doc_id INTEGER, PRIMARY KEY(owner,layer,doc_id))")
                             for (owner,) in con.execute("SELECT DISTINCT owner FROM documents WHERE filename LIKE '微信_与%'").fetchall():
+                                # doc_kind:群/对话判定 + 真实最后联系日期(纯正则无LLM,便宜;喂给人脉卡显示)
+                                try:
+                                    if _DK.ensure_doc_kind(con, owner):
+                                        worked = True
+                                except Exception as _e:
+                                    print(f"[bg-analyze] dockind {owner}: {_e}")
                                 # 承诺雷达 intel:每轮处理 ≤3 个未缓存微信会话
                                 pend = con.execute(
                                     "SELECT d.id, d.filename FROM documents d WHERE d.owner=? AND d.filename LIKE '微信_与%' AND d.pages>=2 "
@@ -173,6 +179,26 @@ def _start_bg_analyzer():
                                     except Exception as _e: print(f"[bg-analyze] entities {did}: {_e}")
                                     con.execute("INSERT OR IGNORE INTO analysis_processed(owner,layer,doc_id) VALUES(?,?,?)", (owner, "entities", did))
                                     con.commit(); worked = True
+                                # ★人脉卡预热(对齐 106 cardwarm.py:106 靠该脚本自动预热了 504 张卡,客户端单机无脚本→
+                                #   必须 bg 自驱,否则人脉页永远空。/api/relationships 默认 generate=False 只读缓存、
+                                #   "缺的交给后台 warm"——这里就是那个 warm)。每轮 ≤2 张,LLM 节流护机器。
+                                con.execute("CREATE TABLE IF NOT EXISTS card_hidden(username TEXT, contact TEXT, PRIMARY KEY(username,contact))")
+                                pend3 = con.execute(
+                                    "SELECT d.id, d.filename, d.pages FROM documents d WHERE d.owner=? AND d.filename LIKE '微信_与%' AND d.pages>=2 "
+                                    "AND NOT EXISTS(SELECT 1 FROM relationship_cards rc WHERE rc.username=d.owner AND rc.contact=REPLACE(REPLACE(d.filename,'微信_与',''),'.txt','') AND rc.msgcount=d.pages) "
+                                    "AND NOT EXISTS(SELECT 1 FROM card_hidden ch WHERE ch.username=d.owner AND ch.contact=REPLACE(REPLACE(d.filename,'微信_与',''),'.txt','')) "
+                                    "ORDER BY d.pages DESC LIMIT 2", (owner,)).fetchall()
+                                for _cdid, _cfn, _cpg in pend3:
+                                    _contact = _cfn.replace("微信_与", "").replace(".txt", "")
+                                    _ctext = "\n".join(p[0] for p in con.execute("SELECT text FROM pages WHERE doc_id=? ORDER BY page_no LIMIT 40", (_cdid,)).fetchall())
+                                    try:
+                                        _card = REL.build_card(_contact, _ctext)
+                                        if _card:
+                                            con.execute("INSERT OR REPLACE INTO relationship_cards(username,contact,doc_id,day,msgcount,data) VALUES(?,?,?,?,?,?)",
+                                                        (owner, _contact, _cdid, _dt.date.today().isoformat(), _cpg or 0, json.dumps(_card, ensure_ascii=False)))
+                                            con.commit(); worked = True
+                                    except Exception as _e:
+                                        print(f"[bg-analyze] card {_contact}: {_e}")
                     finally:
                         con.close()
                 except Exception as e:
