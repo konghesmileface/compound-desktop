@@ -123,6 +123,37 @@ def _json(path):
     return [(i + 1, chunk, "json") for i, chunk in enumerate(_chunk_text(full))]
 
 
+def _safe_body(part):
+    """取邮件正文,治中文乱码:邮件未声明 charset 时 get_content() 按 us-ascii 解码 → UTF-8 中文变 �。
+    检测到无 charset 或出现替换字符,就用原始字节按 utf-8/gbk/big5 兜底重解。"""
+    if part is None:
+        return ""
+    txt = None
+    try:
+        txt = part.get_content()
+    except Exception:
+        txt = None
+    try:
+        charset = part.get_content_charset()
+    except Exception:
+        charset = None
+    if txt is None or "�" in txt or not charset:
+        try:
+            raw = part.get_payload(decode=True)   # 先解 base64/quoted-printable 回原始字节
+            if raw:
+                for enc in ("utf-8", "gbk", "gb18030", "big5"):
+                    try:
+                        d = raw.decode(enc)
+                        if "�" not in d:
+                            return d
+                    except Exception:
+                        pass
+                return raw.decode("utf-8", errors="replace")
+        except Exception:
+            pass
+    return txt or ""
+
+
 def _mbox(path):
     """Gmail Takeout 导出的 .mbox:一个文件含全部邮件。每封一个 unit。"""
     import mailbox
@@ -138,8 +169,7 @@ def _mbox(path):
         body = ""
         try:
             part = msg.get_body(preferencelist=("plain", "html"))
-            if part is not None:
-                body = part.get_content()
+            body = _safe_body(part)
         except Exception:
             body = ""
         txt = f"主题: {msg.get('subject', '')}\n发件: {msg.get('from', '')}\n日期: {msg.get('date', '')}\n\n{body}"
@@ -155,9 +185,9 @@ def _eml(path):
     body = ""
     try:
         part = msg.get_body(preferencelist=("plain", "html"))
-        body = part.get_content() if part else ""
+        body = _safe_body(part) or _safe_body(msg)
     except Exception:
-        body = msg.get_payload()
+        body = _safe_body(msg)
     full = f"主题: {msg.get('subject', '')}\n发件: {msg.get('from', '')}\n\n{body}"
     return [(i + 1, chunk, "email") for i, chunk in enumerate(_chunk_text(full))]
 

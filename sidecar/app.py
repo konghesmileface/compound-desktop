@@ -3590,7 +3590,12 @@ def auth_update_profile(payload: dict = Body(...), authorization: str = Header(N
     try:
         con.execute("CREATE TABLE IF NOT EXISTS users2 (phone TEXT PRIMARY KEY, nickname TEXT, created TEXT)")
         _ensure_user_cols(con)
-        con.execute("UPDATE users2 SET nickname=?, gender=?, age=?, zodiac=?, mbti=?, bio=? WHERE phone=?", (nick, gender, age, zodiac, mbti, bio, me))
+        # ★UPSERT:用户名账号从没建过 users2 行,纯 UPDATE 会影响0行→资料丢失。没行就插入。
+        con.execute("INSERT INTO users2(phone,nickname,gender,age,zodiac,mbti,bio,created) "
+                    "VALUES(?,?,?,?,?,?,?,datetime('now')) "
+                    "ON CONFLICT(phone) DO UPDATE SET nickname=excluded.nickname,gender=excluded.gender,"
+                    "age=excluded.age,zodiac=excluded.zodiac,mbti=excluded.mbti,bio=excluded.bio",
+                    (me, nick, gender, age, zodiac, mbti, bio))
         con.commit()
         return {"ok": True, "nickname": nick, "gender": gender, "age": age, "zodiac": zodiac, "mbti": mbti, "bio": bio}
     finally:
@@ -3880,13 +3885,14 @@ def card_set_status(card_id: int, payload: dict = Body(...), authorization: str 
 def card_edit(card_id: int, payload: dict = Body(...), authorization: str = Header(None)):
     me = _me(authorization)
     content = (payload.get("content") or "").strip()
+    title = (payload.get("title") or "").strip()   # ★与 create_card 一致:有 title 就用 title,别永远拿 content 前24字当标题
     if not content:
         raise HTTPException(400, "内容不能为空")
     con = _con()
     try:
         if not _own_doc(con, card_id, me):
             raise HTTPException(404, "没有这张卡片")
-        fn = content[:24] + ("…" if len(content) > 24 else "")
+        fn = title or (content[:24] + ("…" if len(content) > 24 else ""))
         con.execute("UPDATE pages SET text=? WHERE doc_id=? AND page_no=1", (content, card_id))
         con.execute("UPDATE documents SET filename=? WHERE id=?", (fn, card_id))
         con.execute("DELETE FROM page_embeddings WHERE page_id IN (SELECT id FROM pages WHERE doc_id=?)", (card_id,))
