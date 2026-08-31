@@ -1,5 +1,5 @@
 import { useEffect, useState, useRef } from 'react'
-import * as api from './api'
+import { api } from './api'
 
 // ★首启模型下载页(Windows 瘦身版:安装器小,首次启动下核心模型)。
 //   科幻精致:深空星云底 + 神经核心脉冲 + 能力模块逐个点亮 + 进度环 + 预估时间 + 安抚等待。

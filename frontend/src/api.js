@@ -22,6 +22,7 @@ const j = (r) => {
 const authHeaders = () => { try { const a = JSON.parse(localStorage.getItem('auth') || 'null'); return a && a.token ? { Authorization: 'Bearer ' + a.token } : {} } catch { return {} } }
 
 export const api = {
+  modelStatus: () => fetch('/api/model_status').then(j),
   stats: () => fetch('/api/stats', { headers: authHeaders() }).then(j),
   library: () => fetch('/api/library', { headers: authHeaders() }).then(j),
   doc: (id, offset = 0, limit = 40) => fetch(`/api/doc/${id}?offset=${offset}&limit=${limit}`, { headers: authHeaders() }).then(j),

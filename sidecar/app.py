@@ -4609,6 +4609,18 @@ if os.path.isdir(_DL_DIR):
     app.mount("/dl", _SF2(directory=_DL_DIR), name="downloads")
 
 
+@app.get("/api/model_status")
+def model_status():
+    """首启模型下载进度(Windows 瘦身版:大模型首次启动下载,下完全离线)。
+    Mac 全打进包 → 检测都在 → 立即 done。前端 ModelDownload.jsx 轮询此端点。"""
+    try:
+        import model_bootstrap as _mb
+        return _mb.start_if_needed()
+    except Exception as e:
+        # 任何异常都不能卡死首屏:报 done 让 App 正常进入(模型缺了到用时再懒下载兜底)
+        return {"modules": {}, "overall_pct": 100, "done": True, "eta": "", "speed": "", "error": str(e)}
+
+
 @app.get("/go/wechat-export")
 def _go_wechat_export():
     """指路牌:跳转到第三方微信导出工具官网。我们只给指针、不托管安装包。

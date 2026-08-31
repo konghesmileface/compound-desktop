@@ -19,6 +19,7 @@ import NodeDetail from './NodeDetail'
 import Auth, { AlipayBindModal } from './Auth'
 import Landing from './Landing'
 import Onboard from './Onboard'
+import ModelDownload from './ModelDownload'
 import ErrorBoundary from './ErrorBoundary'
 import { TrialBanner, PaywallModal } from './Paywall'
 import { api } from './api'
@@ -136,6 +137,22 @@ export default function App() {
     return () => clearInterval(iv)
   }, [auth, tab])
   const displayName = auth ? (auth.nickname || auth.username) : ''
+
+  // ★首启模型门:Windows 瘦身版大模型首次启动才下载。Mac 全打进包→model_status 立即 done→秒过。
+  //   端点异常也返回 done(不卡首屏)。检测中极短暂显示空白,再决定是否显示下载页。
+  const [modelsReady, setModelsReady] = useState(false)
+  const [modelsChecked, setModelsChecked] = useState(false)
+  React.useEffect(() => {
+    let alive = true
+    api.modelStatus()
+      .then((s) => { if (alive) { if (s && s.done) setModelsReady(true); setModelsChecked(true) } })
+      .catch(() => { if (alive) { setModelsReady(true); setModelsChecked(true) } })
+    return () => { alive = false }
+  }, [])
+  if (!modelsReady) {
+    if (!modelsChecked) return null           // 检测中(Mac 立即 done,基本无感)
+    return <ModelDownload onDone={() => setModelsReady(true)} />
+  }
 
   // 全局登录门:没登录先看登录/注册,登录后才进 app
   if (!auth) return (<><Landing onAuthed={saveAuth} />{alipayTicket && <AlipayBindModal ticket={alipayTicket} onAuthed={saveAuth} onClose={() => setAlipayTicket(null)} />}{typeof window !== 'undefined' && window.location.search.includes('onboard') && onboard && <Onboard onDone={finishOnboard} onGoto={() => {}} />}<UIHost /><UpdateBanner /></>)

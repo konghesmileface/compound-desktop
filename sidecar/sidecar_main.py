@@ -135,9 +135,15 @@ def main():
         print(f"  {'OK  ' if n_dl else 'FAIL'} 数据:微信助手安装包({n_dl} 个)")
         ok = ok and n_dl > 0
         # ★音视频入库:SenseVoice ASR + Mac ffmpeg(缺了音视频转文字入库跑不了)
+        #   ★Windows 瘦身:SenseVoice(0.9G)不打包,首启门下载(和 bge-m3 一样),缺 ≠ FAIL。
         _sv = os.path.join(base, "models", "sherpa-onnx-sense-voice-zh-en-ja-ko-yue-2024-07-17", "model.int8.onnx")
-        print(f"  {'OK  ' if os.path.isfile(_sv) else 'FAIL'} 数据:SenseVoice ASR 模型")
-        ok = ok and os.path.isfile(_sv)
+        if os.path.isfile(_sv):
+            print("  OK   数据:SenseVoice ASR 模型")
+        elif sys.platform.startswith("win"):
+            print("  OK   数据:SenseVoice(Windows 不打包,首启下载——降到 2GB 内让 NSIS 打得动)")
+        else:
+            print("  FAIL 数据:SenseVoice ASR 模型")
+            ok = False
         _ff = os.path.join(base, "bin", "ffmpeg" + (".exe" if sys.platform == "win32" else ""))
         print(f"  {'OK  ' if os.path.isfile(_ff) else 'FAIL'} 数据:ffmpeg 二进制")
         ok = ok and os.path.isfile(_ff)
@@ -161,10 +167,14 @@ def main():
             _vc.sample_rate = 16000
             _so.VoiceActivityDetector(_vc, buffer_size_in_seconds=180)
             _svm = os.path.join(base, "models", "sherpa-onnx-sense-voice-zh-en-ja-ko-yue-2024-07-17")
-            _so.OfflineRecognizer.from_sense_voice(
-                model=os.path.join(_svm, "model.int8.onnx"),
-                tokens=os.path.join(_svm, "tokens.txt"), use_itn=True)
-            print("  OK  sherpa VAD+SenseVoice 真加载(silero/模型版本匹配)")
+            if os.path.isfile(os.path.join(_svm, "model.int8.onnx")):
+                _so.OfflineRecognizer.from_sense_voice(
+                    model=os.path.join(_svm, "model.int8.onnx"),
+                    tokens=os.path.join(_svm, "tokens.txt"), use_itn=True)
+                print("  OK  sherpa VAD+SenseVoice 真加载(silero/模型版本匹配)")
+            else:
+                # Windows 瘦身:SenseVoice 首启下载,构建期只验 VAD(silero/sherpa 版本匹配)
+                print("  OK  sherpa VAD 真加载(SenseVoice 首启下载,构建期跳过)")
         except Exception as e:
             ok = False; print(f"  FAIL sherpa 加载(silero版本不匹配?): {e}")
         # ★HEIC/HEIF(iPhone 默认照片):pillow-heif + 原生 libheif 必须在冻结包里真能工作,
@@ -225,7 +235,13 @@ def main():
         cand = os.path.join(here0, "models", "bge-m3")
         if os.path.isdir(cand):
             bundled = cand
-    os.environ.setdefault("EMBED_MODEL", bundled or "BAAI/bge-m3")
+    # 没打进包(Windows 瘦身版):首启门 model_bootstrap 会把 bge-m3 下到 数据目录/models/bge-m3。
+    # EMBED_MODEL 指向那里 → 下完 semantic 直接本地加载,不再让 sentence-transformers 去 HF 重下一遍。
+    if not bundled:
+        _dd_bge = os.path.join(data, "models", "bge-m3")
+        os.environ.setdefault("EMBED_MODEL", _dd_bge)
+    else:
+        os.environ.setdefault("EMBED_MODEL", bundled)
     # ★模型已打进包→强制离线加载:不设的话 sentence_transformers/huggingface_hub 会联网校验,
     #   慢 + 无网/无CA时直接加载失败 → 嵌入起不来 → 分析中卡0%。打进包就该纯本地。
     if bundled:
