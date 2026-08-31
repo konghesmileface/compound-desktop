@@ -216,7 +216,10 @@ export default function WechatSync({ onGuide }) {
   const iosDone = !!iosOverall && iosOverall.state === 'done'
   const iosFailed = !!iosOverall && iosOverall.state === 'failed'
   const iosRunning = iosItems.some((x) => x.state !== 'done' && x.state !== 'failed' && (nowSec - (x.ts || 0) < 120))
-  const showIos = iosRunning || (!!iosOverall && (nowSec - (iosOverall.ts || 0) < 45)) // 刚完成也留展示片刻
+  // ★有进度但没完成(含中断/failed)= 未完成的导入,持续显示面板(续传/重连态),别掉线一下就翻回 idle「开始导入」——
+  //   那样用户看不到"连接中断·可续传"、以为白干了(用户实测反馈的 UX bug)。
+  const iosUnfinished = !!iosOverall && iosOverall.state !== 'done' && (iosOverall.percent || 0) > 0
+  const showIos = iosRunning || iosUnfinished || (!!iosOverall && (nowSec - (iosOverall.ts || 0) < 45)) // 刚完成也留展示片刻
   const iosPct = iosDone ? 100 : (iosOverall ? (iosOverall.percent || 0) : 0)
   const iosStage = iosDone ? IOS_STAGES.length : iosStageIndex(iosPct)
 
@@ -387,7 +390,19 @@ export default function WechatSync({ onGuide }) {
                 </div>
               </div>
               {!iosDone && !iosFailed && <div className="wx-ios-keep">● 导入进行中 —— 请<b>保持 iPhone 解锁常亮、不要拔线</b>,断开会中断需重来</div>}
-              {iosFailed && <div className="wx-ios-msg fail">导入中断了(多为手机锁屏或供电不足)。请:①重新解锁 iPhone 保持常亮 ②<b>屏幕亮度调最低+开飞行模式省电</b> ③数据线<b>直插电脑机身</b>(别用扩展坞)插紧 ④重新点「连手机导入历史」。断点会自动续传,不用从头。</div>}
+              {iosFailed && (
+                <>
+                  <div className="wx-ios-msg fail">连接中断了(多为手机锁屏或<b>供电不足</b>,已传的不会丢、可断点续传)。请:①重新解锁 iPhone 保持常亮 ②<b>屏幕亮度调最低+开飞行模式省电</b>(或先充到 80% 再开)③数据线<b>直插电脑机身</b>(别用扩展坞)插紧 ④点下面「继续导入」。</div>
+                  <button
+                    className="wx-ios-go"
+                    style={{ marginTop: 12 }}
+                    disabled={iosStarting || !(iosEnv && iosEnv.tool_ready && iosEnv.connected)}
+                    onClick={startIphoneImport}>
+                    <span className="wx-ios-go-ring" />
+                    {iosStarting ? '正在继续…' : (iosEnv && iosEnv.connected ? '继续导入(断点续传)' : '请先连上 iPhone')}
+                  </button>
+                </>
+              )}
               {iosOverall && iosOverall.message && !iosDone && !iosFailed && <div className="wx-ios-msg">{iosOverall.message}</div>}
               {iosSessions.filter((x) => x.state !== 'done').slice(0, 4).map((it, i) => (
                 <div key={i} className="wx-ios-sess">
