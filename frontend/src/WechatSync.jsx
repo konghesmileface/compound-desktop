@@ -345,8 +345,14 @@ export default function WechatSync({ onGuide }) {
                 <span className="wx-ios-plug-dot" />
                 {!iosEnv ? '检测中…'
                   : !iosEnv.tool_ready ? '未检测到 iPhone 备份工具(需装 libimobiledevice)'
-                    : iosEnv.connected ? 'iPhone 已连接 · 可以开始' : '请用数据线把 iPhone 连上电脑'}
+                    : iosEnv.connected ? ('iPhone 已连接 · 可以开始' + (iosEnv.battery != null ? ` · 电量 ${iosEnv.battery}%${iosEnv.charging ? '(充电中)' : ''}` : '')) : '请用数据线把 iPhone 连上电脑'}
               </div>
+              {/* ★电量低主动提醒:整机备份耗电>500mA口充电,低电量必中断——别等断了才让用户猜 */}
+              {iosEnv && iosEnv.connected && iosEnv.battery != null && iosEnv.battery < 60 && (
+                <div className="wx-ios-lowbat" style={{ margin: '8px 0', padding: '9px 12px', borderRadius: 10, fontSize: 12.5, lineHeight: 1.6, color: '#fbbf24', background: 'rgba(245,158,11,0.1)', border: '1px solid rgba(245,158,11,0.35)' }}>
+                  ⚠ 电量偏低(<b>{iosEnv.battery}%</b>)—— 整机备份耗电大,USB 口供电常不够,很可能<b>中途中断</b>。建议<b>先充到 80% 以上</b>(充电时先别开备份,不然充不进去),并开<b>飞行模式 + 亮度最低</b>再导入,一次传完不折腾。
+                </div>
+              )}
               <button
                 className="wx-ios-go"
                 disabled={iosStarting || !(iosEnv && iosEnv.tool_ready && iosEnv.connected)}

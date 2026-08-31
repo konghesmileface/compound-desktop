@@ -1808,13 +1808,27 @@ def iphone_status(authorization: str = Header(None)):
     import shutil as _sh, subprocess as _sp
     have_tool = bool(_sh.which("idevicebackup2") and _sh.which("idevice_id"))
     connected = False
+    battery = None; charging = None
     if have_tool:
         try:
             out = _sp.check_output(["idevice_id", "-l"], text=True, timeout=8)
             connected = bool([x for x in out.splitlines() if x.strip()])
         except Exception:
             connected = False
-    return {"running": _IPHONE_IMPORT["running"], "tool_ready": have_tool, "connected": connected}
+        # ★取电量:整机备份耗电>500mA口充电→电量低易中断,前端据此提醒用户先充电
+        if connected and _sh.which("ideviceinfo"):
+            try:
+                b = _sp.check_output(["ideviceinfo", "-q", "com.apple.mobile.battery", "-k", "BatteryCurrentCapacity"], text=True, timeout=8).strip()
+                battery = int(b) if b.isdigit() else None
+            except Exception:
+                battery = None
+            try:
+                c = _sp.check_output(["ideviceinfo", "-q", "com.apple.mobile.battery", "-k", "BatteryIsCharging"], text=True, timeout=8).strip()
+                charging = (c.lower() == "true")
+            except Exception:
+                charging = None
+    return {"running": _IPHONE_IMPORT["running"], "tool_ready": have_tool, "connected": connected,
+            "battery": battery, "charging": charging}
 
 
 @app.post("/api/iphone/import")
