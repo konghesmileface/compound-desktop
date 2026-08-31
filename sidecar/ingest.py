@@ -64,7 +64,7 @@ CREATE TABLE IF NOT EXISTS pages (
     text    TEXT
 );
 CREATE VIRTUAL TABLE IF NOT EXISTS pages_fts
-    USING fts5(text, content='pages', content_rowid='id');
+    USING fts5(text, content='pages', content_rowid='id', tokenize='trigram');
 -- 触发器:pages 变动时同步全文索引
 CREATE TRIGGER IF NOT EXISTS pages_ai AFTER INSERT ON pages BEGIN
     INSERT INTO pages_fts(rowid, text) VALUES (new.id, new.text);
@@ -98,6 +98,25 @@ def db_connect(db_path: str) -> sqlite3.Connection:
         con.execute("ALTER TABLE documents ADD COLUMN owner TEXT")
     except Exception:
         pass
+    # ★老库迁移:早期 pages_fts 漏了 tokenize='trigram'(建成默认 unicode61)→ 中文子串搜不到
+    #   (unicode61 把连续中文当一个大token,只能整token匹配;autosync无空格文本/一般子串全搜不到)。
+    #   检测到非 trigram 就重建成 trigram 并回填,与 106 对齐。只在首次连接触发一次。
+    try:
+        _fts = con.execute("SELECT sql FROM sqlite_master WHERE name='pages_fts'").fetchone()
+        if _fts and "trigram" not in (_fts[0] or ""):
+            con.executescript("""
+                DROP TRIGGER IF EXISTS pages_ai;
+                DROP TRIGGER IF EXISTS pages_ad;
+                DROP TABLE IF EXISTS pages_fts;
+                CREATE VIRTUAL TABLE pages_fts USING fts5(text, content='pages', content_rowid='id', tokenize='trigram');
+                INSERT INTO pages_fts(rowid, text) SELECT id, text FROM pages;
+                CREATE TRIGGER pages_ai AFTER INSERT ON pages BEGIN INSERT INTO pages_fts(rowid, text) VALUES (new.id, new.text); END;
+                CREATE TRIGGER pages_ad AFTER DELETE ON pages BEGIN INSERT INTO pages_fts(pages_fts, rowid, text) VALUES('delete', old.id, old.text); END;
+            """)
+            con.commit()
+            print("[migrate] pages_fts: unicode61 → trigram 重建完成(修复中文子串搜索)", file=sys.stderr)
+    except Exception as _e:
+        print("[migrate] pages_fts trigram 迁移失败:", _e, file=sys.stderr)
     return con
 
 
