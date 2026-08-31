@@ -83,10 +83,13 @@ def _run_backup(udid: str, dest_dir: str, on_status) -> str:
     idevicebackup2 支持从已传处续传(不删 dest_dir 重跑即可)。这里最多重试 20 次,
     只要每次能往前推进就继续,直到 Manifest.db 出现(备份完整)。真实用户连接抖动也靠这个兜住。
     """
+    import threading
+    import shutil
     on_status("正在备份手机(请保持连接、屏幕解锁)", 15,
               "首次备份较慢,期间不要拔线;若中途断开会自动继续")
     pct_re = re.compile(r"\((\d+)%\)")
     backup_root = os.path.join(dest_dir, udid)
+    STALL_LIMIT = 120   # 秒:进程无任何输出这么久 = 卡死(如协议握手挂住),杀掉换策略
 
     def _manifest_ok():
         for root in (backup_root, dest_dir):
@@ -94,34 +97,77 @@ def _run_backup(udid: str, dest_dir: str, on_status) -> str:
                 return root
         return None
 
+    def _filecount():
+        try:
+            return sum(len(fs) for _, _, fs in os.walk(dest_dir))
+        except Exception:
+            return 0
+
     last_seen = -1
+    cleared_once = False
     for attempt in range(20):
         cmd = ["idevicebackup2", "-u", udid, "backup", "--full", dest_dir]
         proc = subprocess.Popen(cmd, stdout=subprocess.PIPE,
                                 stderr=subprocess.STDOUT, text=True)
-        for raw in iter(proc.stdout.readline, ""):
-            m = pct_re.search(raw)
-            if m:
-                inner = int(m.group(1))
-                mapped = 15 + int(inner * 0.40)  # 15→55
-                on_status("正在备份手机", mapped, raw.strip())
-        proc.wait()
+        buf = {"last": time.time(), "err": None}
+
+        def _reader(p=proc, b=buf):
+            for raw in iter(p.stdout.readline, ""):
+                b["last"] = time.time()
+                low = raw.lower()
+                if "version exchange" in low or "error code -1" in low:
+                    b["err"] = "proto"     # 协议握手失败=设备备份服务卡住
+                elif "lockdownd" in low or "error code -5" in low:
+                    b["err"] = "lockdown"  # 连不上=设备没就绪/没解锁
+                m = pct_re.search(raw)
+                if m:
+                    on_status("正在备份手机", 15 + int(int(m.group(1)) * 0.40), raw.strip())
+        threading.Thread(target=_reader, daemon=True).start()
+
+        # ★卡死看门狗:进程还活着但 STALL_LIMIT 秒没任何输出 → 判定卡死,杀掉
+        stalled = False
+        while proc.poll() is None:
+            if time.time() - buf["last"] > STALL_LIMIT:
+                stalled = True
+                try: proc.kill()
+                except Exception: pass
+                break
+            time.sleep(2)
+        try: proc.wait(timeout=10)
+        except Exception: pass
+
         root = _manifest_ok()
         if root:
-            # 备份完整(Manifest.db 出现)即成功,即便进程返回码非0
-            return root
-        # 判断续传是否有进展(备份目录文件数在长 = 有效,继续)
-        try:
-            cur = sum(len(fs) for _, _, fs in os.walk(dest_dir))
-        except Exception:
-            cur = 0
-        if cur <= last_seen and attempt >= 2:
-            raise RuntimeError("备份失败,请确认手机已点『信任』、屏幕保持解锁、数据线插紧后重试")
+            return root   # Manifest.db 出现=备份完整,即便返回码非0
+
+        # ① 具体错误 → 具体建议(不再一句笼统的"确认信任/解锁")
+        if buf["err"] == "proto":
+            raise RuntimeError("iPhone 备份服务未响应(协议握手失败 -1)。这多是设备端备份服务卡住,"
+                               "标准解法:【重启 iPhone】(关机再开机、解锁到桌面),再点「开始导入」即可。")
+        if buf["err"] == "lockdown":
+            raise RuntimeError("连不上 iPhone(设备未就绪或未解锁)。请解锁 iPhone 并保持常亮,"
+                               "拔插一次数据线后重试;刚重启过的话等它完全开机再试。")
+
+        cur = _filecount()
+        # ② 卡死/无进展 → 自愈:清掉可能损坏的半成品,从头全新备份一次(而不是无限续损坏的)
+        if stalled or cur <= last_seen:
+            if not cleared_once and attempt >= 1:
+                shutil.rmtree(dest_dir, ignore_errors=True)
+                os.makedirs(dest_dir, exist_ok=True)
+                cleared_once = True
+                last_seen = -1
+                on_status("检测到备份卡住,已清理损坏的半成品、从头重新备份…", 15,
+                          "不再续那个卡住的备份,改全新全量(会重传,但能真正跑完)")
+                time.sleep(2)
+                continue
+            if attempt >= 3:
+                raise RuntimeError("备份反复卡住未能推进。请依次试:① 重启 iPhone ② 换原装数据线、"
+                                   "直插电脑机身 USB 口(别用扩展坞)③ 电量充到 80%+ 后再点「开始导入」。")
         last_seen = cur
         on_status("连接中断,正在自动继续备份…", 20,
                   f"已传 {cur} 个文件,第 {attempt + 2} 次续传(保持手机解锁不拔线)")
         time.sleep(2)
-    raise RuntimeError("备份多次中断未能完成。请换一根数据线或换个 USB 口,保持手机解锁后重试。")
+    raise RuntimeError("备份多次未能完成。请【重启 iPhone】+ 换数据线/USB口 + 充到 80%+ 后重试(断点续传,已传的不丢)。")
 
 
 # --------------------------------------------------------------------------- #
