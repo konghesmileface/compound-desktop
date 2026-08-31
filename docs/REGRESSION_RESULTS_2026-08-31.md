@@ -108,3 +108,15 @@
 - pwd_login 是手机号账号专用(用户名走login),非bug
 - AI设置:全局单例,测改会覆盖真key→只读验证has_key=true,未动
 
+## 最后一批(用户列的"还没测的")
+- ✅ **T430 OCR 后端**:T430在线(OCR服务在8100不是8000/8200,之前探错端口)。scan.pdf+backend=t430 → doc method=**unlimited-ocr@t430** 正文正确;T430日志实证"POST /ocr/image 200 OK"。整链路通。★图片走process_image恒rapidocr,backend只对PDF扫描页生效。
+- ✅ **支付 pay/create**:生成订单+支付宝pay_url+金额,会话创建正常(未真付)
+- ✅ **头像上传 avatar**:JSON dataurl格式上传{ok:True}读回成功(要dataurl不是multipart)
+- ✅ **genimg/genvid** 端点存活;**iphone/status** tool_ready=True环境就绪(需插手机才能导入)
+- ✅ **前端深度CDP交互**:11 tab 渲染/切换正常、无JS报错;问答实体卡→弹askDirect弹窗、发现铃可点开、卡片可点。雷达97字符=加载中(截图早),探索canvas无文字(正常)。
+- ⛔ **仍需外部动作**:iPhone导入(插手机)、支付真完成(真付款)、真·实时增量微信(用户发新消息看秒级流入)——这三个我做不了。
+
+## Bug 修复收尾
+- 3个真bug全修:①eml/mbox乱码(extract._safe_body,实测正确)②卡片编辑丢title③改料不持久(UPSERT)。客户端已提交(需重构建生效);106已直改+重启+验证(update_profile UPSERT实测持久)。
+- 2个降级为误判(analysis_status聊天专属进度/api/friends前端没调);autosync去重用户已修。
+

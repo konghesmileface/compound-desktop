@@ -55,12 +55,22 @@ function SubscribeFlow({ plans, onPaid, compact, alipayOn = true, wechatOn = fal
       } catch { /* noop */ }
     }, 3000)
   }
+  // ★Tauri 客户端里 window.open/<a target=_blank> 被 WKWebView 拦(支付宝页弹不出),必须走 open_external
+  const openExternal = (url) => {
+    if (!url) return
+    try {
+      if (typeof window !== 'undefined' && window.__TAURI__ && window.__TAURI__.core) {
+        window.__TAURI__.core.invoke('open_external', { url }); return
+      }
+    } catch { /* noop */ }
+    try { window.open(url, '_blank') } catch { /* noop */ }
+  }
   const startPay = async () => {
     setBusy(true)
     try {
       const r = await api.payCreate(plan, method)
       setOrder(r); setStage('paying')
-      if (r.method !== 'wechat') { try { window.open(r.pay_url, '_blank') } catch { /* noop */ } }
+      if (r.method !== 'wechat') openExternal(r.pay_url)
       startPoll(r.order_id)
     } catch (e) { toast(String(e && e.message) === '402' ? '' : '发起支付失败,请稍后再试', 'err') }
     finally { setBusy(false) }
@@ -96,7 +106,7 @@ function SubscribeFlow({ plans, onPaid, compact, alipayOn = true, wechatOn = fal
           <button className="btn btn-primary" onClick={confirmPaid}>我已完成支付</button>
           <button className="btn" onClick={() => { clearInterval(pollRef.current); setStage('choose') }}>重新选择</button>
         </div>
-        {!isWx && <div className="pw-paying-tip">没弹出?<a href={order && order.pay_url} target="_blank" rel="noreferrer">点这里手动打开支付页</a></div>}
+        {!isWx && <div className="pw-paying-tip">没弹出?<a href="#" onClick={(e) => { e.preventDefault(); order && openExternal(order.pay_url) }}>点这里手动打开支付页</a></div>}
       </div>
     )
   }
