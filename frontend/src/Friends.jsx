@@ -171,7 +171,7 @@ function DiscoverDrawer({ people, onAdd, onClose }) {
     <div className="nd-overlay" onClick={onClose}>
       <div className="nd-panel dv-panel glass" onClick={(e) => e.stopPropagation()}>
         <div className="nd-x" onClick={onClose}><IconClose /></div>
-        <div className="dv-head"><h2>添加好友</h2><p>这些人也在用第二大脑,加为好友后进入你的人格宇宙</p></div>
+        <div className="dv-head"><h2>添加好友</h2><p>发起请求后需<b>对方同意</b>才成为好友;同意后才能互相算姻缘 —— 只用双方 AI 画像,<b>不共享任何聊天原文</b>。</p></div>
         <input className="dv-search" placeholder="搜昵称 / 标签…" value={q} onChange={(e) => setQ(e.target.value)} />
         <div className="dv-list">
           {shown.length === 0 && (
@@ -201,107 +201,90 @@ function DiscoverDrawer({ people, onAdd, onClose }) {
 }
 
 export default function Friends({ auth }) {
-  const [friends, setFriends] = useState(null); const [need, setNeed] = useState(false)
-  const [reqs, setReqs] = useState({ incoming: [], outgoing: [] })
-  const [sel, setSel] = useState(null)
-  const [addOpen, setAddOpen] = useState(false); const [phone, setPhone] = useState(''); const [busy, setBusy] = useState(false)
+  const [list, setList] = useState(null); const [need, setNeed] = useState(false)
+  const [sel, setSel] = useState(null); const [view, setView] = useState('cloud')
+  const [discover, setDiscover] = useState(false)
+  const [reqs, setReqs] = useState([])   // 收到的好友请求(待同意)
+  const hostRef = useRef(); const [dim, setDim] = useState({ w: 800, h: 600 })
 
-  const reload = () => {
-    api.friendList().then((r) => setFriends(r.friends || [])).catch((e) => {
-      if (String(e && e.message) === '401') setNeed(true); else setFriends([])
-    })
-    api.friendRequests().then(setReqs).catch(() => {})
-  }
+  // 只有真·未登录(401)才提示登录;其它错误(空DB/后端慢)显示空列表,不误报"请先登录"
+  const reload = () => api.people().then((r) => setList(r.people || [])).catch((e) => {
+    if (String(e && e.message) === '401') setNeed(true); else setList([])
+  })
+  const loadReqs = () => api.friendRequests().then((r) => setReqs(r.incoming || [])).catch(() => {})
   useEffect(() => {
     if (!auth) { setNeed(true); return }
-    setNeed(false); reload()
-    const t = setInterval(() => { api.friendRequests().then(setReqs).catch(() => {}) }, 30000)
-    return () => clearInterval(t)
+    setNeed(false); reload(); loadReqs()
+    const t = setInterval(loadReqs, 30000); return () => clearInterval(t)
   }, [auth])
-
-  const sendReq = async () => {
-    const to = phone.trim()
-    if (!/^\d{6,}$/.test(to)) { toast('请输入对方手机号', 'err'); return }
-    setBusy(true)
+  // 加好友 = 发请求(要对方同意才成好友、才能算姻缘),不再单方直接加
+  const addFriend = async (p) => {
     try {
-      const r = await api.friendRequest(to)
-      if (r.already === 'friend') toast('你们已经是好友了', 'ok')
-      else if (r.auto_accepted) toast('对方也加过你,已互相成为好友', 'ok')
-      else toast('已发送好友请求,等对方同意', 'ok')
-      setPhone(''); setAddOpen(false); reload()
-    } catch (e) { toast(String(e && e.message) === '404' ? '没有这个用户(对方需先注册第二大脑)' : '发送失败,请稍后再试', 'err') }
-    setBusy(false)
+      const r = await api.friendRequest(p.username)
+      if (r && r.already === 'friend') toast(`${p.display} 已是好友`, 'ok')
+      else if (r && r.auto_accepted) toast(`已和 ${p.display} 互相成为好友`, 'ok')
+      else toast(`已向 ${p.display} 发送好友请求,等 TA 同意`, 'ok')
+      setDiscover(false); reload()
+    } catch { toast(`请求 ${p.display} 没成功,请稍后再试`, 'err') }
   }
-  const respond = async (from, accept) => {
-    if (accept && !(await confirmDialog('同意后,你俩可以互相用 AI 画像算姻缘(只共享 AI 画像,不共享任何聊天原文)。确定同意?', '同意', false))) return
-    try { await api.friendRespond(from, accept); toast(accept ? '已同意,现在可以互相算姻缘了' : '已拒绝', 'ok'); reload() }
+  // 同意/拒绝收到的请求(同意=授权双方用AI画像算姻缘,不共享聊天原文)
+  const respondReq = async (from, accept) => {
+    if (accept && !(await confirmDialog('同意后,你俩可以互相用 AI 画像算姻缘(只共享 AI 画像,不共享任何聊天原文)。确定同意?', '同意'))) return
+    try { await api.friendRespond(from, accept); toast(accept ? '已同意,现在可以互相算姻缘了' : '已拒绝', 'ok'); setReqs((s) => s.filter((x) => x.from !== from)); reload() }
     catch { toast('操作失败,请稍后再试', 'err') }
   }
   const removeFriend = async (p) => {
-    if (!(await confirmDialog(`移除好友「${p.display}」?`, '移除', true))) return
-    try { await api.friendRemove(p.username); toast('已移除', 'ok'); reload() }
-    catch { toast('移除失败', 'err') }
+    try { await api.friend(p.username, 'remove'); await reload(); toast(`已移除 ${p.display}`, 'ok') }
+    catch { toast(`移除 ${p.display} 没成功,请稍后再试`, 'err') }
   }
+  useEffect(() => {
+    const el = hostRef.current; if (!el) return
+    const ro = new ResizeObserver(() => setDim({ w: el.clientWidth, h: el.clientHeight }))
+    ro.observe(el); return () => ro.disconnect()
+  }, [view, list])
 
   if (need) return <div className="view"><div className="empty"><div className="e-big">请先登录</div></div></div>
-  if (!friends) return <div className="view"><Thinking phases={['正在读好友列表…']} hint="按手机号加好友,对方同意后算姻缘" /></div>
+  if (!list) return <div className="view"><Thinking phases={['正在读大家的知识库…', '计算你和每个人的契合度…']} hint="按真实兴趣与互补匹配" /></div>
+
+  const friends = list.filter((p) => p.is_friend)
+  const strangers = list.filter((p) => !p.is_friend)
 
   return (
     <div className="fr-view">
       <div className="fr-header">
-        <div><h1>好友 · 匹配</h1><p>按<b>手机号</b>加好友,对方<b>同意</b>后才能互相算姻缘 —— 只用双方的 <b style={{ color: '#f9a8d4' }}>AI 画像</b>比对,<b>不共享任何聊天原文</b>。</p></div>
+        <div><h1>好友 · 匹配</h1><p>你的人格宇宙。星越近越同频,<b style={{ color: '#f9a8d4' }}>粉线是你的命定星</b>。点星看你俩的同频 / 互补 / 姻缘 —— 全基于真实大脑。</p></div>
         <div className="fr-header-r">
-          <button className="btn btn-primary fr-add-btn" onClick={() => setAddOpen(true)}>+ 添加好友</button>
+          <button className="btn fr-add-btn" onClick={() => setDiscover(true)}>+ 添加好友</button>
+          <div className="seg glass">
+            <button className={view === 'cloud' ? 'on' : ''} onClick={() => setView('cloud')}>星云</button>
+            <button className={view === 'grid' ? 'on' : ''} onClick={() => setView('grid')}>列表</button>
+          </div>
         </div>
       </div>
-      <div className="fr-body" style={{ overflowY: 'auto', padding: '4px 2px' }}>
-        {reqs.incoming && reqs.incoming.length > 0 && (
-          <div className="fr-reqs">
-            <div className="fr-reqs-t">好友请求 · {reqs.incoming.length}</div>
-            {reqs.incoming.map((r) => (
-              <div key={r.from} className="fr-req-row glass">
-                <span className="fr-req-name">{r.display}</span>
-                <span className="fr-req-sub">想加你为好友</span>
-                <div className="fr-req-actions">
-                  <button className="btn" onClick={() => respond(r.from, false)}>拒绝</button>
-                  <button className="btn btn-primary" onClick={() => respond(r.from, true)}>同意</button>
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
-        {friends.length === 0
-          ? <Empty icon={<IconFriends />} title="还没有好友" sub="点右上「+ 添加好友」,输入对方手机号发起请求;对方同意后即可算姻缘" action={<button className="btn btn-primary" onClick={() => setAddOpen(true)}>去添加</button>} />
-          : <div className="fr-friend-grid">
-              {friends.map((p) => (
-                <div key={p.username} className="fr-friend-card glass" onClick={() => setSel(p)}>
-                  <button className="fr-fc-x" onClick={(e) => { e.stopPropagation(); removeFriend(p) }} title="移除">×</button>
-                  <div className="fr-fc-avatar">{(p.display || p.username).slice(0, 1)}</div>
-                  <div className="fr-fc-name">{p.display}</div>
-                  <div className="fr-fc-sub">{p.has_persona ? '点开算姻缘 →' : '对方还没生成画像'}</div>
-                </div>
-              ))}
-            </div>}
-        {reqs.outgoing && reqs.outgoing.length > 0 && (
-          <div className="fr-out">已发送请求(等对方同意):{reqs.outgoing.map((r) => r.display).join('、')}</div>
-        )}
-      </div>
-      {sel && <MatchReport me={auth.username} person={sel} onClose={() => setSel(null)} />}
-      {addOpen && (
-        <div className="dialog-overlay" onClick={() => setAddOpen(false)}>
-          <div className="dialog" onClick={(e) => e.stopPropagation()}>
-            <div className="dialog-x" onClick={() => setAddOpen(false)}><IconClose /></div>
-            <div className="dialog-msg">按手机号添加好友<br /><span className="nd-dim" style={{ fontSize: 13 }}>对方同意后,你俩可以互相算姻缘(只用 AI 画像,不共享聊天原文)</span></div>
-            <input className="fr-add-input" placeholder="对方手机号" value={phone} autoFocus
-              onKeyDown={(e) => { if (e.key === 'Enter') sendReq() }}
-              onChange={(e) => setPhone(e.target.value)} />
-            <div className="dialog-actions">
-              <button className="btn" onClick={() => setAddOpen(false)}>取消</button>
-              <button className="btn btn-primary" disabled={busy} onClick={sendReq}>{busy ? '发送中…' : '发送请求'}</button>
-            </div>
-          </div>
+      {reqs.length > 0 && (
+        <div className="fr-reqbar">
+          <span className="fr-reqbar-t">好友请求 · {reqs.length}</span>
+          {reqs.map((r) => (
+            <span key={r.from} className="fr-reqbar-item">
+              <b>{r.display}</b> 想加你为好友
+              <button className="btn fr-reqbar-btn" onClick={() => respondReq(r.from, false)}>拒绝</button>
+              <button className="btn btn-primary fr-reqbar-btn" onClick={() => respondReq(r.from, true)}>同意</button>
+            </span>
+          ))}
         </div>
       )}
+      <div className="fr-body" ref={hostRef}>
+        {friends.length === 0
+          ? <Empty icon={<IconFriends />} title="还没有好友" sub="点右上「+ 添加好友」,把同频的人拉进你的人格宇宙" action={<button className="btn btn-primary" onClick={() => setDiscover(true)}>去添加</button>} />
+
+          : view === 'cloud'
+            ? <ErrorBoundary fallback={<div className="empty"><div className="e-big">星云需要 WebGL</div><div>切到「列表」也能看匹配</div></div>}>
+                <StarCloud people={friends} onSelect={setSel} dim={dim} me={auth.username} />
+              </ErrorBoundary>
+            : <div className="fr-gridwrap"><Grid list={friends} onSel={setSel} onRemove={removeFriend} /></div>}
+      </div>
+      {sel && <MatchReport me={auth.username} person={sel} onClose={() => setSel(null)} />}
+      {discover && <DiscoverDrawer people={strangers} onAdd={addFriend} onClose={() => setDiscover(false)} />}
     </div>
   )
 }

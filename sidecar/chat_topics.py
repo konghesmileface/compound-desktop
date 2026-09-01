@@ -75,6 +75,10 @@ def _cluster_name(texts, contact_names=None, topn=3):
                     continue
                 if not re.search(r'[一-鿿A-Za-z]', w):
                     continue
+                # ★过滤纯小写拉丁噪声词(qq/tc/hy/bizid 这类缩写/代码/字段名)——中文业务聊天的主题名
+                #   应是中文;纯小写英文几乎都是噪声。保留全大写缩写(AAA评级/CFA)与中文。
+                if re.fullmatch(r'[a-z]+', w):
+                    continue
                 if w in stop:
                     continue
                 cnt[w] += 1

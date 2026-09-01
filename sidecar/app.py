@@ -204,6 +204,16 @@ def _start_bg_analyzer():
                                 if pend3:
                                     con.execute("DELETE FROM compute_cache WHERE owner=? AND name='relationships'", (owner,))
                                     con.commit()
+                                # ★预热"仅聊天"主题星系缓存:首次点即秒出(不用等10-30s KMeans+jieba)。
+                                #   仅当嵌入全完成(无待嵌页)才算——否则首启嵌入期签名一直变、反复重算拖垮8G。
+                                try:
+                                    _pend_emb = con.execute(
+                                        "SELECT COUNT(*) FROM pages p LEFT JOIN page_embeddings e ON e.page_id=p.id "
+                                        "WHERE e.page_id IS NULL AND length(trim(p.text))>0").fetchone()[0]
+                                    if _pend_emb == 0:
+                                        _db_cached(con, owner, "chat_topic_galaxy", lambda: CT.chat_topic_galaxy(con, owner))
+                                except Exception as _e:
+                                    print(f"[bg-analyze] chat_galaxy warm: {_e}")
                     finally:
                         con.close()
                 except Exception as e:
@@ -255,12 +265,23 @@ def _autosync_scan_owner(con, owner, per_round=12):
         return 0
     # 走标准入库管线(与手动上传完全一致:嵌入/实体/缓存全复用),进度也能在入库页看到
     jid = _new_job(len(todo), "auto")
-    _run_ingest_job(jid, todo, "auto", 200, owner)
+    try:
+        _run_ingest_job(jid, todo, "auto", 200, owner)
+    except Exception as _e:
+        print(f"[autosync] ingest job 部分失败: {_e}")
+    # ★逐文件记 seen(无论整批成败都记):否则某个大文件/坏文件让 _run_ingest_job 抛异常→整批不记seen→
+    #   下次扫描又当"新文件"重复入库(已入库的攒重复页+坏文件无限重试,8G机被磨死、count永远卡住)。
+    #   已进 documents 的记真 mtime/size(防重复);没进的也记(标记已尝试,不无限重试;用户可改动文件触发重试)。
+    done_paths = set(r[0] for r in con.execute(
+        "SELECT source_path FROM documents WHERE owner=?", (owner,)).fetchall()) if owner else set()
+    ok = 0
     for f in todo:
         mt, sz = stamp[f]
         con.execute("INSERT OR REPLACE INTO autosync_seen(owner,path,mtime,size) VALUES(?,?,?,?)", (owner, f, mt, sz))
+        if f in done_paths:
+            ok += 1
     con.commit()
-    return len(todo)
+    return ok
 
 _BG_SYNC_LOCK = threading.Lock()
 

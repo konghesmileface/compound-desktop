@@ -58,15 +58,9 @@ function SongStage({ song }) {
   useEffect(() => { setCur(0); setDur(0); setPlaying(false) }, [song.url])
 
   const setupAudio = useCallback(() => {
-    if (acRef.current) return
-    try {
-      const AC = window.AudioContext || window.webkitAudioContext
-      const ac = new AC()
-      const src = ac.createMediaElementSource(audioRef.current)
-      const an = ac.createAnalyser(); an.fftSize = 256; an.smoothingTimeConstant = 0.82
-      src.connect(an); an.connect(ac.destination)
-      acRef.current = ac; anRef.current = an; dataRef.current = new Uint8Array(an.frequencyBinCount)
-    } catch (e) { /* 跨域/不支持 → 退回纯 CSS 动效 */ }
+    // ★不用 Web Audio 分析器:createMediaElementSource 会把 <audio> 原生输出改道进 AudioContext,
+    //   Tauri WKWebView 里这条经常静音(改道后原生声也没了=用户报"没声音")。保声优先→让 <audio> 原生播放,
+    //   频谱可视化走下面的 CSS 兜底(playing 时正弦波动画),声音一定有。
   }, [])
 
   // 环形频谱可视化(围绕专辑);无音频分析时画柔和呼吸圆
