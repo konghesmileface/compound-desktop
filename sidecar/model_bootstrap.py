@@ -23,26 +23,33 @@ _MEI = getattr(sys, "_MEIPASS", os.path.dirname(os.path.abspath(__file__)))
 _SENSE = "sherpa-onnx-sense-voice-zh-en-ja-ko-yue-2024-07-17"
 _SEG = "sherpa-onnx-pyannote-segmentation-3-0"
 
+# ★下载源:优先阿里云 OSS(国内可达+快,海外也可达;github/HF 在中国被墙)。
+#   我们把模型 tar 托管到 worldmonitor-downloads 桶(公读);海外/OSS挂了再回落 github/HF。
+_OSS = "https://worldmonitor-downloads.oss-cn-shanghai.aliyuncs.com/compound-models/"
+
 # 每个模块:est=预估字节(算总进度用);check_any=只要任一文件在(打包目录或数据目录)就算已就绪
+# kind=tar → 下 urls(按序试,先成先用)的 tar 解到 models/;extra=附带的单文件(url,落地名)
 SPECS = {
     "bge-m3": {
-        "est": 2_300_000_000,
+        "est": 2_100_000_000,
         "check_any": [os.path.join("bge-m3", "model.safetensors"),
                       os.path.join("bge-m3", "pytorch_model.bin")],
-        "kind": "hf", "repo": "BAAI/bge-m3", "dest": "bge-m3",
+        "kind": "tar",
+        "urls": [_OSS + "compound-bge-m3.tar.gz"],   # HF 多文件仓不便直链,仅托管 OSS
     },
     "sensevoice": {
-        "est": 950_000_000,
+        "est": 1_100_000_000,
         "check_any": [os.path.join(_SENSE, "model.int8.onnx")],
         "kind": "tar",
-        "url": "https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models/%s.tar.bz2" % _SENSE,
-        "extra": [("https://github.com/snakers4/silero-vad/raw/v4.0/files/silero_vad.onnx", "silero_vad.onnx")],
+        "urls": [_OSS + "compound-sense-voice.tar.gz",
+                 "https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models/%s.tar.bz2" % _SENSE],
+        "extra": [],   # silero_vad 已随包打进(Windows 也保留),无需再下
     },
     "speaker": {
-        "est": 200_000_000,
+        "est": 50_000_000,
         "check_any": [os.path.join(_SEG, "model.onnx")],
         "kind": "tar",
-        "url": "https://github.com/k2-fsa/sherpa-onnx/releases/download/speaker-segmentation-models/%s.tar.bz2" % _SEG,
+        "urls": ["https://github.com/k2-fsa/sherpa-onnx/releases/download/speaker-segmentation-models/%s.tar.bz2" % _SEG],
         "extra": [("https://github.com/k2-fsa/sherpa-onnx/releases/download/speaker-recongition-models/3dspeaker_speech_eres2net_base_sv_zh-cn_3dspeaker_16k.onnx",
                    "3dspeaker_speech_eres2net_base_sv_zh-cn_3dspeaker_16k.onnx")],
     },
@@ -109,12 +116,24 @@ def _download(url, dst_file, on_bytes):
     os.replace(tmp, dst_file)
 
 
+def _download_first(urls, dst_file, on_bytes):
+    """按序试多个镜像(OSS 优先,github/HF 回落),先成先用。全挂才抛。"""
+    last = None
+    for u in urls:
+        try:
+            _download(u, dst_file, on_bytes)
+            return u
+        except Exception as e:
+            last = e
+    raise last or RuntimeError("no url")
+
+
 def _do_tar(spec, models_dir, on_bytes):
     os.makedirs(models_dir, exist_ok=True)
-    tmp = tempfile.NamedTemporaryFile(suffix=".tar.bz2", delete=False).name
+    tmp = tempfile.NamedTemporaryFile(suffix=".tar", delete=False).name
     try:
-        _download(spec["url"], tmp, on_bytes)
-        with tarfile.open(tmp, "r:bz2") as tf:
+        _download_first(spec["urls"], tmp, on_bytes)
+        with tarfile.open(tmp, "r:*") as tf:   # 自动识别 gz/bz2
             tf.extractall(models_dir)
     finally:
         try:

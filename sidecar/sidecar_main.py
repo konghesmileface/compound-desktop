@@ -46,12 +46,15 @@ def _seed_downloads(data_dir):
     dst = os.path.join(data_dir, "downloads")
     os.makedirs(dst, exist_ok=True)
     for f in os.listdir(src):
+        s = os.path.join(src, f)
         d = os.path.join(dst, f)
-        if not os.path.exists(d):
-            try:
-                shutil.copy2(os.path.join(src, f), d)
-            except Exception:
-                pass
+        try:
+            # ★不能只在"不存在时"复制:助手升级后(如v7)包内是新版但数据目录还是旧版→
+            #   老用户永远下到旧助手。改成大小不同就覆盖(升级即刷新)。
+            if (not os.path.exists(d)) or os.path.getsize(d) != os.path.getsize(s):
+                shutil.copy2(s, d)
+        except Exception:
+            pass
 
 
 def _spawn_paddle_worker():
