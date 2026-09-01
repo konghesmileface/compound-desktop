@@ -211,3 +211,27 @@
 
 ### 内部子组件(随父功能覆盖,不单列)
 AskDrawer/GroupGraph/RelationTimeline/NodeDetail/Reader/ReportPanel(问答/人脉/文库产出)、ModelDownload(§1首启)、AnalysisStatus(分析中状态条)、Paywall(§4支付)、ComingSoon(占位)。
+
+---
+
+## 8. 端点全覆盖对账(所有 116 个后端端点 → 功能域 → case 章节)
+
+> 目的:可审计的全覆盖——每个端点都归入一个功能域+对应 case 章节。测该功能=覆盖这些端点。
+
+- **下载中心/健康 §2说明** — 2 端点:`/go/wechat-export`, `/health`
+- **产出文档/图/视频 §2问答,§4** — 6 端点:`/api/download/{fname}`, `/api/generate`, `/api/genimg/{name}`, `/api/genvid/{name}`, `/api/preview/{fname}`, `/api/report`
+- **人脉 §2人脉** — 11 端点:`/api/briefing`, `/api/draft_reply`, `/api/favors`, `/api/group_graph`, `/api/number_ledger`, `/api/rel_graph`, `/api/rel_path`, `/api/relation_timeline`, `/api/relationships`, `/api/relationships/deepen`, `/api/relationships/delete`
+- **入库/定期同步 §2入库** — 8 端点:`/api/autosync/add`, `/api/autosync/list`, `/api/autosync/remove`, `/api/embed`, `/api/ingest/progress`, `/api/ingest/status`, `/api/upload`, `/api/upload_url`
+- **冥想 §2冥想** — 7 端点:`/api/lifesong`, `/api/lifestory`, `/api/music-list`, `/api/music/{fname}`, `/api/song/make`, `/api/song/status`, `/api/tts/{fname}`
+- **好友社交 §7好友社交** — 7 端点:`/api/friend`, `/api/friend/list`, `/api/friend/remove`, `/api/friend/request`, `/api/friend/requests`, `/api/friend/respond`, `/api/match/{other}`
+- **微信数据 §2微信** — 8 端点:`/api/iphone/import`, `/api/iphone/status`, `/api/realtime/heartbeat`, `/api/realtime/status`, `/api/realtime/toggle`, `/api/wechat/ingest`, `/api/wechat/watch`, `/api/wechat_messages`
+- **文库/星图 §2文库** — 6 端点:`/api/entity_links`, `/api/graph`, `/api/library`, `/api/links`, `/api/mylibrary`, `/api/today`
+- **洞察 §2洞察** — 1 端点:`/api/panorama`
+- **画像/人脉画像 §2画像,人脉** — 3 端点:`/api/network_portrait`, `/api/people`, `/api/persona`
+- **设置/首启 §2设置,§1** — 4 端点:`/api/model_status`, `/api/settings`, `/api/settings/test`, `/api/theme/{fname}`
+- **账号/资料/支付 §2账户,§4,§7** — 23 端点:`/api/account`, `/api/auth/alipay/bind`, `/api/auth/alipay/enabled`, `/api/auth/alipay/login_url`, `/api/auth/login`, `/api/auth/me`, `/api/auth/phone_login`, `/api/auth/phone_register`, `/api/auth/profile`, `/api/auth/pwd_login`, `/api/auth/register`, `/api/auth/reset_password`, `/api/auth/send_code`, `/api/auth/set_password`, `/api/auth/update_profile`, `/api/avatar`, `/api/avatars`, `/api/balance`, `/api/orders`, `/api/orders/delete`, `/api/pay/create`, `/api/pay/query`, `/api/plans`
+- **问答/搜索/探索/仅聊天 §2,§7** — 15 端点:`/api/analysis_status`, `/api/ask`, `/api/chat_galaxy`, `/api/chat_node/{doc_id}`, `/api/chat_topic_galaxy`, `/api/connections/{doc_id}`, `/api/doc/{doc_id}`, `/api/doc_summary/{doc_id}`, `/api/job/{job_id}`, `/api/media_structure`, `/api/news`, `/api/search`, `/api/similar/{doc_id}`, `/api/starmap`, `/api/stats`
+- **问答·卡片 §2问答** — 6 端点:`/api/card`, `/api/card/{card_id}`, `/api/card/{card_id}/edit`, `/api/card/{card_id}/related`, `/api/card/{card_id}/status`, `/api/cards`
+- **雷达/发现/通知 §2雷达,§7** — 9 端点:`/api/checkup`, `/api/commitments`, `/api/commitments/dismiss`, `/api/cooling`, `/api/discoveries`, `/api/dormant`, `/api/loops/dismiss`, `/api/matches`, `/api/reach/dismiss`
+
+**覆盖率:116/116 端点已归入 case;未映射 0**(前端交互点 365 个由 §2 逐页覆盖)。
