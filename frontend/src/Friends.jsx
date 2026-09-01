@@ -185,7 +185,7 @@ function DiscoverDrawer({ people, onAdd, onClose }) {
             <div key={p.username} className="dv-row">
               <span className="fr-av sm" style={{ background: `linear-gradient(145deg, hsl(${hue(p.username)} 50% 58%), hsl(${hue(p.username)} 55% 40%))` }}>{initial(p.display)}</span>
               <div className="dv-info">
-                <div className="dv-name">{p.display}{p.mbti && <span className={'fr-mbti' + (p.mbti_real ? '' : ' mbti-guess')} title={p.mbti_real ? '本人填写' : 'AI 从画像推测'}>{p.mbti}{p.mbti_real ? '' : <i className="mbti-est">推测</i>}</span>}<span className="dv-compat num" style={{ color: p.compat >= 60 ? '#34d399' : p.compat >= 40 ? '#fbbf24' : '#8b93f8' }}>{p.compat}%</span></div>
+                <div className="dv-name">{p.display}{p.mbti && <span className={'fr-mbti' + (p.mbti_real ? '' : ' mbti-guess')} title={p.mbti_real ? '本人填写' : 'AI 从画像推测'}>{p.mbti}{p.mbti_real ? '' : <i className="mbti-est">推测</i>}</span>}<span className="dv-compat num" style={{ color: p.compat >= 60 ? '#34d399' : p.compat >= 40 ? '#fbbf24' : '#8b93f8', borderColor: (p.compat >= 60 ? '#34d399' : p.compat >= 40 ? '#fbbf24' : '#8b93f8') + '55' }} title="预估契合度(基于双方公开画像)">契合 {p.compat}%</span></div>
                 <div className="dv-one">{p.one_liner}</div>
               </div>
               <button className="dv-add-btn" disabled={busy === p.username}

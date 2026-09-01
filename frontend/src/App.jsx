@@ -96,6 +96,13 @@ export default function App() {
     const poll = () => api.cards().then((r) => setUnread(r.unread_total || 0)).catch(() => {})
     poll(); const t = setInterval(poll, 45000); return () => clearInterval(t)
   }, [auth])
+  // 好友请求数(左侧「好友」tab 角标提示)
+  const [friendReqs, setFriendReqs] = useState(0)
+  React.useEffect(() => {
+    if (!auth) return
+    const poll = () => api.friendRequests().then((r) => setFriendReqs((r.incoming || []).length)).catch(() => {})
+    poll(); const t = setInterval(poll, 30000); return () => clearInterval(t)
+  }, [auth])
   // 会员/授权:拉试用倒计时状态;监听 402 → 弹订阅墙
   const [account, setAccount] = useState(null)
   const [paywall, setPaywall] = useState(false)
@@ -166,6 +173,7 @@ export default function App() {
             <button key={key} className={tab === key ? 'active' : ''} onClick={() => setTab(key)}>
               <Icon /><span className="label">{label}</span>
               {key === 'home' && unread > 0 && <span className="nav-badge">{unread > 99 ? '99+' : unread}</span>}
+              {key === 'friends' && friendReqs > 0 && <span className="nav-badge">{friendReqs > 99 ? '99+' : friendReqs}</span>}
               {key === 'life' && lifeNew && <span className="nav-dot" title="有新歌" />}
             </button>
           ))}

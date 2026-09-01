@@ -2687,6 +2687,29 @@ def people(authorization: str = Header(None)):
             out.append({"username": u, "display": p.get("display", u), "one_liner": p.get("one_liner", ""),
                         "tags": p.get("tags", []), "mbti": (_rm or mbti), "mbti_real": _mbti_real, "compat": compat,
                         "is_friend": u in friends})
+        # ★合并云端好友(手机号加+对方同意的):他们的画像在云 shared_personas,拉进来才能在星云图显示+算姻缘。
+        #   否则同意好友后本地不知情→星云图永远空(用户实测)。已在本地列表的标记 is_friend。
+        try:
+            _by = {o["username"]: o for o in out}
+            fl = _cloud_proxy("GET", "/social/friend/list", authorization)
+            for fr in (fl.get("friends") or []):
+                fu = fr.get("username")
+                if not fu or fu == me:
+                    continue
+                if fu in _by:
+                    _by[fu]["is_friend"] = True
+                    continue
+                if not fr.get("has_persona"):
+                    continue
+                _pd, _pm, _pdisp = _fetch_friend_persona(authorization, fu)
+                if not _pd:
+                    continue
+                _pp = _pd if isinstance(_pd, dict) else json.loads(_pd)
+                out.append({"username": fu, "display": _pp.get("display", _pdisp or fu),
+                            "one_liner": _pp.get("one_liner", ""), "tags": _pp.get("tags", []),
+                            "mbti": _pm, "mbti_real": bool(_pm), "compat": _compat(myp, _pp), "is_friend": True})
+        except Exception as _e:
+            print(f"[people] 云好友合并: {_e}")
         out.sort(key=lambda x: -x["compat"])
         return {"me": me, "people": out}
     finally:
