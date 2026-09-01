@@ -2645,11 +2645,16 @@ def _cos_emb(ba, bb):
     return sum(x*y for x, y in zip(a, b))  # 已归一,点积=余弦
 
 def _compat(a, b):
-    an = "".join(d.get("name", "") for d in a.get("domains", []))
-    bn = "".join(d.get("name", "") for d in b.get("domains", []))
+    # ★不同来源的画像结构可能不同:domains 元素可能是 dict{name} 或直接 str;thinking 可能是 dict 或字符串。
+    #   全部防御性处理,否则跨用户合并/匹配时 'str'.get 崩(实测:云好友 bella 的 thinking 是字符串→合并全废)。
+    def _dn(p):
+        return "".join((d.get("name", "") if isinstance(d, dict) else str(d or "")) for d in (p.get("domains") or []))
+    an = _dn(a); bn = _dn(b)
     ta = set(re.findall(r"..", an)); tb = set(re.findall(r"..", bn))
     ov = len(ta & tb) / max(1, min(len(ta), len(tb))) if ta and tb else 0
-    at = a.get("thinking", {}) or {}; bt = b.get("thinking", {}) or {}
+    at = a.get("thinking") or {}; bt = b.get("thinking") or {}
+    if not isinstance(at, dict): at = {}
+    if not isinstance(bt, dict): bt = {}
     td = 1 - (abs(at.get("depth", 50) - bt.get("depth", 50)) + abs(at.get("rational", 50) - bt.get("rational", 50))) / 200
     return round((ov * 0.6 + td * 0.4) * 100)
 
