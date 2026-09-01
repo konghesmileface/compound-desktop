@@ -21,6 +21,26 @@ const j = (r) => {
 }
 const authHeaders = () => { try { const a = JSON.parse(localStorage.getItem('auth') || 'null'); return a && a.token ? { Authorization: 'Bearer ' + a.token } : {} } catch { return {} } }
 
+// ★Tauri WKWebView 里 <a href download>/window.open 都被拦(下载不触发、相对/api打不到sidecar)。
+//   下载/外链统一走这个:补全 API_BASE(sidecar 真实地址)→ Tauri 用 open_external 交给系统浏览器下,
+//   web 端 window.open 打开(/api/download 带 attachment 头 → 浏览器直接下)。
+// 把相对 /api 路径补成 sidecar 全地址(Tauri 里 <audio src>/<img src> 相对路径打不到后端;web 端 API_BASE 为空不变)。
+export function apiUrl(path) {
+  if (!path) return path
+  return /^https?:|^data:|^blob:/i.test(path) ? path : (API_BASE + path)
+}
+
+export function openExternal(url) {
+  if (!url) return
+  const full = /^https?:/i.test(url) ? url : (API_BASE + url)
+  try {
+    if (typeof window !== 'undefined' && window.__TAURI__ && window.__TAURI__.core) {
+      window.__TAURI__.core.invoke('open_external', { url: full }); return
+    }
+  } catch { /* noop */ }
+  try { window.open(full, '_blank') } catch { /* noop */ }
+}
+
 export const api = {
   modelStatus: () => fetch('/api/model_status').then(j),
   stats: () => fetch('/api/stats', { headers: authHeaders() }).then(j),

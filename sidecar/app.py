@@ -210,7 +210,7 @@ def _start_bg_analyzer():
                     print(f"[bg-analyze] {e}")
                 finally:
                     _BG_ANALYZE_LOCK.release()
-            _time.sleep(3 if worked else 60)   # 有活→3s喘一下继续;没活→60s轻巡
+            _time.sleep(15 if worked else 90)   # ★8G机护航:后台分析节流(有活15s/没活90s),给用户操作留资源,别把机器占死
     threading.Thread(target=_loop, daemon=True).start()
 
 
@@ -2321,10 +2321,8 @@ def create_card(payload: dict = Body(...), authorization: str = Header(None)):
         con.execute("INSERT INTO pages(doc_id,page_no,method,text) VALUES(?,?,?,?)",
                     (did, 1, "card:" + ctype, content))
         con.commit()
-        try:
-            S.embed_pending(con)
-        except Exception:
-            pass
+        # ★不在这里同步嵌入:embed_pending 在 8G 机上要加载 bge-m3 + 逐页 encode(数分钟),
+        #   会把保存卡片的 HTTP 请求拖到超时/失败。后台常驻嵌入线程会自动把这张新卡的页嵌入。
         import threading
         threading.Thread(target=_gen_nudge, args=(did, ctype, content, me), daemon=True).start()
         return {"id": did, "title": fn}

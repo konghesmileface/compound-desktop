@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react'
-import { api } from './api'
+import { api, apiUrl, openExternal } from './api'
 import { IconDownload, IconPlay } from './icons'
 import { toast } from './ui'
 
@@ -141,9 +141,9 @@ function SongStage({ song }) {
           <span className="ms-t">{fmt(cur)}</span>
           <input className="ms-seek" type="range" min="0" max="100" value={ratio * 100 || 0} onChange={seek} style={{ '--p': (ratio * 100 || 0) + '%' }} />
           <span className="ms-t">{fmt(dur)}</span>
-          <a className="ms-dl" href={song.url} download={(song.title || '专属主题曲') + '.mp3'} title="下载 MP3"><IconDownload /></a>
+          <button type="button" className="ms-dl" onClick={() => openExternal(song.url)} title="下载 MP3"><IconDownload /></button>
         </div>
-        <audio ref={audioRef} src={song.url} preload="metadata"
+        <audio ref={audioRef} src={apiUrl(song.url)} preload="metadata"
           onPlay={() => setPlaying(true)} onPause={() => setPlaying(false)}
           onTimeUpdate={(e) => setCur(e.target.currentTime)}
           onLoadedMetadata={(e) => setDur(e.target.duration)} />

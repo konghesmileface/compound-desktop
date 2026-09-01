@@ -61,6 +61,12 @@ def _xlsx(path):
     wb = load_workbook(path, read_only=True, data_only=True)
     units = []
     for i, ws in enumerate(wb.worksheets):
+        # ★程序导出的 xlsx 常写错/漏 <dimension>(如发票导出文件)→ read_only 只读声明范围会漏掉大量数据行。
+        #   reset_dimensions 强制 openpyxl 扫描所有实际单元格,不信任声明的维度。
+        try:
+            ws.reset_dimensions()
+        except Exception:
+            pass
         rows = []
         for row in ws.iter_rows(values_only=True):
             vals = [str(v) for v in row if v is not None]

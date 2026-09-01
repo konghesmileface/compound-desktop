@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react'
 import { createPortal } from 'react-dom'
-import { api } from './api'
+import { api, openExternal } from './api'
 import { IconSearch, IconClose } from './icons'
 import { toast, confirmDialog, Thinking, Empty } from './ui'
 import { renderRich } from './AskDrawer'
@@ -108,7 +108,7 @@ function GenBar({ topic }) {
         ))}
       </span>
       {file && file.preview && <button className="btn gen-btn" onClick={() => setPreview(true)}>预览</button>}
-      {file && <a className="gen-dl" href={file.url} download>下载《{file.title}》.{extOf(file.format)}</a>}
+      {file && <button type="button" className="gen-dl" onClick={() => openExternal(file.url)}>下载《{file.title}》.{extOf(file.format)}</button>}
       {preview && file && file.preview && (
         <div className="guide-overlay" onClick={() => setPreview(false)}>
           <div className="prev-modal glass" onClick={(e) => e.stopPropagation()}>
@@ -365,7 +365,7 @@ export default function Home({ onOpen, onUnread }) {
             <div className="news-head"><span className="news-dot" />今日新闻 · 和你关注的{news.domains && news.domains.length ? '「' + news.domains.slice(0, 3).join(' / ') + '」' : ''}相关<span className="news-count">{news.items.length} 条</span></div>
             <div className="news-grid">
               {news.items.map((n, i) => (
-                <a key={i} className="news-card glass" href={n.url} target="_blank" rel="noreferrer">
+                <a key={i} className="news-card glass" href={n.url} onClick={(e) => { e.preventDefault(); openExternal(n.url) }}>
                   <div className="news-toprow">
                     {n.date && <span className="news-date">{fmtNewsDate(n.date)}</span>}
                     <span className="news-site">{n.site || '来源'}</span>

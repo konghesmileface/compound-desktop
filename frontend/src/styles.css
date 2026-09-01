@@ -721,7 +721,8 @@ input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; appearance: 
 .toast-err { border-color: rgba(248,113,113,0.5); }
 @keyframes toastIn { from { opacity: 0; transform: translateY(-10px); } to { opacity: 1; transform: none; } }
 .dialog-overlay { position: fixed; inset: 0; background: rgba(4,6,10,0.6); backdrop-filter: blur(5px); display: grid; place-items: center; z-index: 210; animation: fade .18s ease; }
-.dialog { position: relative; width: 400px; max-width: 90vw; padding: 30px 28px 22px; border-radius: var(--r-lg); animation: slideIn .24s cubic-bezier(0.2,0.8,0.2,1); }
+/* ★弹窗必须不透明实底:Tauri WKWebView 里 .glass 的 backdrop-filter blur 常失效→半透明穿透、和背景内容混一起看不清(用户实测删除确认框)。给 dialog 加近实底,不靠 blur。 */
+.dialog { position: relative; width: 400px; max-width: 90vw; padding: 30px 28px 22px; border-radius: var(--r-lg); animation: slideIn .24s cubic-bezier(0.2,0.8,0.2,1); background: #12161e; border: 1px solid var(--border); box-shadow: 0 20px 60px rgba(0,0,0,0.65); }
 .dialog-x { position: absolute; top: 16px; right: 16px; width: 24px; height: 24px; display: grid; place-items: center; border-radius: 7px; cursor: pointer; color: var(--text-3); }
 .dialog-x:hover { color: var(--text); background: var(--glass-2); }
 .dialog-x svg { width: 14px; height: 14px; }

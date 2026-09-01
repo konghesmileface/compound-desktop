@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react'
-import { api } from './api'
+import { api, openExternal } from './api'
 import { IconClose } from './icons'
 import { Thinking } from './ui'
 
@@ -141,7 +141,7 @@ export default function NodeDetail({ docId, onClose, onOpenReader, onOpenNode })
         {gen && gen.busy && (
           <div className="nd-gen-hint"><span className="spinner spinner-xs" /> 正在用深度模型通读资料、逐页撰写,约 1–2 分钟,请稍候…</div>
         )}
-        {gen && gen.file && <a className="gen-dl" style={{ marginTop: 12 }} href={gen.url} download>⬇ 下载《{gen.title}》.{extOf(gen.fmt || gen.format)}</a>}
+        {gen && gen.file && <button type="button" className="gen-dl" style={{ marginTop: 12 }} onClick={() => openExternal(gen.url)}>⬇ 下载《{gen.title}》.{extOf(gen.fmt || gen.format)}</button>}
         {gen && gen.error && <div className="nd-dim" style={{ marginTop: 10 }}>生成失败,请到设置检查模型/key</div>}
       </div>
     </div>

@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react'
-import { api } from './api'
+import { api, apiUrl, openExternal } from './api'
 import { IconPlay, IconDownload, IconGallery } from './icons'
 import { Empty } from './ui'
 
@@ -100,7 +100,7 @@ function Player({ item, onClose }) {
               {item.genre && <div className="gp-genre">{item.genre}</div>}
               {item.style && <div className="gp-style">{item.style}</div>}
               <div className="gp-date">{item.date}</div>
-              <audio ref={ref} src={item.url} controls autoPlay className="gp-audio" />
+              <audio ref={ref} src={apiUrl(item.url)} controls autoPlay className="gp-audio" />
               {item.lyrics && (
                 <div className="gp-lyrics">
                   {String(item.lyrics).split('\n').map((ln, i) => {
@@ -109,12 +109,12 @@ function Player({ item, onClose }) {
                   })}
                 </div>
               )}
-              <a className="gp-dl" href={item.url} download={(item.title || '主题曲') + '.mp3'}><span className="btn-ico"><IconDownload /></span>下载 MP3</a>
+              <button type="button" className="gp-dl" onClick={() => openExternal(item.url)}><span className="btn-ico"><IconDownload /></span>下载 MP3</button>
             </div>
           </div>
         ) : (
           <div className="gp-film-body">
-            <video ref={ref} src={item.url} controls autoPlay playsInline className="gp-video" />
+            <video ref={ref} src={apiUrl(item.url)} controls autoPlay playsInline className="gp-video" />
             <div className="gp-film-cap">
               <span className="gp-film-title">{item.title}</span>
               <span className="gp-film-sub">{item.mode_label} · {item.date}</span>

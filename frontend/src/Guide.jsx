@@ -1,4 +1,5 @@
 import React from 'react'
+import { openExternal } from './api'
 import { IconClose } from './icons'
 
 // 各数据源的「秒懂」分步引导。铁律:小白照着点,最少步骤把数据搞进来,最详细指导,搞不定我们帮接。
@@ -117,7 +118,7 @@ export default function Guide({ sourceKey, onClose }) {
           </div>
         )}
         <p className="guide-intro">{s.intro}</p>
-        {s.dl && <a className="guide-dl btn btn-primary" href={s.dl.url} target="_blank" rel="noreferrer">{s.dl.label}</a>}
+        {s.dl && <button type="button" className="guide-dl btn btn-primary" onClick={() => openExternal(s.dl.url)}>{s.dl.label}</button>}
         {s.dls && (
           <div className="guide-dls">
             {s.dls.map((d, i) => (

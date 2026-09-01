@@ -1,5 +1,6 @@
 import React, { useState } from 'react'
 import Guide, { SOURCES, SYNC_DL } from './Guide'
+import { openExternal } from './api'
 
 // 「说明」独立页:全平台使用手册 —— 功能总览 + 数据导入图文 + 同步状态 + AI模型/OCR/账号关键设置。
 // 铁律:入口藏了=等于没做 —— 这页常驻左侧导航,不再埋在任何页面底部。
@@ -68,9 +69,9 @@ export default function Help() {
           <p>点下面对应你电脑的按钮下载。<b>不知道选哪个?</b>用 Windows 电脑就点第一个;用 Mac 就点屏幕左上角的苹果标 → 「关于本机」,看「芯片」那一行:写 <b>Apple M1/M2/M3/M4</b> 选第三个,写 <b>Intel</b> 选第二个。</p>
           <div className="help-dl-row">
             {SYNC_DL.map((d, i) => (
-              <a key={i} className="guide-dl-btn" href={'/dl/' + encodeURIComponent(d.file)} download>
+              <button key={i} type="button" className="guide-dl-btn" onClick={() => openExternal('/dl/' + encodeURIComponent(d.file))}>
                 <b>{d.label}</b><span>{d.hint}</span>
-              </a>
+              </button>
             ))}
           </div>
           <p className="hstep-note">下载后:Windows 双击 .exe 一路下一步;Mac 双击 .dmg,把图标拖进「应用程序」。Mac 首次打开如果提示"无法验证开发者":在应用图标上<b>点右键 → 打开</b>,再点一次「打开」就好了(只需一次)。</p>

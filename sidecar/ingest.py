@@ -76,7 +76,11 @@ END;
 
 
 def db_connect(db_path: str) -> sqlite3.Connection:
-    con = sqlite3.connect(db_path, timeout=30)
+    # ★isolation_level=None = autocommit:每条写立即提交,写锁绝不横跨慢操作(LLM/encode)。
+    #   之前默认延迟事务下,后台分析在"写了未提交"状态调 LLM(30s+),写锁被占满 30s,
+    #   用户存卡片等操作 INSERT 撞锁 → database is locked → 500(误报成"检查模型/key")。
+    #   WAL 下频繁小提交很便宜;各处显式 con.commit() 变无害 no-op。
+    con = sqlite3.connect(db_path, timeout=30, isolation_level=None)
     con.execute("PRAGMA busy_timeout=30000")   # 撞锁等 30s 而非报错
     con.execute("PRAGMA journal_mode=WAL")      # 边写边读不互锁(批处理+web并发)
     con.execute("PRAGMA synchronous=NORMAL")
