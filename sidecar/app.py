@@ -207,9 +207,12 @@ def _start_bg_analyzer():
                                 # ★预热"仅聊天"主题星系缓存:首次点即秒出(不用等10-30s KMeans+jieba)。
                                 #   仅当嵌入全完成(无待嵌页)才算——否则首启嵌入期签名一直变、反复重算拖垮8G。
                                 try:
+                                    # 只看"微信页"嵌完没(chat星系只用微信页嵌入)——不等其它大文档(PDF等)嵌完,
+                                    #   否则库里有大PDF在补嵌入时预热永不跑、用户首次点仅聊天要现算30s。
                                     _pend_emb = con.execute(
-                                        "SELECT COUNT(*) FROM pages p LEFT JOIN page_embeddings e ON e.page_id=p.id "
-                                        "WHERE e.page_id IS NULL AND length(trim(p.text))>0").fetchone()[0]
+                                        "SELECT COUNT(*) FROM pages p JOIN documents d ON d.id=p.doc_id "
+                                        "LEFT JOIN page_embeddings e ON e.page_id=p.id "
+                                        "WHERE d.filename LIKE '微信_与%' AND e.page_id IS NULL AND length(trim(p.text))>0").fetchone()[0]
                                     if _pend_emb == 0:
                                         _db_cached(con, owner, "chat_topic_galaxy", lambda: CT.chat_topic_galaxy(con, owner))
                                 except Exception as _e:
