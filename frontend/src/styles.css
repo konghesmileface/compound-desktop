@@ -1229,7 +1229,7 @@ input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; appearance: 
 .oc-tip { position: absolute; bottom: calc(100% + 8px); left: 50%; transform: translate(-50%, 6px); opacity: 0; transition: all 0.22s; background: rgba(10,14,22,0.96); border: 1px solid var(--border); border-radius: 10px; padding: 8px 12px; font-size: 12px; color: var(--text-2); width: max-content; max-width: 220px; line-height: 1.5; pointer-events: none; box-shadow: 0 8px 24px rgba(0,0,0,0.5); z-index: 30; }
 /* 匹配报告海报 */
 /* P1-21:匹配报告改居中弹窗(可分享海报,居中比窄抽屉更合适,且对齐用例 TC-FR-122) */
-.mr2-wrap { position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 460px; max-width: 94vw; max-height: 92vh; overflow-y: auto; border-radius: 18px; border: 1px solid var(--border-2); padding: 0; box-shadow: 0 30px 80px -20px rgba(0,0,0,0.75); animation: mr2pop .24s cubic-bezier(.2,.7,.2,1); }
+.mr2-wrap { position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 640px; max-width: 94vw; max-height: 92vh; overflow-y: auto; border-radius: 18px; border: 1px solid var(--border-2); padding: 0; background: #12161e; box-shadow: 0 30px 80px -20px rgba(0,0,0,0.8); animation: mr2pop .24s cubic-bezier(.2,.7,.2,1); }
 @keyframes mr2pop { from { transform: translate(-50%, -48%) scale(.97); opacity: .5 } to { transform: translate(-50%, -50%) scale(1); opacity: 1 } }
 .mr2-loading { height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 14px; color: var(--text-2); font-size: 13.5px; padding: 40px; text-align: center; }
 .mr2-loading .spinner { width: 26px; height: 26px; }
