@@ -1171,8 +1171,9 @@ export default function Explore({ onOpen }) {
         {!chatOnly && (
         <div style={{ display: 'flex', gap: 10, alignItems: 'flex-start' }}>
           <div className="seg glass">
-            <button className={!isStar ? 'on' : ''} onClick={() => setMode('doc')}>文档</button>
-            <button className={isStar ? 'on' : ''} onClick={() => setMode('star')}>星海</button>
+            {/* ★同步清数据:否则切模式那一帧会用"新模式+旧数据"渲染出错误的过渡图(如文档模式闪出1660星海节点),effect的setData(null)在渲染之后才跑 */}
+            <button className={!isStar ? 'on' : ''} onClick={() => { if (isStar) setData(null); setMode('doc') }}>文档</button>
+            <button className={isStar ? 'on' : ''} onClick={() => { if (!isStar) setData(null); setMode('star') }}>星海</button>
           </div>
           {isStar && (<div className="seg glass">{GRAINS.map((g) => (<button key={g.key} className={g.key === grain ? 'on' : ''} onClick={() => setGrain(g.key)}>{g.name}</button>))}</div>)}
           <form className="search-wrap" onSubmit={doSearch} style={{ width: 220 }}><IconSearch /><input className="search" placeholder="搜索飞向星系" value={q} onChange={(e) => setQ(e.target.value)} /></form>
@@ -1237,7 +1238,7 @@ export default function Explore({ onOpen }) {
       {!empty && data && chatOnly && (<div className="preset-bar glass" style={{ pointerEvents: 'none', opacity: 0.82 }}><span style={{ padding: '0 8px', fontSize: 12, color: 'var(--text-2)' }}>点主题放大 · 点星看聊天 · 点空白返回全景</span></div>)}
 
       {!empty && data && (
-        <button className={'chatonly-btn glass' + (chatOnly ? ' on' : '')} onClick={() => setChatOnly((v) => !v)} title="只看微信聊天节点">
+        <button className={'chatonly-btn glass' + (chatOnly ? ' on' : '')} onClick={() => { setData(null); setChatOnly((v) => !v) }} title="只看微信聊天节点">
           <span className="co-dot" />仅聊天
         </button>
       )}
