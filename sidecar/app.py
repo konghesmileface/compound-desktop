@@ -2508,6 +2508,59 @@ def _cloud_proxy(method, path, authorization, body=None):
         raise HTTPException(502, "支付服务连接失败")
 
 
+# ========== 好友社交(走云 compound-server:手机号加+对方同意+画像共享算姻缘)==========
+#   ★本地优先:数据在本地,只把"我的画像"这一份上传云端;云端只让已互为好友的双方互取画像。
+#   加好友=按手机号发请求→对方同意(=授权双方算姻缘)。无发现池。
+def _share_persona_to_cloud(authorization, data, mbti=""):
+    """后台把我的画像上传到云社交库(供已同意好友算姻缘)。失败静默(不影响本地画像)。"""
+    if not authorization:
+        return
+    def _do():
+        try:
+            _cloud_proxy("POST", "/social/persona/share", authorization,
+                         {"data": data, "mbti": mbti})
+        except Exception:
+            pass
+    import threading as _th
+    _th.Thread(target=_do, daemon=True).start()
+
+@app.post("/api/friend/request")
+def friend_request_api(payload: dict = Body(...), authorization: str = Header(None)):
+    """按手机号发好友请求(对方需同意)。"""
+    _me(authorization)
+    return _cloud_proxy("POST", "/social/friend/request", authorization, {"to": (payload.get("to") or "").strip()})
+
+@app.get("/api/friend/requests")
+def friend_requests_api(authorization: str = Header(None)):
+    _me(authorization)
+    return _cloud_proxy("GET", "/social/friend/requests", authorization)
+
+@app.post("/api/friend/respond")
+def friend_respond_api(payload: dict = Body(...), authorization: str = Header(None)):
+    """同意/拒绝好友请求。同意=互为好友+双方可算姻缘。"""
+    _me(authorization)
+    return _cloud_proxy("POST", "/social/friend/respond", authorization,
+                        {"from": (payload.get("from") or "").strip(), "accept": bool(payload.get("accept"))})
+
+@app.get("/api/friend/list")
+def friend_list_api(authorization: str = Header(None)):
+    _me(authorization)
+    return _cloud_proxy("GET", "/social/friend/list", authorization)
+
+@app.post("/api/friend/remove")
+def friend_remove_api(payload: dict = Body(...), authorization: str = Header(None)):
+    _me(authorization)
+    return _cloud_proxy("POST", "/social/friend/remove", authorization, {"other": (payload.get("other") or "").strip()})
+
+def _fetch_friend_persona(authorization, other):
+    """从云取已同意好友的画像(非好友返回 None)。"""
+    try:
+        r = _cloud_proxy("GET", "/social/friend/persona/" + _urlreq.quote(other), authorization)
+        return r.get("data"), (r.get("mbti") or ""), (r.get("display") or other)
+    except HTTPException:
+        return None, "", other
+
+
 @app.get("/api/account")
 def api_account(authorization: str = Header(None), fresh: int = 0):
     """账号+授权(试用倒计时/付费墙用)。不门控:过期用户也要能读到自己状态。fresh=1 绕缓存。"""
@@ -2664,10 +2717,16 @@ def match(other: str, refresh: int = 0, authorization: str = Header(None)):
         if not pa:
             # P1-18:本人没画像就别发 LLM(会空耗 200s 产劣质报告)→ 让前端引导先完善画像
             return {"needs_persona": True, "other": other}
+        # ★本地优先:对方画像先看本地(种子/老数据),没有就从云取"已同意好友"的画像(只共享AI画像非原文)。
         rb = con.execute("SELECT data,mbti FROM personas WHERE username=?", (other,)).fetchone()
-        if not rb:
-            raise HTTPException(404, "没这个人")
-        pb, mb = json.loads(rb[0]), (rb[1] or "")
+        if rb:
+            pb, mb = json.loads(rb[0]), (rb[1] or "")
+        else:
+            _cd, _cm, _ = _fetch_friend_persona(authorization, other)
+            if not _cd:
+                raise HTTPException(404, "还不能匹配:对方需先同意成为好友、且生成过画像")
+            pb = _cd if isinstance(_cd, dict) else json.loads(_cd)
+            mb = _cm
         # 真实填写的基础资料优先(MBTI 等绝不由 AI 编造):有真实填写就用真实的,没填就标未知
         _upa = _user_profile(con, me); _upb = _user_profile(con, other)
         ma_real = bool(_upa["mbti"]); mb_real = bool(_upb["mbti"])
@@ -3873,6 +3932,9 @@ def persona(refresh: int = 0, authorization: str = Header(None)):
         con.execute("INSERT OR IGNORE INTO personas(username, data) VALUES(?, ?)", (me, dj))
         con.execute("UPDATE personas SET data=? WHERE username=?", (dj, me))
         con.commit()
+        # ★上传画像到云(供已同意好友算姻缘)。本地优先:数据在本地,只把画像这一份共享给云,
+        #   且云端只让"已互为好友"的人取到(见 compound-server /social/friend/persona)。后台不阻塞。
+        _share_persona_to_cloud(authorization, data, _user_profile(con, me).get("mbti") or "")
         return {"cached": False, **data}
     finally:
         con.close()

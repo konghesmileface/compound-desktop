@@ -66,6 +66,12 @@ export const api = {
   phoneLogin: (phone, code) => fetch('/api/auth/phone_login', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ phone, code }) }).then(j),
   people: () => fetch('/api/people', { headers: authHeaders() }).then(j),
   friend: (username, action = 'add') => fetch('/api/friend', { method: 'POST', headers: { 'Content-Type': 'application/json', ...authHeaders() }, body: JSON.stringify({ username, action }) }).then(j),
+  // ★好友社交(走云:手机号加+对方同意+画像共享算姻缘)
+  friendRequest: (to) => fetch('/api/friend/request', { method: 'POST', headers: { 'Content-Type': 'application/json', ...authHeaders() }, body: JSON.stringify({ to }) }).then(j),
+  friendRequests: () => fetch('/api/friend/requests', { headers: authHeaders() }).then(j),
+  friendRespond: (from, accept) => fetch('/api/friend/respond', { method: 'POST', headers: { 'Content-Type': 'application/json', ...authHeaders() }, body: JSON.stringify({ from, accept }) }).then(j),
+  friendList: () => fetch('/api/friend/list', { headers: authHeaders() }).then(j),
+  friendRemove: (other) => fetch('/api/friend/remove', { method: 'POST', headers: { 'Content-Type': 'application/json', ...authHeaders() }, body: JSON.stringify({ other }) }).then(j),
   match: (u, refresh) => fetch('/api/match/' + encodeURIComponent(u) + (refresh ? '?refresh=1' : ''), { headers: authHeaders() }).then(j),
   lifestory: (refresh, style) => fetch('/api/lifestory?' + (refresh ? 'refresh=1&' : '') + 'style=' + (style || 'cinema'), { headers: authHeaders() }).then(j),
   songMake: (force) => fetch('/api/song/make' + (force ? '?force=1' : ''), { method: 'POST', headers: authHeaders() }).then(j),
