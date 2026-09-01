@@ -4046,9 +4046,11 @@ def delete_card(card_id: int, authorization: str = Header(None)):
         con.close()
 
 
+_GEN_JOBS = {}   # 异步产出任务:job_id -> {state: running|done|error, result/error}
+
 @app.post("/api/generate")
 def gen(payload: dict = Body(...), authorization: str = Header(None)):
-    """基于知识库检索的素材,生成 PPT/Word/Excel 真文件。"""
+    """基于知识库检索的素材,生成 PPT/Word/Excel 真文件(异步:返回 job_id,前端轮询 /api/generate/status)。"""
     me = _me(authorization)
     topic = (payload.get("topic") or "").strip()
     fmt = payload.get("format", "ppt")
@@ -4072,23 +4074,45 @@ def gen(payload: dict = Body(...), authorization: str = Header(None)):
         srcs = [s for s in S.retrieve(con, topic, topk=40) if s["doc_id"] in mine][:10]
     finally:
         con.close()
-    tag = _dt.datetime.now().strftime("%m%d%H%M%S")
-    try:
-        r = G.generate(LLM, topic, srcs, fmt, tag, theme)
-    except Exception as e:
-        raise HTTPException(400, f"生成失败(检查设置里的模型/key): {e}")
-    _out = {**r, "url": f"/api/download/{r['file']}", "sources": srcs}
-    try:
-        _c3 = _con()
+    # ★异步任务:深度撰写+officecli 常 60-90s,而 Tauri WKWebView 有 ~60s 网络超时→同步请求必被掐断
+    #   报"生成失败"(其实服务端产出了)。改成立即返 job_id、后台生成、前端轮询,彻底躲开超时。
+    import uuid as _uuid
+    jid = "gen-" + _uuid.uuid4().hex[:12]
+    _GEN_JOBS[jid] = {"state": "running"}
+    def _gen_work():
         try:
-            _c3.execute("INSERT OR REPLACE INTO gen_cache(owner,k,day,data) VALUES(?,?,?,?)",
-                        (me, _gk, _dt.date.today().isoformat(), json.dumps(_out, ensure_ascii=False)))
-            _c3.commit()
-        finally:
-            _c3.close()
-    except Exception:
-        pass
-    return _out
+            tag = _dt.datetime.now().strftime("%m%d%H%M%S")
+            r = G.generate(LLM, topic, srcs, fmt, tag, theme)
+            _out = {**r, "url": f"/api/download/{r['file']}", "sources": srcs}
+            try:
+                _c3 = _con()
+                try:
+                    _c3.execute("INSERT OR REPLACE INTO gen_cache(owner,k,day,data) VALUES(?,?,?,?)",
+                                (me, _gk, _dt.date.today().isoformat(), json.dumps(_out, ensure_ascii=False)))
+                    _c3.commit()
+                finally:
+                    _c3.close()
+            except Exception:
+                pass
+            _GEN_JOBS[jid] = {"state": "done", "result": _out}
+        except Exception as e:
+            _GEN_JOBS[jid] = {"state": "error", "error": str(e)}
+    import threading as _th
+    _th.Thread(target=_gen_work, daemon=True).start()
+    return {"job_id": jid, "pending": True}
+
+
+@app.get("/api/generate/status/{jid}")
+def gen_status(jid: str, authorization: str = Header(None)):
+    _me(authorization)
+    j = _GEN_JOBS.get(jid)
+    if not j:
+        return {"state": "unknown"}
+    if j["state"] == "done":
+        return {"state": "done", **j["result"]}
+    if j["state"] == "error":
+        return {"state": "error", "error": j.get("error", "")}
+    return {"state": "running"}
 
 
 @app.get("/api/preview/{fname}")

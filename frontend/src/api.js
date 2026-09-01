@@ -142,7 +142,18 @@ export const api = {
   deleteCard: (id) => fetch(`/api/card/${id}`, { method: 'DELETE', headers: authHeaders() }).then(j),
   cardStatus: (id, status) => fetch(`/api/card/${id}/status`, { method: 'POST', headers: { 'Content-Type': 'application/json', ...authHeaders() }, body: JSON.stringify({ status }) }).then(j),
   cardEdit: (id, content) => fetch(`/api/card/${id}/edit`, { method: 'POST', headers: { 'Content-Type': 'application/json', ...authHeaders() }, body: JSON.stringify({ content }) }).then(j),
-  generate: (topic, format, theme) => fetch('/api/generate', { method: 'POST', headers: { 'Content-Type': 'application/json', ...authHeaders() }, body: JSON.stringify({ topic, format, theme }) }).then(j),
+  // ★异步产出:后端立即返 job_id,内部轮询到完成——躲开 Tauri WKWebView ~60s 网络超时(深度撰写常60-90s)。命中缓存则直接返回。
+  generate: async (topic, format, theme) => {
+    const r = await fetch('/api/generate', { method: 'POST', headers: { 'Content-Type': 'application/json', ...authHeaders() }, body: JSON.stringify({ topic, format, theme }) }).then(j)
+    if (!r || !r.job_id) return r
+    for (let i = 0; i < 180; i++) {
+      await new Promise((s) => setTimeout(s, 2000))
+      const st = await fetch('/api/generate/status/' + r.job_id, { headers: authHeaders() }).then(j)
+      if (st && st.state === 'done') return st
+      if (st && st.state === 'error') throw new Error(st.error || '生成失败')
+    }
+    throw new Error('生成超时')
+  },
   upload: (files, backend = 'auto') => {
     const fd = new FormData()
     for (const f of files) {
