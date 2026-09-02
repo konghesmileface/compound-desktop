@@ -157,7 +157,7 @@ export const api = {
     for (let i = 0; i < 180; i++) {
       await new Promise((s) => setTimeout(s, 2000))
       const st = await fetch('/api/generate/status/' + r.job_id, { headers: authHeaders() }).then(j)
-      if (st && st.state === 'done') return st
+      if (st && st.state === 'done') return st.result || st   // ★解包:后端 status 是 {state,result},前端要的是 result(url/title/format/file)
       if (st && st.state === 'error') throw new Error(st.error || '生成失败')
     }
     throw new Error('生成超时')

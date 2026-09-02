@@ -131,9 +131,13 @@ def embed_pending(con, batch: int = None, char_limit: int = 1400,
     if max_pages is None: max_pages = prof["max_pages"]
     if throttle is None:  throttle = prof["throttle"]
     ensure_schema(con)
+    # ★微信聊天优先:实时同步的聊天该尽快进语义层,别被大书 backlog 挡在后面
+    #   (无序时按 rowid 升序,大书 id 更低会全排前面 → 聊天最后 31 页久久不动)。
     _sql = ("""SELECT p.id, p.text FROM pages p
                LEFT JOIN page_embeddings e ON e.page_id = p.id
-               WHERE e.page_id IS NULL AND length(trim(p.text)) > 0""")
+               JOIN documents d ON d.id = p.doc_id
+               WHERE e.page_id IS NULL AND length(trim(p.text)) > 0
+               ORDER BY (d.filename LIKE '微信_与%') DESC, p.id""")
     if max_pages:
         _sql += " LIMIT %d" % int(max_pages)
     rows = con.execute(_sql).fetchall()
