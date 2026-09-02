@@ -66,6 +66,7 @@ def transcribe_segments(wav_path, progress_cb=None):
     import wave
     import numpy as np
     import sherpa_onnx
+    import time as _time
     w = wave.open(wav_path)
     total = w.getnframes() / w.getframerate()
     vcfg = sherpa_onnx.VadModelConfig()
@@ -99,6 +100,9 @@ def transcribe_segments(wav_path, progress_cb=None):
                     progress_cb(min(int(start), int(total)), int(total))
                 except Exception:
                     pass
+            # ★让出 CPU:ASR 满负荷会把 HTTP 服务饿死→/health、/job 应答不了→前端误报"网络不稳/出错"。
+            #   每段后短暂 sleep 让 uvicorn 有机会响应(轻微拖慢转写,换来进度一直可刷、不吓用户)。
+            _time.sleep(0.02)
     # ★流式读音频:每次读 1s 帧喂 VAD,绝不把整段音轨压进内存(2h 视频≈460MB→OOM 撑崩 8G sidecar 的真凶)。
     #   峰值内存 = 1s 块 + VAD 内部有界缓冲。
     CHUNK = 16000  # 1 秒
@@ -115,6 +119,7 @@ def transcribe_segments(wav_path, progress_cb=None):
         drained += 1
         if drained % 3 == 0:   # 每 ~3s drain 一次(及时出段+回收)
             _drain()
+        _time.sleep(0.003)   # 读帧/VAD 之间也让出一点 CPU,保 HTTP 服务不被饿死
     _drain(flush=True)
     try:
         w.close()
@@ -427,7 +432,14 @@ def process_media(con, path, vault_dir, force=False, progress_cb=None):
         if os.environ.get("ASR_LLM_FIX", "1") == "1" and units:
             print("  ✏️  LLM词典纠错中(%d页)…" % len(units))
             gl = _glossary(con)
-            units = [(t0, _llm_fix(txt, gl)) for (t0, txt) in units]
+            # ★并行纠错:逐页是网络 I/O(等 LLM),串行几十页要等很久;并发跑质量不变、快数倍。
+            from concurrent.futures import ThreadPoolExecutor
+            try:
+                with ThreadPoolExecutor(max_workers=5) as _ex:
+                    fixed = list(_ex.map(lambda u: (u[0], _llm_fix(u[1], gl)), units))
+                units = fixed
+            except Exception:
+                units = [(t0, _llm_fix(txt, gl)) for (t0, txt) in units]   # 并发异常回退串行
         n = len(units)
         method0 = "asr:sensevoice" + ("+ocr" if vis else "")
         dur_line = "时长 %s, 语音段 %d, 画面帧 %d" % (_fmt_t(total), len(segs), len(vis))
