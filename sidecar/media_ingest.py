@@ -68,7 +68,6 @@ def transcribe_segments(wav_path, progress_cb=None):
     import sherpa_onnx
     w = wave.open(wav_path)
     total = w.getnframes() / w.getframerate()
-    samples = np.frombuffer(w.readframes(w.getnframes()), dtype=np.int16).astype(np.float32) / 32768.0
     vcfg = sherpa_onnx.VadModelConfig()
     vcfg.silero_vad.model = _VAD
     vcfg.silero_vad.threshold = 0.5
@@ -100,12 +99,27 @@ def transcribe_segments(wav_path, progress_cb=None):
                     progress_cb(min(int(start), int(total)), int(total))
                 except Exception:
                     pass
-    while i < len(samples):
-        vad.accept_waveform(samples[i:i + win])
-        i += win
-        if i % (win * 200) == 0:
+    # ★流式读音频:每次读 1s 帧喂 VAD,绝不把整段音轨压进内存(2h 视频≈460MB→OOM 撑崩 8G sidecar 的真凶)。
+    #   峰值内存 = 1s 块 + VAD 内部有界缓冲。
+    CHUNK = 16000  # 1 秒
+    drained = 0
+    while True:
+        buf = w.readframes(CHUNK)
+        if not buf:
+            break
+        chunk = np.frombuffer(buf, dtype=np.int16).astype(np.float32) / 32768.0
+        j = 0
+        while j < len(chunk):
+            vad.accept_waveform(chunk[j:j + win])
+            j += win
+        drained += 1
+        if drained % 3 == 0:   # 每 ~3s drain 一次(及时出段+回收)
             _drain()
     _drain(flush=True)
+    try:
+        w.close()
+    except Exception:
+        pass
     return segs, total
 
 
@@ -380,7 +394,8 @@ def process_media(con, path, vault_dir, force=False, progress_cb=None):
             return "error"
         print(f"  🎙  转写中: {os.path.basename(path)}")
         segs, total = transcribe_segments(wav, progress_cb)
-        if os.environ.get("ASR_DIARIZE", "1") == "1" and segs:
+        # ★说话人识别(diarize)会把整段 wav 再读进内存;长文件(>30min)跳过,防 8G 上 OOM 撑崩 sidecar。
+        if os.environ.get("ASR_DIARIZE", "1") == "1" and segs and total <= 1800:
             spk = diarize(wav)
             if spk:
                 n_spk = len({s for (_, _, s) in spk})

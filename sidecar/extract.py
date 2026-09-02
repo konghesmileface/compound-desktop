@@ -152,10 +152,27 @@ def _html_readable(raw):
                     el.decompose()
                 except Exception:
                     pass
-        # 优先正文容器
-        main = (soup.find("article") or soup.find("main")
-                or soup.find(attrs={"role": "main"}) or soup.body or soup)
-        text = main.get_text("\n")
+        # 1) 有语义容器就优先(<article>/<main>/role=main)
+        node = soup.find("article") or soup.find("main") or soup.find(attrs={"role": "main"})
+        # 2) 否则按"文本密度"自适应挑正文块(适配千差万别的网页结构):
+        #    文本越多、链接占比越低、段落越多 → 越像正文;链接占比高=导航/列表,跳过。
+        if node is None:
+            best, best_score = None, 0.0
+            for el in soup.find_all(["div", "section", "td", "article"]):
+                txt = el.get_text(" ", strip=True)
+                n = len(txt)
+                if n < 180:
+                    continue
+                link_txt = sum(len(a.get_text(" ", strip=True)) for a in el.find_all("a"))
+                link_density = link_txt / float(n)
+                if link_density > 0.45:
+                    continue
+                p = len(el.find_all("p"))
+                score = n * (1.0 - link_density) + p * 40
+                if score > best_score:
+                    best, best_score = el, score
+            node = best or soup.body or soup
+        text = node.get_text("\n")
     except Exception:
         return _html_to_text(raw)
     lines = [ln.strip() for ln in text.splitlines() if ln.strip()]

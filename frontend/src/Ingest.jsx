@@ -31,18 +31,18 @@ export default function Ingest({ onDone }) {
       try {
         j = await api.job(id)
       } catch (e) {
-        // 404 = 任务在后端已不存在(服务重启过 / 已过期)→ 立即放弃,不再重试
+        // 404 = 任务在后端已不存在(服务重启过 / 已过期)。★别吓用户"重新上传":重启丢的是进度显示,
+        //   文件多半已入库,先引导去文库看。
         if (String(e.message) === '404') {
           clearInterval(t); setBusy(false); localStorage.removeItem(JOB_KEY)
-          if (resumed) { setJob(null); toast('上次的入库任务已结束或已过期', 'info') }
-          else setJob({ phase: 'error', error: '任务已失效(服务可能重启过),请重新上传' })
+          if (resumed) { setJob(null); toast('上次的入库任务已结束', 'info') }
+          else setJob({ phase: 'error', error: '进度显示中断了(后端刷新过)。你的文件多半已入库——去「文库」看看有没有;没有再重传即可,不用担心。' })
           return
         }
-        // 其它错误(网络抖动 / 5xx)→ 容忍几次再放弃,别让一次抖动丢掉进行中的任务
-        if (++fails >= 6) {
-          clearInterval(t); setBusy(false)
-          setJob((p) => ({ ...(p || {}), phase: 'error', error: '网络不稳,已暂停刷新进度,请稍后重试' }))
-        }
+        // ★网络抖动 / sidecar 忙(大文件 ASR 时后端很忙、/job 响应慢很正常)→ 一直耐心重试,
+        //   绝不因几秒抖动就报"出错"让用户误以为要重传/放弃。只挂个软提示。
+        fails++
+        setJob((p) => ({ ...(p || {}), phase: (p && p.phase) || 'ingesting', _stalled: fails }))
         return
       }
       fails = 0
@@ -187,6 +187,17 @@ export default function Ingest({ onDone }) {
             {job.embedded_pages > 0 && <span>已嵌入 <span className="num">{job.embedded_pages}</span> 页</span>}
             {job.error && <span style={{ color: 'var(--bad)' }}>{job.error}</span>}
           </div>
+          {/* ★网络抖动/服务忙时的软安抚(不报错,让用户安心等,别重传/放弃)*/}
+          {!done && job.phase !== 'error' && job._stalled > 3 && (
+            <div className="progress-hint" style={{ marginTop: 8, fontSize: 12.5, color: 'var(--text-3)', lineHeight: 1.6 }}>
+              还在处理中 —— 网络抖动或后端正忙(大文件转写很吃资源),已自动重连,请稍候,<b>不用重传</b>。
+            </div>
+          )}
+          {!done && job.phase !== 'error' && (
+            <div className="progress-hint" style={{ marginTop: 6, fontSize: 12, color: 'var(--text-3)', lineHeight: 1.6 }}>
+              视频 / 长录音转写通常需几分钟,请保持应用打开、别重复上传;进度偶尔卡住是正常的。
+            </div>
+          )}
         </div>
       )}
 
