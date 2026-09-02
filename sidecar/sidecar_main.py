@@ -97,9 +97,13 @@ def main():
         import glob as _glob
         ok = True
         # A) 重依赖能 import(缺=ImportError 运行时崩)
+        # ★惰性(函数内)import 的第三方库也必须列全:PyInstaller 偶尔漏收(如 yt_dlp 曾漏→视频链接崩),
+        #   放进 selftest→缺任一 CI 立即 FAIL,不流到用户机(根治"打包不全面"这类哑火)。
         for mod in ("torch", "sentence_transformers", "rapidocr",
                     "sklearn.cluster", "sklearn.neighbors", "fitz", "docx",
-                    "pptx", "openpyxl", "jieba", "cv2", "onnxruntime", "numpy", "certifi"):
+                    "pptx", "openpyxl", "jieba", "cv2", "onnxruntime", "numpy", "certifi",
+                    "yt_dlp", "bs4", "soundfile", "mobi", "edge_tts", "sherpa_onnx",
+                    "requests", "huggingface_hub"):
             try:
                 __import__(mod)
                 print(f"  OK  import {mod}")

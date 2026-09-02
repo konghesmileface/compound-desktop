@@ -4731,12 +4731,20 @@ def _fetch_url(url: str, owner=None) -> str:
     vid_sites = ("bilibili.com", "b23.tv", "youtube.com", "youtu.be", "douyin.com",
                  "ixigua.com", "v.qq.com", "xiaoyuzhoufm.com")
     if any(h in url for h in vid_sites):
-        import yt_dlp
+        try:
+            import yt_dlp
+        except Exception:
+            raise HTTPException(400, "当前版本暂不支持视频链接抓取(缺 yt-dlp)。可直接粘贴网页/文章链接。")
+        # ★ffmpeg 路径:优先用打进包的 _MEIPASS/bin(officecli 同款定位),回落系统 PATH。
+        #   (旧代码硬编码 /home/kb/brain/bin 服务器路径→客户端 Mac 上必崩,视频永远抓不了)
+        import sys as _sys2
+        _binroot = os.path.join(getattr(_sys2, "_MEIPASS", os.path.dirname(os.path.abspath(__file__))), "bin")
         opts = {"outtmpl": os.path.join(_updir, "%(title).60s.%(ext)s"),
                 "format": "bv*[height<=720]+ba/b[height<=720]/b",
                 "merge_output_format": "mp4", "quiet": True, "noplaylist": True,
-                "ffmpeg_location": "/home/kb/brain/bin",
                 "max_filesize": 800 * 1024 * 1024}
+        if os.path.isfile(os.path.join(_binroot, "ffmpeg")) or os.path.isfile(os.path.join(_binroot, "ffmpeg.exe")):
+            opts["ffmpeg_location"] = _binroot   # 打包内有就用它;否则不设→yt_dlp 自己找 PATH
         with yt_dlp.YoutubeDL(opts) as y:
             info = y.extract_info(url, download=True)
             pth = y.prepare_filename(info)
