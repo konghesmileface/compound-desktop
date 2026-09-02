@@ -67,6 +67,10 @@ jobs:
           arch -x86_64 "$PY" -m venv .venv-paddle
           arch -x86_64 .venv-paddle/bin/python -m pip install --upgrade pip
           arch -x86_64 .venv-paddle/bin/python -m pip install "paddlepaddle==3.0.0" "paddleocr" "paddlex[ocr]" fastapi uvicorn python-multipart Pillow pyinstaller
+          # ★paddlex[ocr] 新版拉进 modelscope→cryptography,arm64 runner 上常装成 arm64 wheel→
+          #   x86_64 加载报 "incompatible architecture (have 'arm64', need 'x86_64')" 构建崩。
+          #   强制以 x86_64 无缓存、只用 wheel 重装 cryptography(有官方 x86_64 macos wheel)。
+          arch -x86_64 .venv-paddle/bin/python -m pip install --force-reinstall --no-cache-dir --only-binary :all: cryptography
           # 下 PP-StructureV3 全套模型到 paddle_models/(区域无关离线);spec 会打进包
           PADDLE_PDX_CACHE_HOME="$PWD/paddle_models" arch -x86_64 .venv-paddle/bin/python -c "from paddleocr import PPStructureV3; PPStructureV3(use_doc_orientation_classify=False, use_doc_unwarping=False, use_chart_recognition=False); print('paddle models ready')"
           du -sh paddle_models
