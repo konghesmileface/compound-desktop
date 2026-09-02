@@ -458,13 +458,22 @@ def _doc_topics_cached(con):
             threading.Thread(target=_bg, daemon=True).start()
         return {int(k): tuple(v) for k, v in json.loads(row[1]).items()}
 
-    # 无任何缓存 → 首次同步构建(仅一次)
-    t = S.doc_topics(con)
-    try:
-        _save(con, t)
-    except Exception:
-        pass
-    return t
+    # 无任何缓存 → 绝不同步构建!doc_topics 要读全部向量+KMeans(700+文档/万级向量),
+    #   同步跑会堵死 worker→整个 sidecar 无响应(health 000,用户实测文库把 sidecar 卡崩)。
+    #   改:先返空(全部"未分类",文库照常列出所有文档)+ 后台构建,下次加载就有分类。
+    if "global" not in _LIBTOPICS_GEN:
+        _LIBTOPICS_GEN.add("global")
+
+        def _bg_first():
+            c2 = _con()
+            try:
+                _save(c2, S.doc_topics(c2))
+            except Exception as e:
+                print("[library] topics first-build fail:", e)
+            finally:
+                _LIBTOPICS_GEN.discard("global"); c2.close()
+        threading.Thread(target=_bg_first, daemon=True).start()
+    return {}
 
 
 @app.get("/api/library")
