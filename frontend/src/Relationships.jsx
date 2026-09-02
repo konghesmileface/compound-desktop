@@ -38,12 +38,16 @@ export default function Relationships({ onOpen, onAsk, onAskContact }) {
   const [destroying, setDestroying] = useState({})   // 正在销毁动画的 contact
 
   const removeCard = async (contact) => {
-    if (!(await confirmDialog('删除「' + contact + '」的关系卡?\n只删卡片,聊天记录不会删除,以后还能重新分析生成。', '删除卡片'))) return
+    const r = await confirmDialog(
+      '删除「' + contact + '」的关系卡?\n默认只删卡片,聊天记录保留、以后还能重新分析生成。',
+      '删除卡片', true, { checkbox: '同步删除该联系人的聊天记录(不可恢复)' })
+    if (!r) return
+    const wipe = r === true ? false : !!r.checked
     setDestroying((d) => ({ ...d, [contact]: true }))
-    api.deleteCard(contact).catch(() => {})
+    api.deleteRelCard(contact, wipe).catch(() => {})
     setTimeout(() => {
       setCards((cs) => (cs || []).filter((c) => c.contact !== contact))
-      toast('已删除卡片(聊天记录保留)', 'ok')
+      toast(wipe ? '已删除卡片和聊天记录' : '已删除卡片(聊天记录保留)', 'ok')
     }, 520)
   }
 

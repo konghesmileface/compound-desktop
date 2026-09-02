@@ -14,14 +14,17 @@ export function toast(msg, type = 'info') {
   setTimeout(() => { state.toasts = state.toasts.filter((t) => t.id !== id); emit() }, 2800)
 }
 
-export function confirmDialog(msg, okText = '确定', danger = false) {
-  return new Promise((res) => { state.confirm = { msg, okText, danger, res }; emit() })
+// opts.checkbox = '复选项文案' 时,弹框多一个复选框;确认时 resolve {ok:true, checked} 而非 true(不传则维持 true/false)
+export function confirmDialog(msg, okText = '确定', danger = false, opts = {}) {
+  return new Promise((res) => { state.confirm = { msg, okText, danger, checkbox: opts.checkbox || null, res }; emit() })
 }
 
 export function UIHost() {
   const [s, setS] = useState({ toasts: [], confirm: null })
+  const [chk, setChk] = useState(false)
   useEffect(() => { listeners.push(setS); return () => { listeners = listeners.filter((l) => l !== setS) } }, [])
-  const done = (v) => { const c = state.confirm; state.confirm = null; emit(); c && c.res(v) }
+  useEffect(() => { if (s.confirm) setChk(false) }, [s.confirm])
+  const done = (v) => { const c = state.confirm; state.confirm = null; emit(); if (c) c.res(v && c.checkbox ? { ok: true, checked: chk } : v) }
   return (
     <>
       <div className="toaster">
@@ -34,6 +37,12 @@ export function UIHost() {
           <div className="dialog glass" onClick={(e) => e.stopPropagation()}>
             <div className="dialog-x" onClick={() => done(false)}><IconClose /></div>
             <div className="dialog-msg">{s.confirm.msg}</div>
+            {s.confirm.checkbox && (
+              <label className="dialog-check" onClick={(e) => e.stopPropagation()}>
+                <input type="checkbox" checked={chk} onChange={(e) => setChk(e.target.checked)} />
+                <span>{s.confirm.checkbox}</span>
+              </label>
+            )}
             <div className="dialog-actions">
               <button className="btn" onClick={() => done(false)}>取消</button>
               <button className={'btn ' + (s.confirm.danger ? 'btn-danger' : 'btn-primary')} onClick={() => done(true)}>{s.confirm.okText}</button>

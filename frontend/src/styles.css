@@ -728,6 +728,8 @@ input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; appearance: 
 .dialog-x:hover { color: var(--text); background: var(--glass-2); }
 .dialog-x svg { width: 14px; height: 14px; }
 .dialog-msg { font-size: 15px; color: var(--text); line-height: 1.6; margin-bottom: 22px; }
+.dialog-check { display: flex; align-items: center; gap: 8px; margin: 14px 0 4px; font-size: 13px; color: var(--text-2); cursor: pointer; user-select: none; }
+.dialog-check input { width: 15px; height: 15px; accent-color: #f2555a; cursor: pointer; }
 .dialog-actions { display: flex; justify-content: flex-end; gap: 10px; }
 .btn-danger { background: var(--bad); color: #1a0808; border: none; font-weight: 600; }
 .btn-danger:hover { color: #1a0808; filter: brightness(1.06); }

@@ -121,7 +121,7 @@ export const api = {
   portrait: (refresh) => fetch('/api/network_portrait' + (refresh ? '?refresh=1' : ''), { headers: authHeaders() }).then(j),
   report: (contact, mode, since, until) => fetch('/api/report', { method: 'POST', headers: { 'Content-Type': 'application/json', ...authHeaders() }, body: JSON.stringify({ contact, mode, since, until }) }).then(j),
   wechatMessages: (contact, offset = 0, limit = 300) => fetch('/api/wechat_messages?contact=' + encodeURIComponent(contact) + '&offset=' + offset + '&limit=' + limit, { headers: authHeaders() }).then(j),
-  deleteCard: (contact) => fetch('/api/relationships/delete', { method: 'POST', headers: { 'Content-Type': 'application/json', ...authHeaders() }, body: JSON.stringify({ contact }) }).then(j),
+  deleteRelCard: (contact, wipeChat = false) => fetch('/api/relationships/delete', { method: 'POST', headers: { 'Content-Type': 'application/json', ...authHeaders() }, body: JSON.stringify({ contact, wipe_chat: !!wipeChat }) }).then(j),
   analysisStatus: () => fetch('/api/analysis_status', { headers: authHeaders() }).then(j),
   news: () => fetch('/api/news', { headers: authHeaders() }).then(j),
   setAvatar: (dataurl) => fetch('/api/avatar', { method: 'POST', headers: { 'Content-Type': 'application/json', ...authHeaders() }, body: JSON.stringify({ dataurl }) }).then(j),

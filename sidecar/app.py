@@ -927,9 +927,12 @@ def relationships_deepen(payload: dict = Body(...), authorization: str = Header(
 
 @app.post("/api/relationships/delete")
 def relationships_delete(payload: dict = Body(...), authorization: str = Header(None)):
-    """删除一张关系卡(记入 card_hidden 防重新分析时又长出来)。★只删卡,聊天记录 documents/pages 一条不动。"""
+    """删除一张关系卡(记入 card_hidden 防重新分析时又长出来)。
+    默认★只删卡,聊天记录 documents/pages 一条不动。
+    wipe_chat=True 时同步删除该联系人的微信聊天文档(documents/pages/embeddings,精确匹配 微信_与{contact}.txt)。"""
     me = _me(authorization)
     contact = str(payload.get("contact") or "").strip()
+    wipe_chat = bool(payload.get("wipe_chat"))
     if not contact:
         raise HTTPException(400, "缺少 contact")
     con = _con()
@@ -937,8 +940,18 @@ def relationships_delete(payload: dict = Body(...), authorization: str = Header(
         con.execute("CREATE TABLE IF NOT EXISTS card_hidden(username TEXT, contact TEXT, PRIMARY KEY(username,contact))")
         con.execute("INSERT OR IGNORE INTO card_hidden(username,contact) VALUES(?,?)", (me, contact))
         con.execute("DELETE FROM relationship_cards WHERE username=? AND contact=?", (me, contact))
+        wiped = 0
+        if wipe_chat:
+            # 精确匹配该联系人的微信聊天文档(不用 LIKE,防"王"误删"王昀")
+            rows = con.execute("SELECT id FROM documents WHERE owner=? AND filename=?",
+                               (me, "微信_与" + contact + ".txt")).fetchall()
+            for (did,) in rows:
+                con.execute("DELETE FROM page_embeddings WHERE page_id IN (SELECT id FROM pages WHERE doc_id=?)", (did,))
+                con.execute("DELETE FROM pages WHERE doc_id=?", (did,))
+                con.execute("DELETE FROM documents WHERE id=? AND owner=?", (did, me))
+                wiped += 1
         con.commit()
-        return {"ok": True}
+        return {"ok": True, "wiped_chat_docs": wiped}
     finally:
         con.close()
 
