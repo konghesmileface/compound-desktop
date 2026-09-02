@@ -1,5 +1,6 @@
 import React from 'react'
-import { openExternal } from './api'
+import { openExternal, saveHelperLocally } from './api'
+import { toast } from './ui'
 import { IconClose } from './icons'
 
 // 各数据源的「秒懂」分步引导。铁律:小白照着点,最少步骤把数据搞进来,最详细指导,搞不定我们帮接。
@@ -17,7 +18,12 @@ export function syncHref(file) { return DL_BASE + encodeURIComponent(file) }
 export function onSyncDownload(e, file) {
   if (typeof window !== 'undefined' && window.__TAURI__ && window.__TAURI__.core) {
     e.preventDefault()
-    window.__TAURI__.core.invoke('open_external', { url: DL_BASE + encodeURIComponent(file) })
+    // ★桌面版:直接拷到「下载」文件夹 + 文件管理器高亮(秒存,避开 Windows 浏览器下 .exe 的
+    //   SmartScreen 联网扫描卡顿)。失败再回落浏览器打开本地 /dl。
+    saveHelperLocally(file).then((p) => {
+      if (p) toast('已保存到「下载」文件夹,已为你高亮,双击安装即可', 'ok')
+      else openExternal(DL_BASE + encodeURIComponent(file))
+    }).catch(() => openExternal(DL_BASE + encodeURIComponent(file)))
   }
 }
 // tile:false 的不在「更多数据来源」网格里露出(只从微信同步卡的按钮打开)。

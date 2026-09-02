@@ -101,6 +101,24 @@ fn open_external(url: String) {
     let _ = Command::new("xdg-open").arg(&url).spawn();
 }
 
+/// 在系统文件管理器中高亮某个文件(下载好助手安装包后一键定位,不用浏览器下载→避开 Windows
+/// SmartScreen 对 .exe 的联网信誉扫描卡顿)。
+#[tauri::command]
+fn reveal_file(path: String) {
+    #[cfg(target_os = "macos")]
+    let _ = Command::new("open").args(["-R", &path]).spawn();
+    #[cfg(target_os = "windows")]
+    {
+        use std::os::windows::process::CommandExt;
+        let _ = Command::new("explorer.exe").args(["/select,", &path]).creation_flags(0x08000000).spawn();
+    }
+    #[cfg(target_os = "linux")]
+    {
+        let dir = std::path::Path::new(&path).parent().map(|p| p.to_string_lossy().to_string()).unwrap_or(path.clone());
+        let _ = Command::new("xdg-open").arg(&dir).spawn();
+    }
+}
+
 /// 弹原生目录选择器,返回选中的文件夹**绝对路径**(浏览器 webkitdirectory 拿不到真实路径,
 /// 这是"定期同步固定文件夹"能真正落地的关键)。取消返回 None。
 #[tauri::command]
@@ -120,7 +138,7 @@ fn main() {
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
         .manage(SidecarState { child: child_for_state })
-        .invoke_handler(tauri::generate_handler![open_external, pick_folder])
+        .invoke_handler(tauri::generate_handler![open_external, pick_folder, reveal_file])
         .setup(move |app| {
             let handle = app.handle().clone();
             let port = free_port();

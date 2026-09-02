@@ -4252,6 +4252,30 @@ def download(fname: str):
     return FileResponse(p, filename=fname)
 
 
+@app.post("/api/helper/save")
+def helper_save(payload: dict = Body(...)):
+    """把打包内的微信助手安装包直接拷到用户「下载」文件夹,返回路径。
+    ★绕开浏览器下载:Windows 浏览器下载 .exe 会触发 Defender+SmartScreen 联网信誉扫描(极慢)。
+    本地文件拷贝秒完成,无扫描卡顿。返回路径供前端在文件管理器高亮。"""
+    fname = os.path.basename(str(payload.get("file") or "").strip())
+    # 白名单:只允许三平台助手安装包,防路径穿越
+    allow = {"微信同步助手-Windows.exe", "微信同步助手-mac-Intel.dmg", "微信同步助手-mac-arm64.dmg"}
+    if fname not in allow:
+        raise HTTPException(400, "不允许的文件")
+    src = os.path.join(_DL_DIR, fname)
+    if not os.path.exists(src):
+        raise HTTPException(404, "安装包不存在(可能未打包)")
+    downloads = os.path.join(os.path.expanduser("~"), "Downloads")
+    try:
+        os.makedirs(downloads, exist_ok=True)
+    except Exception:
+        pass
+    dst = os.path.join(downloads, fname)
+    import shutil as _sh
+    _sh.copyfile(src, dst)
+    return {"ok": True, "path": dst}
+
+
 @app.get("/api/music-list")
 def music_list():
     out = {"epic": [], "calm": [], "uplift": []}

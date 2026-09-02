@@ -41,6 +41,17 @@ export function openExternal(url) {
   try { window.open(full, '_blank') } catch { /* noop */ }
 }
 
+// 桌面版下载助手安装包:让 sidecar 直接拷到「下载」文件夹 + 文件管理器高亮,绕开浏览器下载
+// (Windows 浏览器下 .exe 会被 Defender/SmartScreen 联网扫描卡很久)。返回保存路径;非 Tauri 返 null。
+export async function saveHelperLocally(file) {
+  if (!(typeof window !== 'undefined' && window.__TAURI__ && window.__TAURI__.core)) return null
+  const r = await fetch('/api/helper/save', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ file }) }).then(j)
+  if (r && r.path) {
+    try { window.__TAURI__.core.invoke('reveal_file', { path: r.path }) } catch { /* noop */ }
+  }
+  return r && r.path
+}
+
 export const api = {
   modelStatus: () => fetch('/api/model_status').then(j),
   stats: () => fetch('/api/stats', { headers: authHeaders() }).then(j),
