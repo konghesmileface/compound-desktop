@@ -234,6 +234,7 @@ export default function Friends({ auth }) {
     catch { toast('操作失败,请稍后再试', 'err') }
   }
   const removeFriend = async (p) => {
+    if (!(await confirmDialog(`确定删除好友「${p.display}」吗?删除后将不再互相用 AI 画像算姻缘,如需再来需重新加回。`, '删除'))) return
     try { await api.friend(p.username, 'remove'); await reload(); toast(`已移除 ${p.display}`, 'ok') }
     catch { toast(`移除 ${p.display} 没成功,请稍后再试`, 'err') }
   }

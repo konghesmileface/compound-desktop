@@ -1421,8 +1421,8 @@ input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; appearance: 
   transition: transform .5s cubic-bezier(.2,.7,.2,1);
 }
 .vinyl-card:hover .vinyl-disc { transform: translate(13%, -50%) rotate(9deg); }
-.vinyl-card.spinning .vinyl-disc { animation: vinylspin 3.4s linear infinite; }
-@keyframes vinylspin { to { transform: translate(13%, -50%) rotate(360deg); } }
+.vinyl-card.spinning .vinyl-disc { transform: translate(13%, -50%); animation: vinylspin 3.4s linear infinite; }
+@keyframes vinylspin { from { transform: translate(13%, -50%) rotate(0deg); } to { transform: translate(13%, -50%) rotate(360deg); } }
 /* 沟纹:同心圆细线 */
 .vinyl-grooves {
   position: absolute; inset: 4%; border-radius: 50%;
