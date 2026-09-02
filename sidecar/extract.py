@@ -86,15 +86,35 @@ def _text(path):
     return [(i + 1, chunk, method) for i, chunk in enumerate(_chunk_text(raw))]
 
 
+def _looks_html(s):
+    s2 = (s or "")[:800].lower()
+    return ("<!doctype html" in s2 or "<html" in s2 or "<body" in s2
+            or "<div" in s2 or "<table" in s2 or "<meta" in s2)
+
+
+def _html_to_text(html):
+    """HTML→纯文本。bs4 在就用 bs4(更干净),不在则正则去标签兜底(总比吐原始 HTML 强)。"""
+    try:
+        from bs4 import BeautifulSoup
+        soup = BeautifulSoup(html or "", "html.parser")
+        for s in soup(["script", "style", "noscript", "head"]):
+            s.decompose()
+        text = soup.get_text("\n")
+    except Exception:
+        import re as _re
+        s = _re.sub(r"(?is)<(script|style|head)[^>]*>.*?</\1>", " ", html or "")
+        s = _re.sub(r"(?s)<[^>]+>", "\n", s)
+        import html as _hm
+        text = _hm.unescape(s)
+    lines = [ln.strip() for ln in text.splitlines() if ln.strip()]
+    return "\n".join(lines)
+
+
 def _html(path):
     """网页 / 聊天记录 html 导出 → 去标签取正文。"""
-    from bs4 import BeautifulSoup
     with open(path, "r", encoding="utf-8", errors="ignore") as f:
-        soup = BeautifulSoup(f.read(), "html.parser")
-    for s in soup(["script", "style", "noscript"]):
-        s.decompose()
-    lines = [ln.strip() for ln in soup.get_text("\n").splitlines() if ln.strip()]
-    return [(i + 1, chunk, "html") for i, chunk in enumerate(_chunk_text("\n".join(lines)))]
+        raw = f.read()
+    return [(i + 1, chunk, "html") for i, chunk in enumerate(_chunk_text(_html_to_text(raw)))]
 
 
 def _csv(path):
@@ -173,11 +193,19 @@ def _mbox(path):
     mb = mailbox.mbox(path, factory=factory)
     for i, msg in enumerate(mb):
         body = ""
+        part = None
         try:
             part = msg.get_body(preferencelist=("plain", "html"))
             body = _safe_body(part)
         except Exception:
             body = ""
+        is_html = False
+        try:
+            is_html = (part is not None and part.get_content_type() == "text/html")
+        except Exception:
+            pass
+        if is_html or _looks_html(body):
+            body = _html_to_text(body)
         txt = f"主题: {msg.get('subject', '')}\n发件: {msg.get('from', '')}\n日期: {msg.get('date', '')}\n\n{body}"
         units.append((i + 1, txt.strip()[:8000], "email"))
     return units if units else [(1, "(空邮箱)", "email")]
@@ -189,11 +217,20 @@ def _eml(path):
     with open(path, "rb") as f:
         msg = BytesParser(policy=policy.default).parse(f)
     body = ""
+    part = None
     try:
         part = msg.get_body(preferencelist=("plain", "html"))
         body = _safe_body(part) or _safe_body(msg)
     except Exception:
         body = _safe_body(msg)
+    # ★HTML 正文必须去标签(否则整封邮件吐原始 HTML/CSS→切几十页乱码,用户实测 .eml 变 56 页 markup)
+    is_html = False
+    try:
+        is_html = (part is not None and part.get_content_type() == "text/html")
+    except Exception:
+        pass
+    if is_html or _looks_html(body):
+        body = _html_to_text(body)
     full = f"主题: {msg.get('subject', '')}\n发件: {msg.get('from', '')}\n\n{body}"
     return [(i + 1, chunk, "email") for i, chunk in enumerate(_chunk_text(full))]
 
