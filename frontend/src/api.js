@@ -55,6 +55,7 @@ export const api = {
   connections: (id) => fetch(`/api/connections/${id}`, { headers: authHeaders() }).then(j),
   mediaStructure: (id) => fetch(`/api/media_structure?doc_id=${id}`, { headers: authHeaders() }).then(j),
   persona: (refresh) => fetch('/api/persona' + (refresh ? '?refresh=1' : ''), { headers: authHeaders() }).then(j),
+  health: async () => { try { const r = await fetch('/health'); return !!(r && r.ok) } catch { return false } },
   sendCode: (phone) => fetch('/api/auth/send_code', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ phone }) }).then(j),
   phoneRegister: (phone, code, nickname, gender, age, zodiac, mbti, bio) => fetch('/api/auth/phone_register', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ phone, code, nickname, gender, age, zodiac, mbti, bio }) }).then(j),
   pwdLogin: (phone, password) => fetch('/api/auth/pwd_login', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ phone, password }) }).then(j),

@@ -2665,6 +2665,29 @@ def _fetch_friend_persona(authorization, other):
         return None, "", other
 
 
+_persona_pulled = set()   # 每进程每用户尝试一次:从云拉回本人画像(换机/新登录用)
+def _ensure_my_persona(con, me, authorization):
+    """★换机/新登录:本地没有本人画像时,从云 shared_personas 拉回自己的画像存本地
+    (本人画像本就已分享上云给别人算姻缘)。这样新设备不用重新导数据就能显示好友契合度+算姻缘。
+    只拉自己(ident=me),不涉他人,无串号风险。每进程每用户只试一次,不阻塞。"""
+    if not authorization or me in _persona_pulled:
+        return
+    try:
+        if con.execute("SELECT 1 FROM personas WHERE username=?", (me,)).fetchone():
+            _persona_pulled.add(me)
+            return
+        r = _cloud_proxy("GET", "/social/persona/mine?full=1", authorization)
+        _persona_pulled.add(me)
+        data = r.get("data")
+        if data:
+            con.execute("CREATE TABLE IF NOT EXISTS personas (username TEXT PRIMARY KEY, data TEXT, mbti TEXT, emb TEXT)")
+            con.execute("INSERT OR REPLACE INTO personas(username,data,mbti) VALUES(?,?,?)",
+                        (me, data if isinstance(data, str) else json.dumps(data, ensure_ascii=False), r.get("mbti") or ""))
+            con.commit()
+    except Exception:
+        _persona_pulled.add(me)   # 失败也别每次都试(云无画像/网络问题)
+
+
 @app.get("/api/account")
 def api_account(authorization: str = Header(None), fresh: int = 0):
     """账号+授权(试用倒计时/付费墙用)。不门控:过期用户也要能读到自己状态。fresh=1 绕缓存。"""
@@ -2758,6 +2781,7 @@ def people(authorization: str = Header(None)):
     try:
         # ★全新客户端:personas 表要带 emb 列(否则下句 SELECT emb 崩 no such column→前端误报"请先登录")
         con.execute("CREATE TABLE IF NOT EXISTS personas (username TEXT PRIMARY KEY, data TEXT, mbti TEXT, emb TEXT)")
+        _ensure_my_persona(con, me, authorization)   # 换机/新登录:先从云拉回本人画像,好友契合度才算得出
         try: con.execute("ALTER TABLE personas ADD COLUMN emb TEXT")  # 老库补列
         except Exception: pass
         myp, _ = _my_persona(con, me)
@@ -2840,6 +2864,7 @@ def match(other: str, refresh: int = 0, authorization: str = Header(None)):
     me = _me(authorization)
     con = _con()
     try:
+        _ensure_my_persona(con, me, authorization)   # 换机/新登录:先从云拉回本人画像,才能算姻缘
         con.execute("CREATE TABLE IF NOT EXISTS match_cache (owner TEXT, other TEXT, data TEXT, PRIMARY KEY(owner,other))")
         if not refresh:
             c = con.execute("SELECT data FROM match_cache WHERE owner=? AND other=?", (me, other)).fetchone()
@@ -3393,6 +3418,7 @@ def lifestory(refresh: int = 0, style: str = "cinema", authorization: str = Head
 #   谱好后把 mp3+歌词同步下载到本地 themes(mylibrary/播放照旧走本地,离线可听)。不改 106 一行。
 _SONG_CLOUD = os.environ.get("SONG_CLOUD_URL", "http://106.14.189.104:8200")
 _song_sync_lock = threading.Lock()
+_song_sync_status = {}   # me -> {syncing, total, done}:云历史歌下载进度,前端冥想页显示"同步中 N/M"
 
 def _song_cloud_req(method, path, authorization, timeout=30):
     req = _urlreq.Request(_SONG_CLOUD + path, data=(b"" if method == "POST" else None),
@@ -3407,25 +3433,33 @@ def _sync_cloud_songs(me, authorization):
     try:
         lib = _song_cloud_req("GET", "/api/mylibrary", authorization, timeout=20)
         os.makedirs(_THEMES_DIR, exist_ok=True)
-        n = 0
+        # 先算需要下载的(云上有、本地没有的),给前端进度总数
+        todo = []
         for s in (lib.get("songs") or []):
             fn = os.path.basename((s.get("url") or "").split("?")[0])
-            if not (fn.endswith(".mp3") and fn.startswith(me)):
-                continue
+            if fn.endswith(".mp3") and fn.startswith(me) and not os.path.exists(os.path.join(_THEMES_DIR, fn)):
+                todo.append((fn, s))
+        _song_sync_status[me] = {"syncing": True, "total": len(todo), "done": 0}
+        n = 0
+        for fn, s in todo:
             dst = os.path.join(_THEMES_DIR, fn)
-            if os.path.exists(dst):
-                continue
-            rq = _urlreq.Request(_SONG_CLOUD + "/api/theme/" + fn, headers={"Authorization": authorization or ""})
-            with _cloud_opener.open(rq, timeout=120) as rr, open(dst, "wb") as f:
-                f.write(rr.read())
-            meta = {k: s.get(k) for k in ("title", "genre", "style", "lyrics", "need", "voice", "date") if s.get(k)}
-            if meta:
-                json.dump(meta, open(os.path.splitext(dst)[0] + ".lyrics.json", "w", encoding="utf-8"),
-                          ensure_ascii=False, indent=1)
-            n += 1
+            try:
+                rq = _urlreq.Request(_SONG_CLOUD + "/api/theme/" + fn, headers={"Authorization": authorization or ""})
+                with _cloud_opener.open(rq, timeout=120) as rr, open(dst, "wb") as f:
+                    f.write(rr.read())
+                meta = {k: s.get(k) for k in ("title", "genre", "style", "lyrics", "need", "voice", "date") if s.get(k)}
+                if meta:
+                    json.dump(meta, open(os.path.splitext(dst)[0] + ".lyrics.json", "w", encoding="utf-8"),
+                              ensure_ascii=False, indent=1)
+                n += 1
+            except Exception as e:
+                print("[song-sync] dl fail", fn, str(e)[:80])
+            _song_sync_status[me] = {"syncing": True, "total": len(todo), "done": n}
+        _song_sync_status[me] = {"syncing": False, "total": len(todo), "done": n}
         return n
     except Exception as e:
         print("[song-sync]", str(e)[:120])
+        _song_sync_status[me] = {"syncing": False, "total": 0, "done": 0}
         return 0
     finally:
         _song_sync_lock.release()
@@ -4363,7 +4397,7 @@ def mylibrary(authorization: str = Header(None)):
     for f in films:
         f.pop("_ts", None)
 
-    return {"songs": songs, "films": films}
+    return {"songs": songs, "films": films, "sync": _song_sync_status.get(me, {"syncing": False, "total": 0, "done": 0})}
 
 
 

@@ -151,15 +151,9 @@ fn main() {
                 eprintln!("compound-sidecar 未找到(资源目录/开发回落均无)");
             }
 
-            // ★等 sidecar /health 就绪再开窗:否则前端初始请求(支付宝/账号/好友/订单)在后端起来前就发→
-            //   失败又不重试(支付宝按钮/订单加载中/好友请先登录都因此)。最多等 40s(torch import 要几秒),超时也开窗。
-            for _ in 0..80 {
-                if sidecar_ready(port) {
-                    break;
-                }
-                std::thread::sleep(Duration::from_millis(500));
-            }
-
+            // ★立即开窗(不再等 sidecar 就绪):Windows/慢机首启 sidecar 要几十秒,若等就绪才开窗=
+            //   用户双击后长时间黑屏无反馈(实测)。改为窗口秒出,前端 Boot 门轮询 /health 显示"启动中"
+            //   splash,就绪前不发业务请求→既即时反馈又不丢初始请求。
             // 主窗口:注入本机 API 地址(api.js 的模块级 fetch 影子会读它)。
             let init = format!("window.__COMPOUND_API_BASE__ = {:?};", base);
             WebviewWindowBuilder::new(&handle, "main", WebviewUrl::default())

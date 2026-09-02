@@ -274,12 +274,28 @@ export default function Life({ onGoto }) {
     return () => { stop = true; clearTimeout(timerRef.current) }
   }, [loadLib])
 
+  // ★云历史歌同步中 → 每 2s 刷新曲库(下载好一首冒一首 + 进度更新);同步完停。
+  const syncing = !!(lib && lib.sync && lib.sync.syncing)
+  useEffect(() => {
+    if (!syncing) return
+    const t = setInterval(loadLib, 2000)
+    return () => clearInterval(t)
+  }, [syncing, loadLib])
+
   if (err) return <EmptyLife onGoto={onGoto} />
 
   const songs = (lib && lib.songs) || []
+  const sync = (lib && lib.sync) || {}
 
   if (!songs.length) {
-    // 还没有歌:生成中 or 空态引导
+    // 还没有歌:同步中 / 生成中 / 空态引导
+    if (syncing) return (
+      <div className="view"><div className="loading-wrap">
+        <div className="spinner" />
+        <div>正在从云同步你的历史歌曲{sync.total ? ` ${sync.done || 0}/${sync.total}` : '…'}</div>
+        <div style={{ fontSize: 12.5, color: 'var(--text-3)', marginTop: 6 }}>换设备/新登录首次会从云端下载,稍候即出现</div>
+      </div></div>
+    )
     if (making || (gen && gen.generating)) return <GeneratingLife />
     if (!lib) return <div className="view"><div className="loading-wrap"><div className="spinner" /><div>正在打开你的冥想…</div></div></div>
     return <EmptyLife onGoto={onGoto} noKey={noKey} noData={noData} noPersona={noPersona} eligible={eligible} />
@@ -306,7 +322,7 @@ export default function Life({ onGoto }) {
 
       {songs.length > 1 && (
         <section className="ms-shelf-wrap">
-          <div className="ms-shelf-head"><span className="ms-shelf-dot" /><h2>我的专辑</h2><span className="ms-shelf-n">{songs.length} 首</span></div>
+          <div className="ms-shelf-head"><span className="ms-shelf-dot" /><h2>我的专辑</h2><span className="ms-shelf-n">{songs.length} 首</span>{syncing && <span className="ms-shelf-n" style={{ color: 'var(--accent)' }}><span className="spinner spinner-xs" style={{ marginRight: 5 }} />从云同步中{sync.total ? ` ${sync.done || 0}/${sync.total}` : ''}</span>}</div>
           <div className="vinyl-shelf">
             {songs.map((s, i) => {
               const sh = hue(s.title)
