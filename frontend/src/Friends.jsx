@@ -109,7 +109,7 @@ function MatchReport({ me, person, onClose }) {
           <div className="mr2-poster" ref={posterRef}>
             <div className="mr2-head">
               <div className="mr2-pair">
-                <div className="mr2-side">{avImg(me, '你')}<div className="mr2-side-n">你</div></div>
+                <div className="mr2-side">{avImg(me, '你')}<div className="mr2-side-n">你{d.my_mbti && (d.my_mbti_real ? <i>{d.my_mbti}</i> : <i className="mbti-guess" title="AI 从画像推测">{d.my_mbti}<i className="mbti-est">推测</i></i>)}</div></div>
                 <div className="mr2-score"><b>{d.compat}</b><span>%</span><em>综合契合</em></div>
                 <div className="mr2-side">{avImg(person.username, person.display, true)}<div className="mr2-side-n">{person.display}{person.mbti && (person.mbti_real ? <i>{person.mbti}</i> : <i className="mbti-guess" title="AI 从画像推测">{person.mbti}<i className="mbti-est">推测</i></i>)}</div></div>
               </div>
