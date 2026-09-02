@@ -166,15 +166,28 @@ function Grid({ list, onSel, onRemove }) {
 function DiscoverDrawer({ people, onAdd, onClose }) {
   const [q, setQ] = useState(''); const [busy, setBusy] = useState('')
   useEffect(() => { const h = (e) => { if (e.key === 'Escape') onClose() }; window.addEventListener('keydown', h); return () => window.removeEventListener('keydown', h) }, [onClose])
-  const shown = people.filter((p) => !q || (p.display + p.one_liner + (p.tags || []).join('')).toLowerCase().includes(q.toLowerCase()))
+  const qt = q.trim()
+  const shown = people.filter((p) => !q || (p.display + p.one_liner + (p.tags || []).join('') + (p.username || '')).toLowerCase().includes(q.toLowerCase()))
+  const isPhone = /^1\d{10}$/.test(qt)                        // 合法手机号
+  const phoneInList = isPhone && people.some((p) => p.username === qt)   // 该手机号已在列表里(=已列出的用户)
   return (
     <div className="nd-overlay" onClick={onClose}>
       <div className="nd-panel dv-panel glass" onClick={(e) => e.stopPropagation()}>
         <div className="nd-x" onClick={onClose}><IconClose /></div>
-        <div className="dv-head"><h2>添加好友</h2><p>发起请求后需<b>对方同意</b>才成为好友;同意后才能互相算姻缘 —— 只用双方 AI 画像,<b>不共享任何聊天原文</b>。</p></div>
-        <input className="dv-search" placeholder="搜昵称 / 标签…" value={q} onChange={(e) => setQ(e.target.value)} />
+        <div className="dv-head"><h2>添加好友</h2><p>输入对方<b>手机号</b>加好友(也可搜昵称/标签)。发起请求后需<b>对方同意</b>才成为好友;同意后才能互相算姻缘 —— 只用双方 AI 画像,<b>不共享任何聊天原文</b>。</p></div>
+        <input className="dv-search" placeholder="输入手机号(或搜昵称 / 标签)" value={q} onChange={(e) => setQ(e.target.value)} />
         <div className="dv-list">
-          {shown.length === 0 && (
+          {isPhone && !phoneInList && (
+            <div className="dv-row">
+              <span className="fr-av sm" style={{ background: `linear-gradient(145deg, hsl(${hue(qt)} 50% 58%), hsl(${hue(qt)} 55% 40%))` }}>+</span>
+              <div className="dv-info"><div className="dv-name">{qt}</div><div className="dv-one">向该手机号发送好友请求(对方需已注册第二大脑)</div></div>
+              <button className="dv-add-btn" disabled={busy === qt}
+                onClick={async () => { setBusy(qt); try { await onAdd({ username: qt, display: qt }) } finally { setBusy('') } }}>
+                {busy === qt ? '…' : '+ 添加'}
+              </button>
+            </div>
+          )}
+          {shown.length === 0 && !(isPhone && !phoneInList) && (
             <div className="dv-empty">
               <svg viewBox="0 0 24 24" width="32" height="32"><circle cx="11" cy="11" r="6.5" fill="none" stroke="currentColor" strokeWidth="1.6" /><path d="m16 16 4 4" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" /></svg>
               <div>{q ? `没有匹配「${q}」的人` : '暂时没有可添加的人了'}</div>
@@ -225,7 +238,10 @@ export default function Friends({ auth }) {
       else if (r && r.auto_accepted) toast(`已和 ${p.display} 互相成为好友`, 'ok')
       else toast(`已向 ${p.display} 发送好友请求,等 TA 同意`, 'ok')
       setDiscover(false); reload()
-    } catch { toast(`请求 ${p.display} 没成功,请稍后再试`, 'err') }
+    } catch (e) {
+      const notfound = String(e && e.message).includes('404')
+      toast(notfound ? `没有这个用户「${p.display}」:对方需先注册第二大脑` : `请求 ${p.display} 没成功,请稍后再试`, 'err')
+    }
   }
   // 同意/拒绝收到的请求(同意=授权双方用AI画像算姻缘,不共享聊天原文)
   const respondReq = async (from, accept) => {
