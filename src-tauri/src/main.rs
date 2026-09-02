@@ -72,6 +72,13 @@ fn spawn_sidecar(bin: &PathBuf, port: u16, log: &PathBuf) -> std::io::Result<Chi
     if let Some(dir) = bin.parent() {
         cmd.current_dir(dir);
     }
+    // ★Windows:sidecar 是 console 程序(需 stdio 供日志),spawn 会弹出黑框控制台窗口。
+    //   加 CREATE_NO_WINDOW(0x08000000)隐藏控制台,stdio 仍走上面的管道到日志文件。
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        cmd.creation_flags(0x08000000);
+    }
     cmd.spawn()
 }
 
