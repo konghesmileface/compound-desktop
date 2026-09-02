@@ -110,11 +110,38 @@ def _html_to_text(html):
     return "\n".join(lines)
 
 
+def _html_meta_fallback(raw):
+    """SPA/JS 动态渲染网页(正文靠 JS 出,静态抓只有空壳)→ 退而取 title + meta 描述 + og,至少不空。"""
+    import re as _re
+    import html as _hm
+    bits = []
+    m = _re.search(r"<title[^>]*>(.*?)</title>", raw, _re.S | _re.I)
+    if m:
+        bits.append(m.group(1).strip())
+    for pat in (r'<meta[^>]+name=["\']description["\'][^>]+content=["\']([^"\']+)',
+                r'<meta[^>]+property=["\']og:title["\'][^>]+content=["\']([^"\']+)',
+                r'<meta[^>]+property=["\']og:description["\'][^>]+content=["\']([^"\']+)'):
+        mm = _re.search(pat, raw, _re.I)
+        if mm:
+            bits.append(mm.group(1).strip())
+    seen, out = set(), []
+    for b in bits:
+        b = _hm.unescape(b)
+        if b and b not in seen:
+            seen.add(b); out.append(b)
+    return "\n".join(out)
+
+
 def _html(path):
-    """网页 / 聊天记录 html 导出 → 去标签取正文。"""
+    """网页 / 聊天记录 html 导出 → 去标签取正文。SPA 空壳退取 title+meta 摘要。"""
     with open(path, "r", encoding="utf-8", errors="ignore") as f:
         raw = f.read()
-    return [(i + 1, chunk, "html") for i, chunk in enumerate(_chunk_text(_html_to_text(raw)))]
+    text = _html_to_text(raw)
+    if len(text.strip()) < 40:          # 正文抓不到(JS 动态渲染)→ 退取 title/meta 摘要
+        fb = _html_meta_fallback(raw)
+        if len(fb.strip()) > len(text.strip()):
+            text = (text + "\n" + fb).strip()
+    return [(i + 1, chunk, "html") for i, chunk in enumerate(_chunk_text(text))]
 
 
 def _csv(path):
