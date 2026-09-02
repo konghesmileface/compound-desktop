@@ -204,6 +204,18 @@ def number_ledger(con, owner, refresh=False):
 import hashlib as _hl2
 
 
+def supply_demand_base(con, owner):
+    """只收集 supply/demand 信号(快:只读缓存的 intel,不跑配对 LLM)。给异步端点先返计数+信号,UI 立刻有数不落空。"""
+    intel = all_intel(con, owner, refresh=False, generate=False)
+    supply, demand = [], []
+    for it in intel:
+        for s in it.get("supply", []):
+            supply.append({"contact": it["contact"], **s})
+        for d in it.get("demand", []):
+            demand.append({"contact": it["contact"], **d})
+    return {"supply_count": len(supply), "demand_count": len(demand), "supply": supply, "demand": demand}
+
+
 def supply_demand_matches(con, owner, refresh=False):
     """供需撮合雷达:收集所有供给/需求信号 → LLM 精配成可牵线的机会。
     ★修(P0-1):落缓存(同输入=同结果,治非确定性)+ 硬禁自己配自己 + 大 max_tokens + 解析失败重试。"""

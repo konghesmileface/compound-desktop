@@ -1497,11 +1497,34 @@ def number_ledger_api(refresh: int = 0, authorization: str = Header(None)):
 
 @app.get("/api/matches")
 def matches_api(refresh: int = 0, authorization: str = Header(None)):
-    """供需撮合雷达:供给×需求跨人配对成可牵线机会。"""
+    """供需撮合雷达:供给×需求跨人配对成可牵线机会。
+    异步:冷缓存时配对要嵌入数百条信号+LLM(8G 上 >60s),同步会被 WKWebView 超时掐→前端落空 0×0。
+    改:先秒返 base(供需计数,让 UI 有数),配对结果后台算+前端轮询。命中 matches 缓存则直接返回。"""
     me = _me(authorization)
     con = _con()
     try:
-        return CI.supply_demand_matches(con, me, refresh=bool(refresh))
+        base = CI.supply_demand_base(con, me)
+        # 强制刷新(用户主动点,可等)或 无供需可配 → 直接同步返回(后者秒返空,不必开后台)
+        if refresh or not (base["supply_count"] and base["demand_count"]):
+            return CI.supply_demand_matches(con, me, refresh=bool(refresh))
+        key = "matches:" + me
+        j = _GEN_JOBS.get(key)
+        if j and j.get("state") == "done":
+            return j["result"]
+        if not j or j.get("state") != "running":
+            _GEN_JOBS[key] = {"state": "running"}
+            def _work():
+                try:
+                    c2 = _con()
+                    try:
+                        r = CI.supply_demand_matches(c2, me, refresh=False)
+                    finally:
+                        c2.close()
+                    _GEN_JOBS[key] = {"state": "done", "result": r}
+                except Exception as e:
+                    _GEN_JOBS[key] = {"state": "error", "error": str(e)}
+            threading.Thread(target=_work, daemon=True).start()
+        return {"pending": True, **base}   # 带 base:UI 显示"从 N 供给 × M 需求"+计算中,不再空 0×0
     finally:
         con.close()
 

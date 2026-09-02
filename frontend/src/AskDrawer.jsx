@@ -113,7 +113,7 @@ export default function AskDrawer({ query, contact, initialAction, isGroup, onCl
     const q = label || prompt
     setTurns((t) => [...t, { q, prompt, loading: true }])
     const history = turns.flatMap((t) => t.answer ? [{ role: 'user', content: t.prompt || t.q }, { role: 'assistant', content: t.answer }] : [])
-    api.ask(prompt, history).then((r) => {
+    api.ask(prompt, history, contact || '').then((r) => {   // ★带 contact:后端锁定到该群/联系人的聊天+关系卡检索,自由提问不再"不知道哪个群"
       setTurns((t) => t.map((x, i) => i === idx ? { ...x, loading: false, answer: r.answer || '', sources: r.sources || [] } : x))
     }).catch((e) => { const msg = String(e && e.message || ''); setTurns((t) => t.map((x, i) => i === idx ? { ...x, loading: false, answer: (msg.length > 8 ? msg : '出错了,换句话再试试') } : x)) })
   }

@@ -101,7 +101,15 @@ export const api = {
   },
   relationTimeline: (contact, refresh) => fetch('/api/relation_timeline?contact=' + encodeURIComponent(contact) + (refresh ? '&refresh=1' : ''), { headers: authHeaders() }).then(j),
   numberLedger: (refresh) => fetch('/api/number_ledger' + (refresh ? '?refresh=1' : ''), { headers: authHeaders() }).then(j),
-  matches: (refresh) => fetch('/api/matches' + (refresh ? '?refresh=1' : ''), { headers: authHeaders() }).then(j),
+  matches: async (refresh) => {
+    // 异步:冷缓存后端后台配对+返 pending(带供需计数),这里轮询直到配好(避免 WKWebView 60s 超时落空 0×0)
+    for (let i = 0; i < 90; i++) {
+      const r = await fetch('/api/matches' + (refresh ? '?refresh=1' : ''), { headers: authHeaders() }).then(j)
+      if (!r || !r.pending) return r
+      await new Promise((s) => setTimeout(s, 2000))
+    }
+    throw new Error('供需撮合计算超时')
+  },
   briefing: (contact) => fetch('/api/briefing?contact=' + encodeURIComponent(contact), { headers: authHeaders() }).then(j),
   cooling: () => fetch('/api/cooling', { headers: authHeaders() }).then(j),
   favors: () => fetch('/api/favors', { headers: authHeaders() }).then(j),
@@ -139,7 +147,7 @@ export const api = {
   getSettings: () => fetch('/api/settings', { headers: authHeaders() }).then(j),
   saveSettings: (cfg) => fetch('/api/settings', { method: 'POST', headers: { 'Content-Type': 'application/json', ...authHeaders() }, body: JSON.stringify(cfg) }).then(j),
   testSettings: () => fetch('/api/settings/test', { method: 'POST', headers: { ...authHeaders() } }).then(j),
-  ask: (query, history = []) => fetch('/api/ask', { method: 'POST', headers: { 'Content-Type': 'application/json', ...authHeaders() }, body: JSON.stringify({ query, history }) }).then(async (r) => {
+  ask: (query, history = [], contact = '') => fetch('/api/ask', { method: 'POST', headers: { 'Content-Type': 'application/json', ...authHeaders() }, body: JSON.stringify({ query, history, contact }) }).then(async (r) => {
     if (r.status === 401) { try { localStorage.removeItem('auth') } catch { /* noop */ } location.reload(); throw new Error('401') }
     if (!r.ok) { let d = ''; try { d = (await r.json()).detail || '' } catch { /* noop */ } throw new Error(d || String(r.status)) }
     return r.json()

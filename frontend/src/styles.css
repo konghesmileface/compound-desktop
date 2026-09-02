@@ -1424,7 +1424,10 @@ input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; appearance: 
   transition: transform .5s cubic-bezier(.2,.7,.2,1);
 }
 .vinyl-card:hover .vinyl-disc { transform: translate(13%, -50%) rotate(9deg); }
-.vinyl-card.spinning .vinyl-disc { transform: translate(13%, -50%); animation: vinylspin 3.4s linear infinite; }
+/* ★spinning 时必须关掉 transition(否则 WKWebView 每帧拿 transition 去插值 animation→转圈卡顿/颤抖);
+   且 hover 不能再往 disc 上叠 rotate(9deg)(会和 animation 抢 transform→左右抖)。 */
+.vinyl-card.spinning .vinyl-disc { transform: translate(13%, -50%); animation: vinylspin 3.4s linear infinite; transition: none; will-change: transform; }
+.vinyl-card.spinning:hover .vinyl-disc { transform: translate(13%, -50%); animation: vinylspin 3.4s linear infinite; transition: none; }
 @keyframes vinylspin { from { transform: translate(13%, -50%) rotate(0deg); } to { transform: translate(13%, -50%) rotate(360deg); } }
 /* 沟纹:同心圆细线 */
 .vinyl-grooves {
