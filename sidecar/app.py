@@ -1383,14 +1383,49 @@ def chat_galaxy_api(authorization: str = Header(None)):
         con.close()
 
 
+def _cache_peek(con, owner, name):
+    """只查不算:命中且签名匹配返回缓存,否则 None。用于异步端点先探缓存。"""
+    try:
+        con.execute("CREATE TABLE IF NOT EXISTS compute_cache(owner TEXT, name TEXT, sig TEXT, data TEXT, PRIMARY KEY(owner,name))")
+        sig = _docs_sig(con, owner)
+        row = con.execute("SELECT sig, data FROM compute_cache WHERE owner=? AND name=?", (owner, name)).fetchone()
+        if row and row[0] == sig:
+            return json.loads(row[1])
+    except Exception:
+        pass
+    return None
+
+
 @app.get("/api/chat_topic_galaxy")
 def chat_topic_galaxy_api(authorization: str = Header(None)):
-    """探索·仅聊天(A):全部聊天内容按语义聚成主题星系(每段聊天一颗星,簇=真实主题名)。"""
+    """探索·仅聊天(A):全部聊天内容按语义聚成主题星系(每段聊天一颗星,簇=真实主题名)。
+    异步:命中缓存立即返回;首次未缓存则后台聚类 + 返回 {pending:True},前端轮询(避免 WKWebView 60s 超时把首次点击打成空)。"""
     me = _me(authorization)
     con = _con()
     try:
         import chat_topics as CT
-        return _db_cached(con, me, "chat_topic_galaxy", lambda: CT.chat_topic_galaxy(con, me))
+        cached = _cache_peek(con, me, "chat_topic_galaxy")
+        if cached is not None:
+            return cached
+        key = "chatgalaxy:" + me
+        j = _GEN_JOBS.get(key)
+        if j and j.get("state") == "done":
+            return j["result"]
+        if not j or j.get("state") != "running":
+            _GEN_JOBS[key] = {"state": "running"}
+            def _work():
+                try:
+                    c2 = _con()
+                    try:
+                        r = _db_cached(c2, me, "chat_topic_galaxy", lambda: CT.chat_topic_galaxy(c2, me))
+                    finally:
+                        c2.close()
+                    _GEN_JOBS[key] = {"state": "done", "result": r}
+                except Exception as e:
+                    import traceback
+                    _GEN_JOBS[key] = {"state": "error", "error": str(e), "tb": traceback.format_exc()[-500:]}
+            threading.Thread(target=_work, daemon=True).start()
+        return {"pending": True, "nodes": [], "edges": [], "communities": []}
     except Exception as e:
         import traceback
         return {"nodes": [], "edges": [], "communities": [], "error": str(e), "tb": traceback.format_exc()[-500:]}

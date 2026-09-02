@@ -90,7 +90,15 @@ export const api = {
   dismissReach: (contact) => fetch('/api/reach/dismiss', { method: 'POST', headers: { ...authHeaders(), 'Content-Type': 'application/json' }, body: JSON.stringify({ contact }) }).then(j),
   groupGraph: (contact, refresh) => fetch('/api/group_graph?contact=' + encodeURIComponent(contact) + (refresh ? '&refresh=1' : ''), { headers: authHeaders() }).then(j),
   chatGalaxy: () => fetch('/api/chat_galaxy', { headers: authHeaders() }).then(j),
-  chatTopicGalaxy: () => fetch('/api/chat_topic_galaxy', { headers: authHeaders() }).then(j),
+  chatTopicGalaxy: async () => {
+    // 异步:后端首次未缓存会返回 {pending:true},后台聚类;这里轮询直到算好(避免 WKWebView 60s 超时把首次打成空)
+    for (let i = 0; i < 90; i++) {
+      const r = await fetch('/api/chat_topic_galaxy', { headers: authHeaders() }).then(j)
+      if (!r || !r.pending) return r
+      await new Promise((s) => setTimeout(s, 2000))
+    }
+    throw new Error('聊天星系计算超时')
+  },
   relationTimeline: (contact, refresh) => fetch('/api/relation_timeline?contact=' + encodeURIComponent(contact) + (refresh ? '&refresh=1' : ''), { headers: authHeaders() }).then(j),
   numberLedger: (refresh) => fetch('/api/number_ledger' + (refresh ? '?refresh=1' : ''), { headers: authHeaders() }).then(j),
   matches: (refresh) => fetch('/api/matches' + (refresh ? '?refresh=1' : ''), { headers: authHeaders() }).then(j),
