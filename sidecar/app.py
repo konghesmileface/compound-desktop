@@ -1712,6 +1712,7 @@ def _ingest_wechat_msgs(con, me, msgs):
     con.execute("CREATE TABLE IF NOT EXISTS wechat_lines(owner TEXT, fp TEXT, PRIMARY KEY(owner,fp))")
     by_sess = {}
     dup = 0
+    seen = set()   # 批内去重(同批重复内容)
     for m in msgs:
         sess = (m.get("session_name") or m.get("session_id") or "未知").strip()
         text = m.get("text") or ""
@@ -1722,14 +1723,17 @@ def _ingest_wechat_msgs(con, me, msgs):
         is_me = sname in ("我", "(我)") or not (m.get("sender_id") or "").strip()
         skey = "我" if is_me else sname
         fp = hashlib.md5(("%s|%s|%s|%s|%s" % (me, sess, skey, ts, text)).encode("utf-8")).hexdigest()
-        try:
-            con.execute("INSERT INTO wechat_lines(owner,fp) VALUES(?,?)", (me, fp))
-        except Exception:
+        # ★只查不写 fp(autocommit 下不能先落 fp:若随后写 page 失败,消息永久被判重丢失——实测 1130fp/316条)。
+        if fp in seen:
             dup += 1
             continue
-        by_sess.setdefault(sess, []).append(m)
+        if con.execute("SELECT 1 FROM wechat_lines WHERE owner=? AND fp=?", (me, fp)).fetchone():
+            dup += 1
+            continue
+        seen.add(fp)
+        by_sess.setdefault(sess, []).append((fp, m))
     ingested = 0
-    for sess, ms in by_sess.items():
+    for sess, items in by_sess.items():
         fn = "微信_与" + _wx_safe(sess) + ".txt"
         row = con.execute("SELECT id, pages FROM documents WHERE owner=? AND filename=?", (me, fn)).fetchone()
         if row:
@@ -1740,12 +1744,19 @@ def _ingest_wechat_msgs(con, me, msgs):
                         ("wechat_realtime:" + me + ":" + fn, fn, 0, "wechat", "wx:" + me + ":" + fn, me))
             did = con.execute("SELECT last_insert_rowid()").fetchone()[0]
             pcount = 0
-        lines = [_wx_line(m) for m in ms]
+        lines = [_wx_line(m) for (fp, m) in items]
+        fps = [fp for (fp, m) in items]
         CH = 50
         for i in range(0, len(lines), CH):
             pcount += 1
             con.execute("INSERT INTO pages(doc_id,page_no,method,text) VALUES(?,?,?,?)",
                         (did, pcount, "wechat", "\n".join(lines[i:i + CH])))
+            # ★页写成功后才记该批消息的 fp(autocommit:page 已落再落 fp;若上句抛错则 fp 不落,下次可重来,绝不丢)
+            for fp in fps[i:i + CH]:
+                try:
+                    con.execute("INSERT OR IGNORE INTO wechat_lines(owner,fp) VALUES(?,?)", (me, fp))
+                except Exception:
+                    pass
             ingested += len(lines[i:i + CH])
         con.execute("UPDATE documents SET pages=? WHERE id=?", (pcount, did))
     return ingested, dup, len(by_sess)
