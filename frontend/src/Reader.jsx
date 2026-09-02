@@ -97,6 +97,32 @@ export default function Reader({ docId, targetPage, onClose, onOpen, onAsk, onAs
   const reflow = (t) => String(t || '').split(/\n{2,}/).map((par) =>
     par.replace(/\s*\n\s*/g, '\u0001').replace(/([\u4e00-\u9fff])\u0001(?=[\u4e00-\u9fff])/g, '$1').replace(/\u0001/g, ' ')
   ).join('\n\n')
+  // 音视频转写:把 "[MM:SS] 说话人N:文本" 排成易读的对话块(时间戳+说话人标签+文本,turn 间留白)
+  const isMedia = !!(meta && /^asr:/.test(meta.backend || ''))
+  const renderTranscript = (t) => {
+    const lines = String(t || '').split('\n').filter((l) => l.trim())
+    return lines.map((ln, i) => {
+      const m = ln.match(/^\[([\d:]+)\]\s*([\s\S]*)$/)
+      if (!m) return <div key={i} className="tr-line">{ln}</div>
+      const time = m[1]
+      let rest = m[2], spk = null, scene = false
+      const sm = rest.match(/^\(画面\)\s*([\s\S]*)$/)
+      if (sm) { scene = true; rest = sm[1] }
+      else {
+        const pm = rest.match(/^(说话人\d+)[:：]\s*([\s\S]*)$/)
+        if (pm) { spk = pm[1]; rest = pm[2] }
+      }
+      return (
+        <div key={i} className="tr-turn">
+          <div className="tr-meta">
+            <span className="tr-time">{time}</span>
+            {scene ? <span className="tr-spk tr-scene">画面</span> : (spk ? <span className="tr-spk">{spk}</span> : null)}
+          </div>
+          <div className="tr-body">{rest}</div>
+        </div>
+      )
+    })
+  }
   const contact = isWx ? String(meta.filename).replace('微信_与', '').replace('.txt', '') : null
   const isGrpChat = !!contact && (/(@chatroom|@openim)$/.test(contact) || /群/.test(contact))
 
@@ -186,37 +212,54 @@ export default function Reader({ docId, targetPage, onClose, onOpen, onAsk, onAs
 
           {/* 音视频 AI 纪要(#6):章节/待办/脑图 */}
           {(meta.backend || '').startsWith('asr:') && (msLoad || ms) && (
-            <div className="glass" style={{ margin: '14px 0', padding: 14, borderRadius: 12 }}>
-              <div style={{ fontWeight: 600, marginBottom: 8 }}>AI 纪要</div>
+            <div className="digest-card">
+              <div className="digest-title">AI 纪要</div>
               {msLoad && !ms ? (
                 <Thinking text="正在提炼章节 / 待办 / 脑图…" hint="AI 在通读整段转写" />
               ) : ms ? (
                 <>
                   {ms.chapters && ms.chapters.length > 0 && (
-                    <div style={{ marginBottom: 12 }}>
-                      <div style={{ fontSize: 12, opacity: .6, marginBottom: 4 }}>章节</div>
-                      {ms.chapters.map((c, i) => (
-                        <div key={i} style={{ display: 'flex', gap: 8, padding: '3px 0' }}>
-                          <span style={{ color: 'var(--accent)', fontVariantNumeric: 'tabular-nums', minWidth: 46 }}>{c.time}</span>
-                          <span><b>{c.title}</b>{c.summary ? <span style={{ opacity: .7 }}> — {c.summary}</span> : null}</span>
-                        </div>
-                      ))}
+                    <div className="digest-sec">
+                      <div className="digest-label">章节</div>
+                      <div className="digest-chapters">
+                        {ms.chapters.map((c, i) => (
+                          <div key={i} className="digest-chap">
+                            <span className="digest-time">{c.time}</span>
+                            <div className="digest-chap-body">
+                              <b>{c.title}</b>
+                              {c.summary ? <div className="digest-chap-sum">{c.summary}</div> : null}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
                     </div>
                   )}
                   {ms.todos && ms.todos.length > 0 && (
-                    <div style={{ marginBottom: 12 }}>
-                      <div style={{ fontSize: 12, opacity: .6, marginBottom: 4 }}>待办 / 决议</div>
-                      {ms.todos.map((t, i) => (
-                        <div key={i} style={{ padding: '2px 0' }}>· {t.text}{t.owner ? <span style={{ opacity: .6 }}> [{t.owner}]</span> : null}</div>
-                      ))}
+                    <div className="digest-sec">
+                      <div className="digest-label">待办 / 决议</div>
+                      <ul className="digest-todos">
+                        {ms.todos.map((t, i) => (
+                          <li key={i}>{t.text}{t.owner ? <span className="digest-owner">{t.owner}</span> : null}</li>
+                        ))}
+                      </ul>
                     </div>
                   )}
                   {ms.mindmap && ms.mindmap.branches && ms.mindmap.branches.length > 0 && (
-                    <div>
-                      <div style={{ fontSize: 12, opacity: .6, marginBottom: 4 }}>脑图 · {ms.mindmap.topic}</div>
-                      {ms.mindmap.branches.map((b, i) => (
-                        <div key={i} style={{ padding: '2px 0' }}><b>{b.name}</b>{b.points && b.points.length ? <span style={{ opacity: .7 }}>:{b.points.join('、')}</span> : null}</div>
-                      ))}
+                    <div className="digest-sec">
+                      <div className="digest-label">脑图</div>
+                      <div className="digest-topic">{ms.mindmap.topic}</div>
+                      <div className="digest-branches">
+                        {ms.mindmap.branches.map((b, i) => (
+                          <div key={i} className="digest-branch">
+                            <div className="digest-branch-name">{b.name}</div>
+                            {b.points && b.points.length ? (
+                              <ul className="digest-points">
+                                {b.points.map((p, j) => <li key={j}>{p}</li>)}
+                              </ul>
+                            ) : null}
+                          </div>
+                        ))}
+                      </div>
                     </div>
                   )}
                 </>
@@ -240,7 +283,7 @@ export default function Reader({ docId, targetPage, onClose, onOpen, onAsk, onAs
                 <div key={p.page_no} id={'pg-' + p.page_no} className="page-block"
                      style={p.page_no === hl ? { boxShadow: '0 0 0 2px var(--accent)', borderRadius: 8, transition: 'box-shadow .5s' } : undefined}>
                   <div className="p-no">第 {p.page_no} 页</div>
-                  <div className="p-text">{p.text ? (bookish ? reflow(p.text) : p.text) : '(本页无文本)'}</div>
+                  <div className="p-text">{p.text ? (isMedia ? renderTranscript(p.text) : (bookish ? reflow(p.text) : p.text)) : '(本页无文本)'}</div>
                 </div>
               ))}
               {pages.length < total && (
