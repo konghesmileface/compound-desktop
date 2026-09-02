@@ -132,11 +132,41 @@ def _html_meta_fallback(raw):
     return "\n".join(out)
 
 
+def _html_readable(raw):
+    """网页正文提取(readability 启发式):优先 <article>/<main>,去掉导航/页眉/页脚/侧栏/菜单等非正文。
+    bs4 缺失时回落基础去标签。"""
+    try:
+        from bs4 import BeautifulSoup
+        import re as _re
+        soup = BeautifulSoup(raw or "", "html.parser")
+        for t in soup(["script", "style", "noscript", "head", "nav", "header", "footer",
+                       "aside", "form", "button", "svg", "iframe", "select", "label"]):
+            t.decompose()
+        # 按 class/id 名删明显的非正文容器(导航/菜单/侧栏/横幅/cookie/订阅/分享/评论/广告)
+        junk = _re.compile(r"(nav|menu|header|footer|sidebar|side-bar|banner|cookie|subscrib|"
+                           r"share|social|comment|promo|advert|masthead|breadcrumb|pagination|"
+                           r"lang-switch|font-size|toolbar|widget)", _re.I)
+        for attr in ("class", "id"):
+            for el in soup.find_all(attrs={attr: junk}):
+                try:
+                    el.decompose()
+                except Exception:
+                    pass
+        # 优先正文容器
+        main = (soup.find("article") or soup.find("main")
+                or soup.find(attrs={"role": "main"}) or soup.body or soup)
+        text = main.get_text("\n")
+    except Exception:
+        return _html_to_text(raw)
+    lines = [ln.strip() for ln in text.splitlines() if ln.strip()]
+    return "\n".join(lines)
+
+
 def _html(path):
-    """网页 / 聊天记录 html 导出 → 去标签取正文。SPA 空壳退取 title+meta 摘要。"""
+    """网页 / 聊天记录 html 导出 → 取正文(去导航/菜单等非正文)。SPA 空壳退取 title+meta 摘要。"""
     with open(path, "r", encoding="utf-8", errors="ignore") as f:
         raw = f.read()
-    text = _html_to_text(raw)
+    text = _html_readable(raw)
     if len(text.strip()) < 40:          # 正文抓不到(JS 动态渲染)→ 退取 title/meta 摘要
         fb = _html_meta_fallback(raw)
         if len(fb.strip()) > len(text.strip()):

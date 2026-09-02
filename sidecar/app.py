@@ -4774,8 +4774,25 @@ def _fetch_url(url: str, owner=None) -> str:
     if not name.lower().endswith(ext):
         name += ext
     dest = os.path.join(_updir, name)
+    data = r.read(300 * 1024 * 1024)
     with open(dest, "wb") as f:
-        f.write(r.read(300 * 1024 * 1024))
+        f.write(data)
+    # ★网页用 <title> 命名(利于查找),别叫 generic「网页.html」
+    if ext in (".html", ".htm"):
+        try:
+            html_txt = data.decode("utf-8", errors="ignore")
+            m = _re.search(r"<title[^>]*>(.*?)</title>", html_txt, _re.S | _re.I)
+            if m:
+                import html as _hh
+                title = _re.sub(r"\s+", " ", _hh.unescape(m.group(1))).strip()
+                title = _re.sub(r"[^0-9A-Za-z一-鿿 .-]", "_", title)[:60].strip(" _")
+                if title and title != "网页":
+                    newdest = os.path.join(_updir, title + ".html")
+                    if not os.path.exists(newdest):
+                        os.rename(dest, newdest)
+                        dest = newdest
+        except Exception:
+            pass
     return dest
 
 
