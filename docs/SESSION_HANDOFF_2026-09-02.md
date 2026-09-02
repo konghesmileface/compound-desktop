@@ -43,3 +43,34 @@
 - **前后端契约**:异步端点返 `{state,result}`,前端务必解包 `result`(生成消失的根因)。
 - 唱片/星云等 CSS 动画:WKWebView 里 `transition` 和 `animation` 同属性会每帧插值打架→卡顿,spinning 时须 `transition:none`。
 - 好友星云粉线 = **命定星唯一**(契合最高一位,>0)才连一条线,其余漂浮——原始定稿设计(P1-22),StarCloud.jsx 从 M1 至今零改动,别误判"恢复错版本"。
+
+---
+
+## 六、续(2026-09-03):三台装机 + 视频/网页/邮件深修 + Windows 体验
+
+### 三台机器(用户家庭网络,均可达)
+| 机器 | IP(家庭网) | 版本 | 已装 |
+|---|---|---|---|
+| 本机 Mac | 192.168.71.108 | Mac 轻量 | ✅ e196862 |
+| mac2(zhaojue,pw qingshi@123) | 192.168.71.112 | Mac 高精 | ✅ e196862 |
+| Windows(Qingshi,pw qingshi@123) | 192.168.71.111 | Win 轻量 | ✅ e196862 |
+- ★办公网旧 IP 已变:mac2 曾 172.16.16.172、Win 曾 172.16.17.175;换网后走家庭网 192.168.71.x。
+- 远程装法:Mac 用 sshpass+scp DMG→挂载 ditto 到 /Applications;Windows scp setup.exe→`start /wait setup.exe /S`(EXITCODE=0 即成功,装到 `%LOCALAPPDATA%\Compound\compound-desktop.exe`,主程序名不是 Compound.exe)。
+- ★DMG 经 gh/clash 下载会损坏:必须 ditto 全量校验(imageinfo 只验头不够);LAN 内 scp 可靠。
+
+### 已提交待构建(e196862 之后,`git log e196862..HEAD`)
+- fe60f78:换机从云拉回本人画像(_ensure_my_persona,people/match 触发;106 `/social/persona/mine?full=1` 已上线)+ 冥想历史歌同步进度(mylibrary 带 sync{total,done})+ Windows 窗口秒出(壳不再等 /health 才开窗;前端 main.jsx Boot 门轮询 /health 显 splash)
+- 0ef6767:Windows 隐藏所有子进程黑框(open_external 改 explorer;sidecar_main 全局给 subprocess 注入 CREATE_NO_WINDOW)
+- f2c0e9c:Windows 下载助手秒存(/api/helper/save 拷到 Downloads + Tauri reveal_file 高亮,绕开浏览器 SmartScreen 扫 .exe)
+- 用户令"先不构建",这批攒着,下次一起打 + 三台装。
+
+### 本轮(9-2 白天起)四类入库深修(都已在 e196862 里)
+- 视频/语音:流式读音频(治整段进内存 OOM 崩)+ ASR 每段 sleep 让 CPU(治满负荷饿死 HTTP→前端误报"网络不稳",实测 sidecar 207% CPU 没崩只是忙)+ diarize>30min 跳过 + LLM 纠错并行5 + 说话人对话块渲染 + AI 纪要清爽排版。
+- 网页:文本密度自适应正文(去导航菜单)+ `<title>` 命名 + SPA 退取 title/meta 摘要。
+- 邮件:_eml/_mbox HTML 正文去标签(治吐原始 HTML)。
+- 网络韧性:Ingest 轮询抖动不再报错、软提示"处理中/别重传"、后端重启引导看文库、大文件等待提示。
+- 文库:首次学科聚类改后台(治同步 KMeans 堵死 sidecar→文库空)。
+
+### ★仍需注意
+- 视频转写在 8G 上仍慢(29min 视频要不短时间);已流式+让CPU降低崩溃率,但**增量保存未做**(崩了丢全部转写)——可作下一步。
+- helper/save 与 boot 门等新端点尚未装到机器上(待构建)。
