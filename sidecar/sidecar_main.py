@@ -18,6 +18,21 @@ if sys.platform.startswith("win"):
         sys.stderr.reconfigure(encoding="utf-8", errors="replace")
     except Exception:
         pass
+    # ★一劳永逸隐藏所有子进程控制台黑框:sidecar 各处 subprocess(ffmpeg/officecli/yt_dlp…)
+    #   在 Windows 上不加 CREATE_NO_WINDOW 都会弹 cmd 黑框。全局给 Popen 注入,覆盖 run/call/check_*。
+    try:
+        import subprocess as _sp
+        _CNW = getattr(_sp, "CREATE_NO_WINDOW", 0x08000000)
+        _orig_popen_init = _sp.Popen.__init__
+        def _popen_no_window(self, *a, **kw):
+            try:
+                kw["creationflags"] = int(kw.get("creationflags", 0)) | _CNW
+            except Exception:
+                pass
+            return _orig_popen_init(self, *a, **kw)
+        _sp.Popen.__init__ = _popen_no_window
+    except Exception:
+        pass
 
 
 def _data_dir() -> str:

@@ -92,7 +92,11 @@ fn open_external(url: String) {
     #[cfg(target_os = "macos")]
     let _ = Command::new("open").arg(&url).spawn();
     #[cfg(target_os = "windows")]
-    let _ = Command::new("cmd").args(["/C", "start", "", &url]).spawn();
+    {
+        // ★用 explorer 直接开默认浏览器(不经 cmd,不弹黑框);加 CREATE_NO_WINDOW 双保险。
+        use std::os::windows::process::CommandExt;
+        let _ = Command::new("explorer.exe").arg(&url).creation_flags(0x08000000).spawn();
+    }
     #[cfg(target_os = "linux")]
     let _ = Command::new("xdg-open").arg(&url).spawn();
 }
