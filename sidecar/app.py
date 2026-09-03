@@ -99,6 +99,27 @@ def _warm_cache():
     threading.Thread(target=w, daemon=True).start()
 
 
+# ★统一性能档:面向未来的好电脑设计,不为老电脑拖慢全体(用户令 2026-09-03)。
+#   好机器全速大批量无节流;只有老 8G 机才温柔(护机器不冻)。环境变量可覆盖。
+def _perf_profile():
+    try:
+        import semantic as _SM
+        gb = _SM._phys_ram_gb()
+    except Exception:
+        gb = 16
+    if gb <= 10:      # 8G 老机:温柔护航(慢但不冻)
+        p = {"analyze_batch": 3, "analyze_sleep": 15, "analyze_idle": 90, "autosync_round": 12, "asr_yield": 0.02}
+    elif gb <= 20:    # 16G
+        p = {"analyze_batch": 8, "analyze_sleep": 3, "analyze_idle": 60, "autosync_round": 40, "asr_yield": 0.0}
+    else:             # 32G+ 好机:全速
+        p = {"analyze_batch": 20, "analyze_sleep": 0, "analyze_idle": 45, "autosync_round": 200, "asr_yield": 0.0}
+    try:
+        if os.environ.get("ANALYZE_BATCH"): p["analyze_batch"] = int(os.environ["ANALYZE_BATCH"])
+    except Exception:
+        pass
+    return p
+
+
 # ★★后台常驻嵌入驱动:客户端是单机、没有 106 上那种回填 cron,微信 handoff 入库的页
 #   永远不会被嵌入 → "分析中"卡 0%、星图/语义问答/探索全空。这里持续把待嵌页嵌完(embed_pending
 #   每48页 commit,进度实时可见),有活快转没活慢转。106 上它只补零星漏嵌,无害(统一单一代码)。
@@ -137,7 +158,8 @@ def _start_bg_analyzer():
     def _loop():
         _time.sleep(25)   # 让嵌入先起步(语义层优先)
         import chat_intel as _CI, entities as _EN, dockind as _DK
-        import chat_topics as CT   # ★chat星系预热用(217行);原来漏 import 导致 "name 'CT' is not defined"、预热一直失败→首次点仅聊天要现算
+        import chat_topics as CT   # ★chat星系预热用;原来漏 import 导致 "name 'CT' is not defined"、预热一直失败→首次点仅聊天要现算
+        _PF = _perf_profile(); _AB = _PF["analyze_batch"]   # 好机器每轮多处理、少sleep;老机器温柔
         while True:
             worked = False
             if _BG_ANALYZE_LOCK.acquire(blocking=False):
@@ -157,7 +179,7 @@ def _start_bg_analyzer():
                                 # 承诺雷达 intel:每轮处理 ≤3 个未缓存微信会话
                                 pend = con.execute(
                                     "SELECT d.id, d.filename FROM documents d WHERE d.owner=? AND d.filename LIKE '微信_与%' AND d.pages>=2 "
-                                    "AND NOT EXISTS(SELECT 1 FROM chat_intel ci WHERE ci.username=d.owner AND ci.contact=REPLACE(REPLACE(d.filename,'微信_与',''),'.txt','')) LIMIT 3",
+                                    "AND NOT EXISTS(SELECT 1 FROM chat_intel ci WHERE ci.username=d.owner AND ci.contact=REPLACE(REPLACE(d.filename,'微信_与',''),'.txt','')) LIMIT %d" % _AB,
                                     (owner,)).fetchall()
                                 for did, fn in pend:
                                     contact = fn.replace("微信_与", "").replace(".txt", "")
@@ -172,7 +194,7 @@ def _start_bg_analyzer():
                                 # 人脉图谱 entities:每轮处理 ≤3 个未抽实体的文档
                                 pend2 = con.execute(
                                     "SELECT d.id FROM documents d WHERE d.owner=? "
-                                    "AND NOT EXISTS(SELECT 1 FROM analysis_processed ap WHERE ap.owner=d.owner AND ap.layer='entities' AND ap.doc_id=d.id) LIMIT 3",
+                                    "AND NOT EXISTS(SELECT 1 FROM analysis_processed ap WHERE ap.owner=d.owner AND ap.layer='entities' AND ap.doc_id=d.id) LIMIT %d" % _AB,
                                     (owner,)).fetchall()
                                 for (did,) in pend2:
                                     text = "\n".join(p[0] for p in con.execute("SELECT text FROM pages WHERE doc_id=? ORDER BY page_no", (did,)).fetchall())[:6000]
@@ -224,7 +246,7 @@ def _start_bg_analyzer():
                     print(f"[bg-analyze] {e}")
                 finally:
                     _BG_ANALYZE_LOCK.release()
-            _time.sleep(15 if worked else 90)   # ★8G机护航:后台分析节流(有活15s/没活90s),给用户操作留资源,别把机器占死
+            _time.sleep(_PF["analyze_sleep"] if worked else _PF["analyze_idle"])   # ★按机器档:好机器几乎不歇(全速),老8G机才节流护航
     threading.Thread(target=_loop, daemon=True).start()
 
 
@@ -247,8 +269,10 @@ def _autosync_changed(con, owner, path):
         return None
     return (mt, sz)
 
-def _autosync_scan_owner(con, owner, per_round=12):
-    """扫该 owner 所有监听文件夹,把新增/改动文件(≤per_round/轮,护 8G 机)入库。返回本轮入库数。"""
+def _autosync_scan_owner(con, owner, per_round=None):
+    """扫该 owner 所有监听文件夹,把新增/改动文件入库(每轮上限按机器档:好机器一次多入,老机温柔)。返回本轮入库数。"""
+    if per_round is None:
+        per_round = _perf_profile()["autosync_round"]
     folders = con.execute("SELECT path FROM autosync_folders WHERE owner=?", (owner,)).fetchall()
     todo, stamp = [], {}
     for (folder,) in folders:
@@ -359,7 +383,8 @@ def autosync_add(payload: dict = Body(...), authorization: str = Header(None)):
             try:
                 c2 = _con()
                 try:
-                    while _autosync_scan_owner(c2, owner) >= 12:   # 大文件夹分批扫完(每轮 per_round=12)
+                    _ar = _perf_profile()["autosync_round"]
+                    while _autosync_scan_owner(c2, owner) >= _ar:   # 大文件夹分批扫完(每轮上限按机器档)
                         pass
                 finally:
                     c2.close()

@@ -67,6 +67,12 @@ def transcribe_segments(wav_path, progress_cb=None):
     import numpy as np
     import sherpa_onnx
     import time as _time
+    # ★让CPU仅老机需要(防HTTP饿死);好机器全速不歇(用户令:不为老电脑牺牲性能)
+    try:
+        import semantic as _SM
+        _YIELD = 0.02 if _SM._phys_ram_gb() <= 10 else 0.0
+    except Exception:
+        _YIELD = 0.0
     w = wave.open(wav_path)
     total = w.getnframes() / w.getframerate()
     vcfg = sherpa_onnx.VadModelConfig()
@@ -102,7 +108,7 @@ def transcribe_segments(wav_path, progress_cb=None):
                     pass
             # ★让出 CPU:ASR 满负荷会把 HTTP 服务饿死→/health、/job 应答不了→前端误报"网络不稳/出错"。
             #   每段后短暂 sleep 让 uvicorn 有机会响应(轻微拖慢转写,换来进度一直可刷、不吓用户)。
-            _time.sleep(0.02)
+            if _YIELD: _time.sleep(_YIELD)
     # ★流式读音频:每次读 1s 帧喂 VAD,绝不把整段音轨压进内存(2h 视频≈460MB→OOM 撑崩 8G sidecar 的真凶)。
     #   峰值内存 = 1s 块 + VAD 内部有界缓冲。
     CHUNK = 16000  # 1 秒
@@ -119,7 +125,7 @@ def transcribe_segments(wav_path, progress_cb=None):
         drained += 1
         if drained % 3 == 0:   # 每 ~3s drain 一次(及时出段+回收)
             _drain()
-        _time.sleep(0.003)   # 读帧/VAD 之间也让出一点 CPU,保 HTTP 服务不被饿死
+        if _YIELD: _time.sleep(_YIELD * 0.15)   # 仅老机让CPU;好机器全速
     _drain(flush=True)
     try:
         w.close()
