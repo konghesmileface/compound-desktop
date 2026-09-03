@@ -137,6 +137,7 @@ def _start_bg_analyzer():
     def _loop():
         _time.sleep(25)   # 让嵌入先起步(语义层优先)
         import chat_intel as _CI, entities as _EN, dockind as _DK
+        import chat_topics as CT   # ★chat星系预热用(217行);原来漏 import 导致 "name 'CT' is not defined"、预热一直失败→首次点仅聊天要现算
         while True:
             worked = False
             if _BG_ANALYZE_LOCK.acquire(blocking=False):
