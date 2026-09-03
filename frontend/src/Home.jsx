@@ -128,7 +128,7 @@ function ComposeForm({ ct, form, set }) {
     <>
       <textarea className="compose-area" autoFocus placeholder={t.ph} value={form.text || ''} onChange={(e) => set({ text: e.target.value })} />
       {ct === 'goal' && (<div className="cf-fields">
-        <label className="cf-field"><span>{t.fields.deadline}(可选)</span><input type="date" value={form.deadline || ''} onChange={(e) => set({ deadline: e.target.value })} /></label>
+        <label className="cf-field"><span>{t.fields.deadline}(可选)</span><input type="date" lang="en" value={form.deadline || ''} onChange={(e) => set({ deadline: e.target.value })} /></label>
         <label className="cf-field"><span>{t.fields.why}(可选)</span><input placeholder="想清楚动机,更容易坚持" value={form.why || ''} onChange={(e) => set({ why: e.target.value })} /></label>
       </div>)}
       {ct === 'diary' && (<div className="cf-fields">
@@ -142,7 +142,7 @@ function ComposeForm({ ct, form, set }) {
         <label className="cf-field"><span>{t.fields.tags}(可选,空格分隔)</span><input placeholder="债券 估值 灵感" value={form.tags || ''} onChange={(e) => set({ tags: e.target.value })} /></label>
       </div>)}
       {ct === 'task' && (<div className="cf-fields">
-        <label className="cf-field"><span>{t.fields.due}(可选)</span><input type="date" value={form.due || ''} onChange={(e) => set({ due: e.target.value })} /></label>
+        <label className="cf-field"><span>{t.fields.due}(可选)</span><input type="date" lang="en" value={form.due || ''} onChange={(e) => set({ due: e.target.value })} /></label>
         <div className="cf-chips"><span className="cf-clabel">轻重</span>{PRIOS.map((p) => (
           <button key={p} type="button" className={'chip' + (form.prio === p ? ' on' : '')} onClick={() => set({ prio: form.prio === p ? '' : p })}>{p}</button>))}</div>
       </div>)}
