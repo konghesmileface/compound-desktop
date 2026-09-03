@@ -2921,11 +2921,12 @@ def match(other: str, refresh: int = 0, authorization: str = Header(None)):
     con = _con()
     try:
         _ensure_my_persona(con, me, authorization)   # 换机/新登录:先从云拉回本人画像,才能算姻缘
-        con.execute("CREATE TABLE IF NOT EXISTS match_cache (owner TEXT, other TEXT, data TEXT, PRIMARY KEY(owner,other))")
-        if not refresh:
-            c = con.execute("SELECT data FROM match_cache WHERE owner=? AND other=?", (me, other)).fetchone()
-            if c:
-                return {"cached": True, **json.loads(c[0])}
+        # ★缓存加"双方画像版本"签名:画像随新数据定期变化,旧做法一算永久用缓存(除非手动刷新)→
+        #   画像变了报告还是旧的。现在按双方画像内容签名,任一方画像更新→签名变→自动重算。
+        con.execute("CREATE TABLE IF NOT EXISTS match_cache (owner TEXT, other TEXT, data TEXT, sig TEXT, PRIMARY KEY(owner,other))")
+        try: con.execute("ALTER TABLE match_cache ADD COLUMN sig TEXT")  # 老库补列
+        except Exception: pass
+        # 先取双方画像(读缓存也要用它算签名)
         pa, ma = _my_persona(con, me)
         if not pa:
             # P1-18:本人没画像就别发 LLM(会空耗 200s 产劣质报告)→ 让前端引导先完善画像
@@ -2940,6 +2941,12 @@ def match(other: str, refresh: int = 0, authorization: str = Header(None)):
                 raise HTTPException(404, "还不能匹配:对方需先同意成为好友、且生成过画像")
             pb = _cd if isinstance(_cd, dict) else json.loads(_cd)
             mb = _cm
+        import hashlib as _hl_m
+        _sig = _hl_m.md5(json.dumps([pa, pb, ma, mb], ensure_ascii=False, sort_keys=True).encode("utf-8")).hexdigest()
+        if not refresh:
+            c = con.execute("SELECT data, sig FROM match_cache WHERE owner=? AND other=?", (me, other)).fetchone()
+            if c and c[1] == _sig:   # 签名一致=双方画像都没变→用缓存;变了→往下重算
+                return {"cached": True, **json.loads(c[0])}
         # 真实填写的基础资料优先(MBTI 等绝不由 AI 编造):有真实填写就用真实的,没填就标未知
         _upa = _user_profile(con, me); _upb = _user_profile(con, other)
         ma_real = bool(_upa["mbti"]); mb_real = bool(_upb["mbti"])
@@ -2991,7 +2998,7 @@ def match(other: str, refresh: int = 0, authorization: str = Header(None)):
         cs = _cos_emb(ea[0] if ea else None, eb[0] if eb else None)
         data["compat"] = round(max(0.0, cs) * 100) if cs is not None else _compat(pa, pb)
         data["mbti"] = mb; data["mbti_real"] = mb_real; data["my_mbti"] = ma; data["my_mbti_real"] = ma_real
-        con.execute("INSERT OR REPLACE INTO match_cache(owner,other,data) VALUES(?,?,?)", (me, other, json.dumps(data, ensure_ascii=False)))
+        con.execute("INSERT OR REPLACE INTO match_cache(owner,other,data,sig) VALUES(?,?,?,?)", (me, other, json.dumps(data, ensure_ascii=False), _sig))
         con.commit()
         return {"cached": False, **data}
     finally:
