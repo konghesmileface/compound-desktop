@@ -102,3 +102,33 @@
 - **Windows 干净重测计划**(坐实根因):卸载旧客户端+清 %APPDATA%\Compound + ~\.wxsync(游标/handoff/keys)→装新版→重开助手抓密钥+开实时同步→不手动推,看客户端自己全量入库=证明修对。
 - ★远程 Windows SSH 必须 no-proxy:env -u *_proxy + ssh -o ProxyCommand=none(走clash会频繁掉线);Windows 系统 python 用 `py`(非python);嵌 Python 到 PowerShell 引号会崩→scp .py/.ps1 文件跑。
 - 三台家庭网IP会变(办公网:mac2=172.16.16.172 win=172.16.17.175;家庭网=192.168.71.x)。
+
+---
+
+## 八、续(2026-09-03 夜):三台入库全测 + 高精OCR真bug + UI批
+
+### 入库全格式测试(autosync 自动扫描法,不碰凭据)
+- 测法:直接往库 autosync_folders 插文件夹(owner=账号)→ bg-autosync 后台自动扫描入库。不需token。
+- **Windows 轻量:11格式全过**(pdf/pptx/md/png-OCR/txt/eml×2去HTML/docx/html正文/xlsx结构化/mp4-ASR)。邮件去HTML+网页正文自适应验证通过。
+- **mac2 高精:11格式全过**,但揪出大bug↓
+
+### ★高精OCR白装(已修 7b02279)
+- mac2高精 PNG入库 backend=rapidocr(轻量),没用paddle。真因:_ocr_image_file rapidocr装了就永远return,paddle分支仅rapidocr缺失时走+地址写死8100。
+- 修:PADDLE_OCR_URL存在时优先paddle /ocr/image;backend标签动态。
+
+### 微信"人脉卡数量不对"= 其实正确
+- 24会话但只7个 pages>=2(其余17个是一两句短会话),关系卡只给够长会话生成→7张正确。非bug。
+
+### bg-analyze CT未定义(已修 579af1a):chat星系预热漏 import chat_topics。
+
+### key无效反馈(已修):Settings保存后自动测key,无效当场提示(不再和"没配key"一样静默)。
+
+### ★UI批(用户Windows宽屏实测,部分待修)
+- 图62/64:发现卡片不对齐+底部输入框左右大空白 → home-view已改1600居中(996a666),但洞察/雷达/冥想页用通用.view全宽左对齐、还没加居中包裹(★待修:每个JSX加max-width+auto的wrapper,或.view内层居中)。
+- 图65:新建目标日期 type=date 在中文Windows显示"yyyy-mm-日"(WebView2原生本地化,占位符改不了)→★待修:换自定义日期选择或美化。Cards.jsx:104。
+- 重复"老男孩":联想历史卡同一人反复展示 → ★待修:去重(Home.jsx 散落模块)。
+- "大脑解读中·稍后自动补上":联想卡等LLM生成(key/8G内存相关),补上即消失。
+- 8G错峰:嵌入(2.3G模型)与bg-analyze同时跑内存爆(实测95%)→★待做:嵌入进行中时bg-analyze让路。
+
+### 下批构建清单(全部待构建)
+needs_key提示 / 游标自愈 / 宽屏空白(home+persona已改,洞察雷达冥想待改) / 标签字号 / CT import / 高精OCR走paddle / key无效反馈 / 【待做:8G错峰、日期选择器、联想去重】
