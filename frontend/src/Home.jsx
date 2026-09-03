@@ -449,7 +449,7 @@ export default function Home({ onOpen, onUnread }) {
           <div className="ent-sec">
             <div className="ent-head"><span className="ent-dot" />同一个人 / 事,散落在这些资料里 —— 大脑替你认出来了</div>
             <div className="ent-grid">
-              {entLinks.map((e, i) => (
+              {(() => { const _seen = new Set(); return entLinks.filter((e) => { const k = (e.entity || '').trim(); if (!k || _seen.has(k)) return false; _seen.add(k); return true }) })().map((e, i) => (
                 <div key={i} className="ent-card glass">
                   <div className="ent-name clickable" title="点击看这个关键词在各份资料里的具体上下文"
                        onClick={() => askDirect(`「${e.entity}」出现在我的 ${e.count} 份资料里。请告诉我:它在其中几份代表性资料里具体是因为什么出现的(各自的上下文和角色),以及这些散落的信息连起来,我能利用的点是什么。`, `「${e.entity}」为什么出现在这些资料里?`)}>

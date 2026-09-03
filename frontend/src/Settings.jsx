@@ -143,7 +143,16 @@ export default function Settings({ auth, onLogout, onNick, section = 'all' }) {
     setStatus(null)
     if (!(cfg.llm_model || '').trim()) { setStatus({ ok: false, msg: '请填写「质量模型」(可从下拉选推荐)' }); return }
     if (!(cfg.llm_fast_model || '').trim()) { setStatus({ ok: false, msg: '请填写「快模型」(可从下拉选推荐)' }); return }
-    try { await api.saveSettings(cfg); const s = await api.getSettings(); setSaved(s); setCfg((c) => ({ ...c, llm_key: '' })); setStatus({ ok: true, msg: '已保存' }) }
+    try {
+      await api.saveSettings(cfg); const s = await api.getSettings(); setSaved(s); setCfg((c) => ({ ...c, llm_key: '' }))
+      // ★保存后自动测一次:key 无效当场告知,别等承诺雷达/人脉图谱静默失败(和"没配key"一样迷惑)
+      setStatus({ ok: true, msg: '已保存,正在验证 key…' })
+      try {
+        const r = await api.testSettings()
+        setStatus(r.ok ? { ok: true, msg: '已保存 · key 验证通过 ✓ ' + (r.reply ? '(模型回复:' + r.reply + ')' : '') }
+                       : { ok: false, msg: '已保存,但 key 验证失败:' + (r.error || '连不通') + ' —— 承诺雷达/人脉图谱需要有效 key 才能分析,请检查 key/模型/网络' })
+      } catch { setStatus({ ok: true, msg: '已保存(key 未能自动验证,可点「测试连通」手动确认)' }) }
+    }
     catch (e) { setStatus({ ok: false, msg: '保存失败' }) }
   }
   async function test() {
