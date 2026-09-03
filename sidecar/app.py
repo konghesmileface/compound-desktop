@@ -1714,24 +1714,31 @@ def _ingest_wechat_msgs(con, me, msgs):
     dup = 0
     seen = set()   # 批内去重(同批重复内容)
     for m in msgs:
-        sess = (m.get("session_name") or m.get("session_id") or "未知").strip()
-        text = m.get("text") or ""
-        if not text:
+        # ★单条容错:一条坏消息(非dict/字段异常)只跳过它自己,绝不抛出去连累整批
+        #   (整批抛异常会让消费器游标不前进→永久卡在这批,历史再也进不来)。
+        try:
+            if not isinstance(m, dict):
+                continue
+            sess = (m.get("session_name") or m.get("session_id") or "未知").strip()
+            text = m.get("text") or ""
+            if not text:
+                continue
+            ts = str(m.get("ts") or "").replace("T", " ")[:16]   # 与 _wx_line 同口径(分钟精度)
+            sname = (m.get("sender_name") or "").strip()
+            is_me = sname in ("我", "(我)") or not (m.get("sender_id") or "").strip()
+            skey = "我" if is_me else sname
+            fp = hashlib.md5(("%s|%s|%s|%s|%s" % (me, sess, skey, ts, text)).encode("utf-8")).hexdigest()
+            # ★只查不写 fp(autocommit 下不能先落 fp:若随后写 page 失败,消息永久被判重丢失——实测 1130fp/316条)。
+            if fp in seen:
+                dup += 1
+                continue
+            if con.execute("SELECT 1 FROM wechat_lines WHERE owner=? AND fp=?", (me, fp)).fetchone():
+                dup += 1
+                continue
+            seen.add(fp)
+            by_sess.setdefault(sess, []).append((fp, m))
+        except Exception:
             continue
-        ts = str(m.get("ts") or "").replace("T", " ")[:16]   # 与 _wx_line 同口径(分钟精度)
-        sname = (m.get("sender_name") or "").strip()
-        is_me = sname in ("我", "(我)") or not (m.get("sender_id") or "").strip()
-        skey = "我" if is_me else sname
-        fp = hashlib.md5(("%s|%s|%s|%s|%s" % (me, sess, skey, ts, text)).encode("utf-8")).hexdigest()
-        # ★只查不写 fp(autocommit 下不能先落 fp:若随后写 page 失败,消息永久被判重丢失——实测 1130fp/316条)。
-        if fp in seen:
-            dup += 1
-            continue
-        if con.execute("SELECT 1 FROM wechat_lines WHERE owner=? AND fp=?", (me, fp)).fetchone():
-            dup += 1
-            continue
-        seen.add(fp)
-        by_sess.setdefault(sess, []).append((fp, m))
     ingested = 0
     for sess, items in by_sess.items():
         fn = "微信_与" + _wx_safe(sess) + ".txt"
@@ -1839,7 +1846,7 @@ def _handoff_watch_loop():
             me = _HANDOFF_OWNER["v"]
             if me and os.path.isdir(hd):
                 batch = []
-                dirty = False
+                pending = {}          # ★本轮待前进的游标:只有入库成功后才 apply 到 cursors(见下方)
                 total_bytes = 0
                 done_bytes = 0
                 for f in sorted(x for x in os.listdir(hd) if x.endswith(".ndjson")):
@@ -1859,8 +1866,7 @@ def _handoff_watch_loop():
                                 raw = fh.read(CHUNK)
                             nl = raw.rfind(b"\n")
                             usable, adv = (raw, len(raw)) if nl < 0 else (raw[:nl], nl + 1)
-                            cursors[p] = off + adv
-                            dirty = True
+                            pending[p] = off + adv   # ★先记待前进,别直接动 cursors
                             for ln in usable.split(b"\n"):
                                 ln = ln.strip()
                                 if ln:
@@ -1870,7 +1876,7 @@ def _handoff_watch_loop():
                                         pass
                         except Exception:
                             pass
-                    done_bytes += min(cursors.get(p, 0), sz)
+                    done_bytes += min(pending.get(p, cursors.get(p, 0)), sz)
                 # 助手活性:助手运行时每秒刷新 ~/.wxsync/state.json;关掉就不刷(关窗未退进程仍算在跑)。
                 alive = False
                 try:
@@ -1882,17 +1888,22 @@ def _handoff_watch_loop():
                 _HANDOFF_PROG.update(done=done_bytes, total=total_bytes,
                                      importing=importing, alive=alive)
                 con = _con()
+                ingest_ok = True
                 try:
                     if batch:
                         _ingest_wechat_msgs(con, me, batch)  # 入库总做
                     if alive:
                         _handoff_beat(con, me)               # 助手在跑=实时同步中
                     con.commit()
-                except Exception:
-                    pass
+                except Exception as _e:
+                    ingest_ok = False   # ★入库失败→本轮不前进游标,下次重读这批(靠 fp 去重不会重复)
+                    print("[handoff] 入库失败,游标不前进,下次重试:", str(_e)[:120], file=sys.stderr)
                 finally:
                     con.close()
-                if dirty:
+                # ★只有入库成功才 apply 游标并持久化(治:读完游标就前进+入库异常被吞+游标无条件保存
+                #   →入库失败的那批永久跳过丢失。用户实测 Windows 消费器起了11次却只入几条的真因)。
+                if ingest_ok and pending:
+                    cursors.update(pending)
                     _handoff_save_cursors(cursors)
         except Exception:
             pass

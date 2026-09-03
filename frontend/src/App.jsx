@@ -96,6 +96,11 @@ export default function App() {
     const poll = () => api.cards().then((r) => setUnread(r.unread_total || 0)).catch(() => {})
     poll(); const t = setInterval(poll, 45000); return () => clearInterval(t)
   }, [auth])
+  // ★登录后立即启动微信 handoff 消费器(原来只在打开「微信同步」页才启动→用户在别的页时实时同步不入库/历史不重灌)
+  React.useEffect(() => {
+    if (!auth) return
+    api.wechatWatch().catch(() => {})
+  }, [auth])
   // 好友请求数(左侧「好友」tab 角标提示)
   const [friendReqs, setFriendReqs] = useState(0)
   React.useEffect(() => {
