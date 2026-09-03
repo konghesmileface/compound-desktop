@@ -1748,16 +1748,20 @@ def _ingest_wechat_msgs(con, me, msgs):
         fps = [fp for (fp, m) in items]
         CH = 50
         for i in range(0, len(lines), CH):
-            pcount += 1
-            con.execute("INSERT INTO pages(doc_id,page_no,method,text) VALUES(?,?,?,?)",
-                        (did, pcount, "wechat", "\n".join(lines[i:i + CH])))
-            # ★页写成功后才记该批消息的 fp(autocommit:page 已落再落 fp;若上句抛错则 fp 不落,下次可重来,绝不丢)
-            for fp in fps[i:i + CH]:
-                try:
-                    con.execute("INSERT OR IGNORE INTO wechat_lines(owner,fp) VALUES(?,?)", (me, fp))
-                except Exception:
-                    pass
-            ingested += len(lines[i:i + CH])
+            # ★每页独立 try:一页写失败只跳过该页(不记 fp、不中断整批),避免一条坏消息连累整批/永久卡流。
+            try:
+                con.execute("INSERT INTO pages(doc_id,page_no,method,text) VALUES(?,?,?,?)",
+                            (did, pcount + 1, "wechat", "\n".join(lines[i:i + CH])))
+                pcount += 1
+                # 页写成功后才记该页 fp(autocommit:page 已落再落 fp;失败则 fp 不落,下次可重来,绝不丢)
+                for fp in fps[i:i + CH]:
+                    try:
+                        con.execute("INSERT OR IGNORE INTO wechat_lines(owner,fp) VALUES(?,?)", (me, fp))
+                    except Exception:
+                        pass
+                ingested += len(lines[i:i + CH])
+            except Exception as _e:
+                print("[wechat-ingest] 页写失败,跳过(不记fp,下次重来):", str(_e)[:80], file=sys.stderr)
         con.execute("UPDATE documents SET pages=? WHERE id=?", (pcount, did))
     return ingested, dup, len(by_sess)
 
