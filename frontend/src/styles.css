@@ -609,16 +609,16 @@ input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; appearance: 
 /* ================= 问答主页(核心 · 精致)================= */
 .home-view { position: absolute; inset: 0; overflow-y: auto; padding: 46px 48px 60px; }
 /* 内容填满宽度(不再两边大片空白),仅设一个舒适上限 */
-.home-view > * { max-width: 1280px; margin-left: auto !important; margin-right: auto !important; }
+.home-view > * { max-width: 1600px; margin-left: auto !important; margin-right: auto !important; }
 .home-view .view-head { margin-bottom: 24px; }
 
 /* 首页:滚动内容 + 底部固定问答条 */
 .home-flex { display: flex; flex-direction: column; padding: 0; overflow: hidden; }
 .home-flex > * { max-width: none !important; margin: 0 !important; }
 .home-scroll { flex: 1; overflow-y: auto; padding: 46px 48px 26px; }
-.home-scroll > * { max-width: 1280px; margin-left: auto; margin-right: auto; }
+.home-scroll > * { max-width: 1600px; margin-left: auto; margin-right: auto; }
 .home-composer { flex: 0 0 auto; padding: 15px 48px 20px; border-top: 1px solid var(--border); background: rgba(8,9,13,0.7); backdrop-filter: blur(12px); }
-.home-composer .home-box { max-width: 1280px; margin: 0 auto; }
+.home-composer .home-box { max-width: 1600px; margin: 0 auto; }
 .home-view .view-head h1 { font-size: 22px; font-weight: 640; letter-spacing: -0.02em; }
 .home-view .view-head p { max-width: 600px; }
 
@@ -1055,7 +1055,7 @@ input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; appearance: 
 .nd-gen-btn { flex: 1; justify-content: center; min-width: 112px; background: #171b24; }
 
 /* ============ 我的画像 ============ */
-.persona-view { max-width: 1400px; }
+.persona-view { max-width: 1600px; margin-left: auto; margin-right: auto; }
 .pg-hero { padding: 26px 28px; margin-bottom: 30px; border-left: 3px solid var(--accent); }
 .pg-social { padding: 18px 22px; border-left: 3px solid #ffd166; }
 .pg-social-circle { font-size: 15px; font-weight: 600; line-height: 1.6; color: var(--text); }

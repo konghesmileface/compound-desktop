@@ -114,7 +114,7 @@ export default function Insights({ onOpen, onAsk }) {
                   <div className="por-cloud-t" style={{ color }}>{label}</div>
                   <div className="por-cloud">
                     {ents.map((e, i) => {
-                      const sz = 12 + Math.round((e.people / max) * 9)
+                      const sz = 12 + Math.round((e.people / max) * 4)   // 上限压到16px(原21px太大,图59底部标签)
                       return (
                         <span key={i} className="por-tag" style={{ fontSize: sz + 'px', borderColor: color + '66', color }}
                           onClick={() => onAsk && onAsk('我认识的人里,和「' + e.name + '」有关的都有谁?他们各自什么角色、和我什么交集?')}
