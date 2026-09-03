@@ -322,15 +322,29 @@ def _clean_ocr_lines(lines):
 
 
 def _ocr_image_file(path):
-    """图片OCR: rapidocr可用则用(快), 否则走本机8100百度OCR服务(质量高)。返回清洗后的行列表。"""
+    """图片OCR:★高精版(设了 PADDLE_OCR_URL)优先走 paddle PP-StructureV3(版面/表格更强);
+    失败或轻量版回落 rapidocr(快)。返回清洗后的行列表。"""
+    import json as _j
+    import subprocess as _sp
+    # ★高精:paddle worker 在(PADDLE_OCR_URL)→ 优先用它(否则高精版白装 paddle、图片仍走 rapidocr)
+    _pu = os.environ.get("PADDLE_OCR_URL")
+    if _pu:
+        try:
+            r = _sp.run(["curl", "-s", "-m", "180", "-X", "POST", _pu.rstrip("/") + "/ocr/image",
+                         "-F", "file=@" + path], capture_output=True, text=True, timeout=185)
+            d = _j.loads(r.stdout)
+            t = d.get("markdown") or d.get("text") or ""
+            lines = _clean_ocr_lines(str(t).split("\n"))
+            if lines:
+                return lines
+        except Exception as e:
+            print("[ocr] paddle 失败,回落 rapidocr:", str(e)[:80])
     try:
         from rapidocr import RapidOCR
         res, _ = RapidOCR()(path)
         return _clean_ocr_lines([x[1] for x in (res or [])])
     except ImportError:
         pass
-    import json as _j
-    import subprocess as _sp
     r = _sp.run(["curl", "-s", "-X", "POST", "http://127.0.0.1:8100/ocr/image",
                  "-F", "file=@" + path], capture_output=True, text=True, timeout=180)
     try:
@@ -362,15 +376,16 @@ def process_image(con, path, vault_dir, force=False, progress_cb=None):
             progress_cb(1, 1)
         except Exception:
             pass
+    _ocr_bk = "ocr:paddle" if os.environ.get("PADDLE_OCR_URL") else "ocr:rapidocr"
     con.execute("DELETE FROM documents WHERE source_path=?", (path,))
     cur = con.execute(
         "INSERT INTO documents(source_path,filename,pages,backend,file_hash,ingested_at)"
         " VALUES(?,?,?,?,?,?)",
-        (path, os.path.basename(path), 1, "ocr:rapidocr", fhash,
+        (path, os.path.basename(path), 1, _ocr_bk, fhash,
          _dt.datetime.now().isoformat(timespec="seconds")))
     doc_id = cur.lastrowid
     con.execute("INSERT INTO pages(doc_id,page_no,method,text) VALUES(?,?,?,?)",
-                (doc_id, 1, "ocr:rapidocr", text))
+                (doc_id, 1, _ocr_bk, text))
     con.commit()
     os.makedirs(vault_dir, exist_ok=True)
     stem = os.path.splitext(os.path.basename(path))[0]
