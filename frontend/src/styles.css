@@ -764,7 +764,7 @@ input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; appearance: 
 .model-combo-opt.on { color: var(--accent); background: rgba(139,140,255,0.08); }
 
 /* ===== 冥想 · 音乐页(歌曲为主,炫酷)===== */
-.ms-page { padding: 40px 46px 28px; }   /* 与 .view 同规格(顶部呼吸+左右边距),别用简写覆盖成 0/10 */
+.ms-page { padding: 40px max(46px, (100% - 1600px) / 2) 28px; }   /* 宽屏居中(同 .view),别用简写覆盖成 0/10 */
 .ms-page-head { text-align: center; margin: 0 0 24px; }
 .ms-page-kick { display: inline-block; font-size: 20px; font-weight: 750; letter-spacing: .01em; line-height: 1.4; padding: 2px 0;
   background: linear-gradient(90deg, #a9b0ff, #f0abfc, #a9b0ff); -webkit-background-clip: text; background-clip: text; color: transparent; }
@@ -2797,7 +2797,8 @@ button.oc-node { background: none; border: none; padding: 0; margin: 0; cursor: 
 .rel-path { margin-top: 14px; padding-top: 12px; border-top: 1px dashed rgba(255,255,255,0.1); }
 .rel-path-bar { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .rel-path-bar select { background: rgba(255,255,255,0.05); color: var(--text-1); border: 1px solid rgba(255,255,255,0.14);
-  border-radius: 9px; padding: 7px 10px; font-size: 12.5px; max-width: 190px; }
+  border-radius: 9px; padding: 7px 10px; font-size: 12.5px; max-width: 190px; color-scheme: dark; }
+.rel-path-bar select option { background: #12161e; color: var(--text-1); }   /* Windows 原生下拉列表深色,不白底突兀 */
 .rel-path-arrow { color: var(--text-2); }
 .rel-path-go { font-size: 12.5px; font-weight: 600; color: #0b0e14; background: var(--accent); border: none;
   border-radius: 9px; padding: 8px 16px; cursor: pointer; }
