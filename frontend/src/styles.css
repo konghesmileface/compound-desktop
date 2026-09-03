@@ -128,7 +128,9 @@ body {
   box-shadow: 0 10px 44px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,255,255,0.04);
 }
 
-.view { position: absolute; inset: 0; overflow: auto; padding: 40px 46px; }
+/* ★宽屏内容居中:超过 ~1600 内容宽后,左右 padding 自动增大把内容挤到中间(零JSX改动,
+   所有用 .view 的页——洞察/雷达/冥想/人脉/画像等——一次生效,治宽屏右侧大空白/左对齐)。 */
+.view { position: absolute; inset: 0; overflow: auto; padding: 40px max(46px, (100% - 1600px) / 2); }
 .view-head { margin-bottom: 28px; }
 .view-head h1 { font-size: 24px; font-weight: 640; letter-spacing: -0.02em; }
 .view-head p { color: var(--text-2); margin-top: 8px; font-size: 13.5px; line-height: 1.55; max-width: 640px; }
@@ -1055,7 +1057,7 @@ input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; appearance: 
 .nd-gen-btn { flex: 1; justify-content: center; min-width: 112px; background: #171b24; }
 
 /* ============ 我的画像 ============ */
-.persona-view { max-width: 1600px; margin-left: auto; margin-right: auto; }
+.persona-view { }
 .pg-hero { padding: 26px 28px; margin-bottom: 30px; border-left: 3px solid var(--accent); }
 .pg-social { padding: 18px 22px; border-left: 3px solid #ffd166; }
 .pg-social-circle { font-size: 15px; font-weight: 600; line-height: 1.6; color: var(--text); }
