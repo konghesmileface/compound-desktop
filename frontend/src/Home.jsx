@@ -176,10 +176,22 @@ export default function Home({ onOpen, onUnread }) {
     api.today().then((r) => setTodayFeed(r.items || [])).catch(() => setTodayFeed([]))
     api.links().then((r) => setLinks(r.links || [])).catch(() => {})
     api.entityLinks().then((r) => setEntLinks(r.links || [])).catch(() => {})
+    // ★发现的链接/实体解读(explain)是后台LLM异步生成的,原来进页只拉一次→解读好了前端不刷新、
+    //   永久显示"大脑解读中"。这里轮询:只要还有卡缺 explain 就每8s重拉,直到都补上或试满~2分钟。
+    let _en = 0
+    const _expTick = setInterval(() => {
+      _en++
+      Promise.all([api.links().catch(() => null), api.entityLinks().catch(() => null)]).then(([lk, en]) => {
+        if (lk && lk.links) setLinks(lk.links)
+        if (en && en.links) setEntLinks(en.links)
+        const pend = [...((lk && lk.links) || []), ...((en && en.links) || [])].some((x) => !x.explain)
+        if (!pend || _en >= 15) clearInterval(_expTick)
+      })
+    }, 8000)
     api.news().then((r) => setNews(r)).catch(() => {})
     // 兜底:20s 还没返回(后端慢/卡)就当空,不让用户一直看转圈
     const _t = setTimeout(() => setTodayFeed((v) => (v === null ? [] : v)), 20000)
-    return () => clearTimeout(_t)
+    return () => { clearTimeout(_t); clearInterval(_expTick) }
   }, [])
 
   // 从「人脉」页点"问TA/分析入口"跳来:自动带着问题问一次
