@@ -1851,10 +1851,29 @@ def _handoff_watch_loop():
     CHUNK = 4 * 1024 * 1024
     cursors = _handoff_load_cursors()
     hd = _handoff_dir()
+    _self_healed = set()   # 已做过"游标/库不一致"自愈的 owner(每进程一次)
     while True:
         try:
             me = _HANDOFF_OWNER["v"]
             if me and os.path.isdir(hd):
+                # ★自愈:游标非0(以为读过)但库里去重表为空(库是新的/被清空)= 明显不一致
+                #   (重装客户端/清库但游标残留)→ 重置游标从头读,自动灌满历史,无需人工清游标+重登。
+                if me not in _self_healed:
+                    _self_healed.add(me)
+                    if any(v > 0 for v in cursors.values()):
+                        try:
+                            _c0 = _con()
+                            try:
+                                _c0.execute("CREATE TABLE IF NOT EXISTS wechat_lines(owner TEXT, fp TEXT, PRIMARY KEY(owner,fp))")
+                                _fpn = _c0.execute("SELECT COUNT(*) FROM wechat_lines WHERE owner=?", (me,)).fetchone()[0]
+                            finally:
+                                _c0.close()
+                            if _fpn == 0:
+                                cursors = {}
+                                _handoff_save_cursors(cursors)
+                                print("[handoff] 游标与库不一致(库空游标非0)→重置游标,重灌历史", file=sys.stderr)
+                        except Exception:
+                            pass
                 batch = []
                 pending = {}          # ★本轮待前进的游标:只有入库成功后才 apply 到 cursors(见下方)
                 total_bytes = 0
