@@ -1283,8 +1283,18 @@ def analysis_status(authorization: str = Header(None)):
         ]
         for l in layers:
             l["pct"] = int(l["done"] / l["total"] * 100)
+        # ★承诺雷达/人脉图谱要调 LLM,没配 key 就不会跑(bg-analyze 门控)。标注 needs_key,
+        #   前端提示"去设置配 AI key"而非干停 0%,免得用户以为坏了(用户实测:嵌入跑完这俩停0)。
+        try:
+            _has_key = bool(LLM.load_cfg().get("llm_key"))
+        except Exception:
+            _has_key = False
+        for l in layers:
+            if l["key"] in ("intel", "entities") and not _has_key and l["pct"] < 100:
+                l["needs_key"] = True
         overall = int(sum(l["pct"] for l in layers) / len(layers))
-        return {"layers": layers, "overall_pct": overall, "done": all(l["pct"] >= 100 for l in layers)}
+        return {"layers": layers, "overall_pct": overall, "has_key": _has_key,
+                "done": all(l["pct"] >= 100 for l in layers)}
     finally:
         con.close()
 
