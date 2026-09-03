@@ -319,6 +319,9 @@ export default function WechatSync({ onGuide }) {
                 </a>
               ))}
             </div>
+            <div className="wx-dlbox-note">
+              说明:能同步多少聊天,取决于你电脑上微信客户端里存了多少 —— <b>Windows 电脑版微信通常只保留较近期的聊天</b>,能拿到的历史较少;<b>Mac 版微信保留的历史更全</b>,想要更完整的历史,建议用 Mac 助手,或用「iPhone 导入历史」把手机里的全量记录一次性导入。
+            </div>
             {/* ★显著步骤:第3步「抓密钥」不做会同步到空(2026-08-29 真机验证:直接点开始同步 keys:0 → handoff 空) */}
             <ol className="wx-dlbox-steps">
               <li><b>下载</b>对应系统的助手(上方按钮)</li>
@@ -340,6 +343,11 @@ export default function WechatSync({ onGuide }) {
               </div>
               <div className="wx-ios-idle-t">把电脑版登录<b>之前</b>的老聊天,一次性补进来</div>
               <div className="wx-ios-idle-s">用数据线把 iPhone 连上这台电脑,点下面「开始导入」,就会自动把手机里的历史微信补进第二大脑。做一次即可,平时不用连。</div>
+              {/^win/i.test((typeof navigator !== 'undefined' && (navigator.userAgentData?.platform || navigator.platform || navigator.userAgent)) || '') && (
+                <div style={{ margin: '10px 0', padding: '9px 12px', borderRadius: 10, fontSize: 12.5, lineHeight: 1.7, color: '#fbbf24', background: 'rgba(245,158,11,0.1)', border: '1px solid rgba(245,158,11,0.35)' }}>
+                  ⚠ <b>iPhone 导入目前仅支持 Mac</b> —— Windows 版暂不内置 iPhone 备份工具(libimobiledevice)。想把 iPhone 历史一次性导入,请在 Mac 上操作;Windows 上请用上面的「微信同步助手」实时同步近期聊天。
+                </div>
+              )}
               {/* 连接状态灯:未连手机/未装工具时按钮禁用并提示 */}
               <div className={'wx-ios-plug ' + (iosEnv && iosEnv.connected ? 'on' : '')}>
                 <span className="wx-ios-plug-dot" />
