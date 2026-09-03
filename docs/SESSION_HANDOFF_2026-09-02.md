@@ -74,3 +74,31 @@
 ### ★仍需注意
 - 视频转写在 8G 上仍慢(29min 视频要不短时间);已流式+让CPU降低崩溃率,但**增量保存未做**(崩了丢全部转写)——可作下一步。
 - helper/save 与 boot 门等新端点尚未装到机器上(待构建)。
+
+---
+
+## 七、续(2026-09-03 下午):微信消息丢失根治 + 助手更新 + 待办
+
+### 微信实时同步消息丢失(Windows 1181→2条)真凶=两层
+1. `_ingest_wechat_msgs`:autocommit 下先落全部 fp 再写 page,写页失败 fp 已提交→永久判重丢失。已修:先写页、成功才记 fp + 每条 try 容错。
+2. ★真正主因(消费器层)`_handoff_watch_loop`:读一批游标立即前进(1862)+ 入库 try/except 吞异常 + 末尾无条件 _handoff_save_cursors → 入库失败那批游标已存到末尾、下次跳过永久丢。已修(commit e5ee11f):游标改 pending 暂存,入库+commit 成功才 cursors.update+持久化;失败不前进下次重读(fp去重防重复)。
+- 诊断实锤:Windows 日志 wechat/watch 调用11次(消费器起了)但库只入几条 → 定位到消费器游标层。Mac 上用同一 handoff 灌 1357条零丢失,证明 _ingest 逻辑本身对。
+- Windows 恢复:已在 Mac 侧用 handoff 灌满干净库(1357条/24会话/1435行)推回 Windows,现语义问答已跑完(bge-m3 本地不需key)。
+
+### App.jsx 登录即启动 watch(原来只在打开微信页才启动消费器)= commit e5ee11f 内
+
+### 微信助手:只更新了 Windows 版(用户令 Mac 助手保持不动)
+- 助手仓库 = konghesmileface/wxsync-helper(独立 git,非本地 wxsync_vN 散目录);CI=build-win.yml(windows-latest,入口 wxsync_tray.py,单文件 exe artifact)。
+- 本次 4d26cc1:Windows 抓密钥提示改分步+进度(原来只1句静态闷跑180s)+ sqlcipher_decrypt 加 WAL 合并安全网。
+- 新 exe 已替换进客户端 sidecar/downloads/微信同步助手-Windows.exe(commit 4df32fa)。客户端 CI checkout 就带上(downloads/ 在 git 里,无自动拉取步骤)。
+- 发布链:助手仓推送→build-win 出 exe artifact→下载替换客户端 downloads/→客户端构建。
+
+### 承诺雷达/人脉图谱没配 key 不跑(设计非bug)
+- 语义问答=本地 bge-m3 不需key;intel/entities 每条调LLM,bg-analyze 门控"没key不跑"。
+- 已加 needs_key/has_key + 前端黄字提示"去设置配AI key"(commit 9907c92)。
+
+### ★★待办(下次构建带上)
+- **需重新构建客户端**:当前正在跑的这批(33733309306等)带了「消息丢失根治+Win助手更新+数据体量说明+iPhone仅Mac」,但**没带** needs_key 提示(9907c92)——用户令下批再打。
+- **Windows 干净重测计划**(坐实根因):卸载旧客户端+清 %APPDATA%\Compound + ~\.wxsync(游标/handoff/keys)→装新版→重开助手抓密钥+开实时同步→不手动推,看客户端自己全量入库=证明修对。
+- ★远程 Windows SSH 必须 no-proxy:env -u *_proxy + ssh -o ProxyCommand=none(走clash会频繁掉线);Windows 系统 python 用 `py`(非python);嵌 Python 到 PowerShell 引号会崩→scp .py/.ps1 文件跑。
+- 三台家庭网IP会变(办公网:mac2=172.16.16.172 win=172.16.17.175;家庭网=192.168.71.x)。
