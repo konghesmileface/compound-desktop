@@ -177,8 +177,10 @@ def _start_bg_analyzer():
                                 except Exception as _e:
                                     print(f"[bg-analyze] dockind {owner}: {_e}")
                                 # 承诺雷达 intel:每轮处理 ≤3 个未缓存微信会话
+                                # ★门槛改消息数(与建卡一致,不受分页波动):会话消息数>=15 才抽承诺雷达
                                 pend = con.execute(
-                                    "SELECT d.id, d.filename FROM documents d WHERE d.owner=? AND d.filename LIKE '微信_与%' AND d.pages>=2 "
+                                    "SELECT d.id, d.filename FROM documents d WHERE d.owner=? AND d.filename LIKE '微信_与%' "
+                                    "AND (SELECT COALESCE(SUM(1 + LENGTH(text) - LENGTH(REPLACE(text, char(10), ''))),0) FROM pages WHERE doc_id=d.id) >= 15 "
                                     "AND NOT EXISTS(SELECT 1 FROM chat_intel ci WHERE ci.username=d.owner AND ci.contact=REPLACE(REPLACE(d.filename,'微信_与',''),'.txt','')) LIMIT %d" % _AB,
                                     (owner,)).fetchall()
                                 for did, fn in pend:
@@ -206,19 +208,34 @@ def _start_bg_analyzer():
                                 #   必须 bg 自驱,否则人脉页永远空。/api/relationships 默认 generate=False 只读缓存、
                                 #   "缺的交给后台 warm"——这里就是那个 warm)。每轮 ≤2 张,LLM 节流护机器。
                                 con.execute("CREATE TABLE IF NOT EXISTS card_hidden(username TEXT, contact TEXT, PRIMARY KEY(username,contact))")
-                                pend3 = con.execute(
-                                    "SELECT d.id, d.filename, d.pages FROM documents d WHERE d.owner=? AND d.filename LIKE '微信_与%' AND d.pages>=2 "
-                                    "AND NOT EXISTS(SELECT 1 FROM relationship_cards rc WHERE rc.username=d.owner AND rc.contact=REPLACE(REPLACE(d.filename,'微信_与',''),'.txt','') AND rc.msgcount=d.pages) "
-                                    "AND NOT EXISTS(SELECT 1 FROM card_hidden ch WHERE ch.username=d.owner AND ch.contact=REPLACE(REPLACE(d.filename,'微信_与',''),'.txt','')) "
-                                    "ORDER BY d.pages DESC LIMIT 2", (owner,)).fetchall()
-                                for _cdid, _cfn, _cpg in pend3:
+                                # ★建卡门槛/指纹改用"消息条数"而非页数(pages 受分页策略波动:重新入库同样内容分页边界变了→
+                                #   会话跨过 pages>=3 门槛→卡忽有忽无,用户实测"人脉卡变少")。消息数=各页 text 换行和,稳定。
+                                #   门槛:消息数>=15(约够聊出内容);重入判断:存的 msgcount != 当前消息数 才重建。
+                                _MIN_MSGS = 15
+                                _cands = con.execute(
+                                    "SELECT d.id, d.filename FROM documents d WHERE d.owner=? AND d.filename LIKE '微信_与%' "
+                                    "AND NOT EXISTS(SELECT 1 FROM card_hidden ch WHERE ch.username=d.owner AND ch.contact=REPLACE(REPLACE(d.filename,'微信_与',''),'.txt','')) ",
+                                    (owner,)).fetchall()
+                                pend3 = []
+                                for _cdid, _cfn in _cands:
+                                    _ct = _cfn.replace("微信_与", "").replace(".txt", "")
+                                    _msgs = con.execute("SELECT COALESCE(SUM(1 + LENGTH(text) - LENGTH(REPLACE(text, char(10), ''))),0) FROM pages WHERE doc_id=?", (_cdid,)).fetchone()[0] or 0
+                                    if _msgs < _MIN_MSGS:
+                                        continue
+                                    _rc = con.execute("SELECT msgcount FROM relationship_cards WHERE username=? AND contact=?", (owner, _ct)).fetchone()
+                                    if _rc and _rc[0] == _msgs:   # 已有卡且消息数没变→跳过(不因分页变化重建)
+                                        continue
+                                    pend3.append((_cdid, _cfn, _msgs))
+                                    if len(pend3) >= _perf_profile()["analyze_batch"]:
+                                        break
+                                for _cdid, _cfn, _cmsgs in pend3:
                                     _contact = _cfn.replace("微信_与", "").replace(".txt", "")
                                     _ctext = "\n".join(p[0] for p in con.execute("SELECT text FROM pages WHERE doc_id=? ORDER BY page_no LIMIT 40", (_cdid,)).fetchall())
                                     try:
                                         _card = REL.build_card(_contact, _ctext)
                                         if _card:
                                             con.execute("INSERT OR REPLACE INTO relationship_cards(username,contact,doc_id,day,msgcount,data) VALUES(?,?,?,?,?,?)",
-                                                        (owner, _contact, _cdid, _dt.date.today().isoformat(), _cpg or 0, json.dumps(_card, ensure_ascii=False)))
+                                                        (owner, _contact, _cdid, _dt.date.today().isoformat(), _cmsgs, json.dumps(_card, ensure_ascii=False)))
                                             con.commit(); worked = True
                                     except Exception as _e:
                                         print(f"[bg-analyze] card {_contact}: {_e}")
@@ -1029,14 +1046,16 @@ def group_graph_api(contact: str = "", refresh: int = 0, authorization: str = He
         raise HTTPException(400, "缺少 contact")
     con = _con()
     try:
-        row = con.execute("SELECT id, pages FROM documents WHERE owner=? AND filename=?",
+        row = con.execute("SELECT id FROM documents WHERE owner=? AND filename=?",
                           (me, "微信_与" + contact + ".txt")).fetchone()
         if not row:
-            row = con.execute("SELECT id, pages FROM documents WHERE owner=? AND filename LIKE ?",
+            row = con.execute("SELECT id FROM documents WHERE owner=? AND filename LIKE ?",
                              (me, "微信_与" + contact + "%")).fetchone()
         if not row:
             return {"found": False, "members": [], "edges": []}
-        did, pagecount = row[0], row[1] or 0
+        did = row[0]
+        # 缓存键=消息条数(不用页数:分页策略变→键变→白重跑 LLM)
+        pagecount = con.execute("SELECT COALESCE(SUM(1 + LENGTH(text) - LENGTH(REPLACE(text, char(10), ''))),0) FROM pages WHERE doc_id=?", (did,)).fetchone()[0] or 0
         con.execute("CREATE TABLE IF NOT EXISTS group_graph_cache(owner TEXT, doc_id INTEGER, pages INTEGER, data TEXT, PRIMARY KEY(owner,doc_id))")
         if not refresh:
             c = con.execute("SELECT pages, data FROM group_graph_cache WHERE owner=? AND doc_id=?", (me, did)).fetchone()
@@ -1085,14 +1104,16 @@ def relation_timeline_api(contact: str = "", refresh: int = 0, authorization: st
         raise HTTPException(400, "缺少 contact")
     con = _con()
     try:
-        row = con.execute("SELECT id, pages FROM documents WHERE owner=? AND filename=?",
+        row = con.execute("SELECT id FROM documents WHERE owner=? AND filename=?",
                           (me, "微信_与" + contact + ".txt")).fetchone()
         if not row:
-            row = con.execute("SELECT id, pages FROM documents WHERE owner=? AND filename LIKE ?",
+            row = con.execute("SELECT id FROM documents WHERE owner=? AND filename LIKE ?",
                              (me, "微信_与" + contact + "%")).fetchone()
         if not row:
             return {"found": False, "months": [], "milestones": []}
-        did, pagecount = row[0], row[1] or 0
+        did = row[0]
+        # 缓存键=消息条数(不用页数:分页策略变→键变→白重跑 LLM)
+        pagecount = con.execute("SELECT COALESCE(SUM(1 + LENGTH(text) - LENGTH(REPLACE(text, char(10), ''))),0) FROM pages WHERE doc_id=?", (did,)).fetchone()[0] or 0
         con.execute("CREATE TABLE IF NOT EXISTS relation_timeline_cache(owner TEXT, doc_id INTEGER, pages INTEGER, data TEXT, PRIMARY KEY(owner,doc_id))")
         if not refresh:
             c = con.execute("SELECT pages, data FROM relation_timeline_cache WHERE owner=? AND doc_id=?", (me, did)).fetchone()
@@ -1284,8 +1305,11 @@ def analysis_status(authorization: str = Header(None)):
                              "WHERE d.owner=? AND d.backend='wechat'", (me,)).fetchone()[0] or 0
         emb = con.execute("SELECT COUNT(*) FROM page_embeddings pe JOIN pages p ON p.id=pe.page_id "
                           "JOIN documents d ON d.id=p.doc_id WHERE d.owner=? AND d.backend='wechat'", (me,)).fetchone()[0] or 0
-        docs2 = con.execute("SELECT COUNT(*) FROM documents WHERE owner=? AND filename LIKE '微信_与%' AND pages>=2", (me,)).fetchone()[0] or 0
-        docs3 = con.execute("SELECT COUNT(*) FROM documents WHERE owner=? AND filename LIKE '微信_与%' AND pages>=3", (me,)).fetchone()[0] or 0
+        # ★分母统一用"消息数>=15的会话数"(与建卡/intel门槛一致,不受分页波动→进度百分比不再跳):
+        _mcnt = con.execute("SELECT COUNT(*) FROM documents d WHERE d.owner=? AND d.filename LIKE '微信_与%' "
+                            "AND (SELECT COALESCE(SUM(1 + LENGTH(text) - LENGTH(REPLACE(text, char(10), ''))),0) FROM pages WHERE doc_id=d.id) >= 15", (me,)).fetchone()[0] or 0
+        docs2 = _mcnt
+        docs3 = _mcnt
         try:
             intel = con.execute("SELECT COUNT(*) FROM chat_intel WHERE username=?", (me,)).fetchone()[0]
         except Exception:

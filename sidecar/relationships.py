@@ -172,15 +172,19 @@ def all_cards(con, owner, refresh=False, limit=40, generate=True):
     except Exception:
         pass
     day = _dt.date.today().isoformat()
+    # ★缓存键改用"消息条数"(各页 text 换行和),不用页数:pages 受分页策略波动,重新入库同样内容
+    #   分页边界变→缓存键变→卡被重建甚至掉出显示(用户实测"人脉卡变少")。消息数稳定。
     docs = con.execute(
-        "SELECT id, filename, pages FROM documents WHERE owner=? AND filename LIKE '微信_与%' "
-        "ORDER BY pages DESC LIMIT ?", (owner, limit)).fetchall()
+        "SELECT d.id, d.filename, "
+        "(SELECT COALESCE(SUM(1 + LENGTH(text) - LENGTH(REPLACE(text, char(10), ''))),0) FROM pages WHERE doc_id=d.id) AS mcnt "
+        "FROM documents d WHERE d.owner=? AND d.filename LIKE '微信_与%' "
+        "ORDER BY mcnt DESC LIMIT ?", (owner, limit)).fetchall()
     cards = []
     for did, fn, pagecount in docs:
         contact = fn.replace("微信_与", "").replace(".txt", "")
         if contact in hidden:
             continue   # 用户删过的卡:不再展示,也不重新生成
-        pagecount = pagecount or 0   # 缓存键=文档页数(变了才重生成),不再全量数换行
+        pagecount = pagecount or 0   # 缓存键=消息条数(变了才重生成),不受分页波动
         row = None
         if not refresh:
             row = con.execute(
