@@ -99,4 +99,11 @@ def main():
 
 
 if __name__ == "__main__":
+    # ★PyInstaller 冻结包必须最先 freeze_support():paddlex/paddleocr(PP-StructureV3)推理时会起
+    #   multiprocessing 子进程,子进程会重入冻结的 compound-paddle 二进制。没有 freeze_support 时,
+    #   子进程不会走 mp 引导、而是从头重跑 main()→父进程等子进程结果→永久死锁(实测 mac2 macOS12:
+    #   PPStructureV3 构造函数卡住、0% CPU、内存不涨、/health 都不响应、OCR 永不返回)。
+    #   必须在任何可能 spawn 的代码之前。sidecar_main.py 早有此处理(所以主 sidecar 正常)。
+    import multiprocessing
+    multiprocessing.freeze_support()
     main()
