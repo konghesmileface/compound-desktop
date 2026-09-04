@@ -37,14 +37,20 @@ else:
 
 app = FastAPI(title="Compound 高精 OCR (PP-StructureV3)")
 _engine = None
+_engine_err = None   # ★引擎初始化失败原因(有值=别再重试初始化,直接报错,避免请求线程里重init死锁)
 _lock = threading.Lock()
 
 
 def _engine_lazy():
-    global _engine
-    if _engine is None:
-        with _lock:
-            if _engine is None:
+    global _engine, _engine_err
+    if _engine is not None:
+        return _engine
+    if _engine_err is not None:
+        # ★已失败过就直接抛(初始化只应在启动的主线程做一次;绝不在 uvicorn 请求线程里重试→会死锁)
+        raise RuntimeError("引擎初始化失败,不再重试: " + _engine_err)
+    with _lock:
+        if _engine is None and _engine_err is None:
+            try:
                 from paddleocr import PPStructureV3
                 # ★完整高精 PP-StructureV3(方案第二节):识别+表格SLANeXt+公式PP-FormulaNet+版面 全开。
                 #   建议 16G 内存(方案已注明)。仅方向分类/去扭曲/图表识别这几个预处理关掉(不在方案清单、省资源)。
@@ -53,6 +59,9 @@ def _engine_lazy():
                     use_doc_unwarping=False,
                     use_chart_recognition=False,
                 )
+            except Exception as e:
+                _engine_err = str(e)
+                raise
     return _engine
 
 
@@ -105,7 +114,8 @@ def main():
         _engine_lazy()
         print("[paddle] 引擎预加载完成", flush=True)
     except Exception as _e:
-        print(f"[paddle] 预加载失败(请求时再试): {_e}", flush=True)
+        import traceback as _tb
+        print("[paddle] 预加载失败,完整栈:\n" + _tb.format_exc(), flush=True)
     import uvicorn
     uvicorn.run(app, host=args.host, port=args.port, log_level="warning")
 
