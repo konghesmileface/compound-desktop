@@ -72,10 +72,13 @@ def health():
 
 
 @app.post("/ocr/image")
-async def ocr_image(file: UploadFile = File(...)):
+def ocr_image(file: UploadFile = File(...)):
+    # ★同步 def(不是 async):FastAPI 会在线程池里跑,绝不在主事件循环线程做 paddle 阻塞推理。
+    #   （原来是 async def,paddle 的同步 predict 直接堵主线程,与其内部线程/导入互锁→死锁,
+    #     实测 mac2 macOS12:PPStructureV3 首次推理卡死、0%CPU、OCR 永不返回。)
     import numpy as np
     from PIL import Image
-    raw = await file.read()
+    raw = file.file.read()
     arr = np.array(Image.open(io.BytesIO(raw)).convert("RGB"))
     with _lock:
         parts = [_md_of(r) for r in _engine_lazy().predict(arr)]
@@ -94,6 +97,15 @@ def main():
     ap.add_argument("--host", default="127.0.0.1")
     ap.add_argument("--port", type=int, default=8791)
     args = ap.parse_args()
+    # ★启动即在"干净主线程"预加载 PP-StructureV3(uvicorn/asyncio 还没起)。这正是 CI 里能成功
+    #   构建模型的同一上下文(普通脚本主线程)。避免首次请求时在 async 事件循环/线程池上下文里
+    #   初始化 paddle→线程/导入互锁死锁。预热后首个请求也秒回。失败不致命,请求时还会再试。
+    try:
+        print("[paddle] 预加载 PP-StructureV3 引擎中(首次约需 30-90s)…", flush=True)
+        _engine_lazy()
+        print("[paddle] 引擎预加载完成", flush=True)
+    except Exception as _e:
+        print(f"[paddle] 预加载失败(请求时再试): {_e}", flush=True)
     import uvicorn
     uvicorn.run(app, host=args.host, port=args.port, log_level="warning")
 
