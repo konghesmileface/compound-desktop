@@ -130,7 +130,7 @@ body {
 
 /* ★宽屏内容居中:超过 ~1600 内容宽后,左右 padding 自动增大把内容挤到中间(零JSX改动,
    所有用 .view 的页——洞察/雷达/冥想/人脉/画像等——一次生效,治宽屏右侧大空白/左对齐)。 */
-.view { position: absolute; inset: 0; overflow: auto; padding: 40px max(46px, (100% - 1600px) / 2); }
+.view { position: absolute; inset: 0; overflow: auto; padding: 40px 46px; }
 .view-head { margin-bottom: 28px; }
 .view-head h1 { font-size: 24px; font-weight: 640; letter-spacing: -0.02em; }
 .view-head p { color: var(--text-2); margin-top: 8px; font-size: 13.5px; line-height: 1.55; max-width: 640px; }
@@ -611,16 +611,16 @@ input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; appearance: 
 /* ================= 问答主页(核心 · 精致)================= */
 .home-view { position: absolute; inset: 0; overflow-y: auto; padding: 46px 48px 60px; }
 /* 内容填满宽度(不再两边大片空白),仅设一个舒适上限 */
-.home-view > * { max-width: 1600px; margin-left: auto !important; margin-right: auto !important; }
+.home-view > * { }
 .home-view .view-head { margin-bottom: 24px; }
 
 /* 首页:滚动内容 + 底部固定问答条 */
 .home-flex { display: flex; flex-direction: column; padding: 0; overflow: hidden; }
 .home-flex > * { max-width: none !important; margin: 0 !important; }
 .home-scroll { flex: 1; overflow-y: auto; padding: 46px 48px 26px; }
-.home-scroll > * { max-width: 1600px; margin-left: auto; margin-right: auto; }
+.home-scroll > * { }
 .home-composer { flex: 0 0 auto; padding: 15px 48px 20px; border-top: 1px solid var(--border); background: rgba(8,9,13,0.7); backdrop-filter: blur(12px); }
-.home-composer .home-box { max-width: 1600px; margin: 0 auto; }
+.home-composer .home-box { }
 .home-view .view-head h1 { font-size: 22px; font-weight: 640; letter-spacing: -0.02em; }
 .home-view .view-head p { max-width: 600px; }
 
@@ -764,7 +764,7 @@ input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; appearance: 
 .model-combo-opt.on { color: var(--accent); background: rgba(139,140,255,0.08); }
 
 /* ===== 冥想 · 音乐页(歌曲为主,炫酷)===== */
-.ms-page { padding: 40px max(46px, (100% - 1600px) / 2) 28px; }   /* 宽屏居中(同 .view),别用简写覆盖成 0/10 */
+.ms-page { padding: 40px 46px 28px; }
 .ms-page-head { text-align: center; margin: 0 0 24px; }
 .ms-page-kick { display: inline-block; font-size: 20px; font-weight: 750; letter-spacing: .01em; line-height: 1.4; padding: 2px 0;
   background: linear-gradient(90deg, #a9b0ff, #f0abfc, #a9b0ff); -webkit-background-clip: text; background-clip: text; color: transparent; }
