@@ -35,6 +35,16 @@ else:
 # ★不硬编码国内 BOS 源(会坑海外微信客户)。模型已打进包→通常不下载;
 #   万一回落下载,paddlex 默认源(海外可达);国内用户可自设 PADDLE_PDX_MODEL_SOURCE=BOS。
 
+# ★PyInstaller 冻结包里 site.USER_SITE 为 None(-S 禁用了 site),而 paddle/base/core.py 的
+#   set_paddle_lib_path() 会 os.path.sep.join([site.USER_SITE,'paddle','libs']) → join(None)崩
+#   (TypeError: sequence item 0: expected str instance, NoneType found)→paddle根本导入不了、
+#   高精OCR全废(实测mac2 macOS12,完整栈定位到此)。指向 _MEIPASS(=_internal),那里正好有
+#   真实 paddle/libs,paddle 反而能正确定位库目录。CI非冻结环境 USER_SITE 正常故构建时无此错。
+import site as _site
+_meipass = getattr(sys, "_MEIPASS", None)
+if _meipass and not getattr(_site, "USER_SITE", None):
+    _site.USER_SITE = _meipass
+
 app = FastAPI(title="Compound 高精 OCR (PP-StructureV3)")
 _engine = None
 _engine_err = None   # ★引擎初始化失败原因(有值=别再重试初始化,直接报错,避免请求线程里重init死锁)
