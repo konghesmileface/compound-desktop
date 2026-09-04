@@ -92,8 +92,11 @@ def _spawn_paddle_worker():
     port = s.getsockname()[1]
     s.close()
     try:
+        # ★cwd 用中性临时目录(不能用 worker 所在的 _internal 目录:里面有 numpy 打包文件,
+        #   paddle worker 里 import numpy 会命中"from its source directory"报错→OCR 500,高精OCR全废)。
+        import tempfile as _tf
         subprocess.Popen([worker, "--host", "127.0.0.1", "--port", str(port)],
-                         cwd=os.path.dirname(worker))
+                         cwd=_tf.gettempdir())
         os.environ["PADDLE_OCR_URL"] = f"http://127.0.0.1:{port}"
         print(f"[sidecar] 高精 paddle worker 已拉起 :{port}", flush=True)
     except Exception as e:

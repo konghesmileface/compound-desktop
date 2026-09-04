@@ -83,6 +83,13 @@ async def ocr_image(file: UploadFile = File(...)):
 
 
 def main():
+    # ★双保险:切到中性临时目录再跑,绝不在含 numpy 打包文件的目录里(否则 import numpy 报
+    #   "from its source directory"→OCR 500,高精OCR全废)。
+    try:
+        import tempfile
+        os.chdir(tempfile.gettempdir())
+    except Exception:
+        pass
     ap = argparse.ArgumentParser()
     ap.add_argument("--host", default="127.0.0.1")
     ap.add_argument("--port", type=int, default=8791)
