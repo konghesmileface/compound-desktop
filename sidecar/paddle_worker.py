@@ -61,6 +61,19 @@ def _engine_lazy():
     with _lock:
         if _engine is None and _engine_err is None:
             try:
+                # ★冻结包里各依赖的 dist-info 元数据被 PyInstaller 剥掉,paddlex 的依赖守卫
+                #   (require_extra/require_deps 用 importlib.metadata 判断)会误判"缺 paddlex[ocr]"
+                #   →DependencyError、pipeline 建不起来(实测mac2完整栈定位)。构建时确已装全 paddlex[ocr]、
+                #   模块也都打进包了(是假阴性),运行时把这几个守卫改成恒可用即可。必须在 import paddleocr
+                #   前打好(paddleocr import 会触发 paddlex,pipeline 装饰器运行时才查)。
+                try:
+                    from paddlex.utils import deps as _pxdeps
+                    _pxdeps.is_dep_available = lambda *a, **k: True
+                    _pxdeps.is_extra_available = lambda *a, **k: True
+                    _pxdeps.require_deps = lambda *a, **k: None
+                    _pxdeps.require_extra = lambda *a, **k: None
+                except Exception as _pe:
+                    print(f"[paddle] 依赖守卫patch跳过: {_pe}", flush=True)
                 from paddleocr import PPStructureV3
                 # ★完整高精 PP-StructureV3(方案第二节):识别+表格SLANeXt+公式PP-FormulaNet+版面 全开。
                 #   建议 16G 内存(方案已注明)。仅方向分类/去扭曲/图表识别这几个预处理关掉(不在方案清单、省资源)。
