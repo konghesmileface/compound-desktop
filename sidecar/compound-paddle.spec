@@ -3,7 +3,7 @@
 # 用法(仅高精版,从 .paddlevenv 跑): .paddlevenv/bin/pyinstaller compound-paddle.spec
 # 产物: dist/compound-paddle/compound-paddle
 import os
-from PyInstaller.utils.hooks import collect_all, collect_submodules, collect_data_files, collect_dynamic_libs
+from PyInstaller.utils.hooks import collect_all, collect_submodules, collect_data_files, collect_dynamic_libs, copy_metadata
 
 here = os.path.abspath(".")
 datas, binaries, hiddenimports = [], [], []
@@ -13,6 +13,27 @@ for pkg in ("paddle", "paddlex", "paddleocr"):
     try:
         d, b, h = collect_all(pkg)
         datas += d; binaries += b; hiddenimports += h
+    except Exception:
+        pass
+
+# ★★把依赖的 dist-info 元数据打进包:paddlex 依赖守卫(paddlex/utils/deps.py)用
+#   importlib.metadata 判断 paddlex[ocr] 各依赖装没装。collect_all 不带元数据→冻结后
+#   is_dep_available 全部误判"缺"→DependencyError,且 image_reader 等的模块级
+#   `if is_dep_available("opencv-contrib-python"): import cv2` 不执行→后面 cv2 NameError
+#   (实测 mac2 完整栈逐层定位)。带上元数据让 is_dep_available 自然为真、无 monkeypatch 时序问题。
+for pkg in ("paddlex", "paddleocr"):
+    try:
+        datas += copy_metadata(pkg, recursive=True)
+    except Exception:
+        pass
+for pkg in ("opencv-contrib-python", "opencv-python", "opencv-contrib-python-headless",
+            "shapely", "pyclipper", "scikit-learn", "scikit-image", "imagesize",
+            "lxml", "premailer", "openpyxl", "PyMuPDF", "pypdfium2", "tokenizers",
+            "ftfy", "regex", "einops", "Jinja2", "numpy", "pandas", "requests",
+            "chardet", "colorlog", "filelock", "huggingface-hub", "packaging",
+            "prettytable", "py-cpuinfo", "PyYAML", "ujson", "ruamel.yaml"):
+    try:
+        datas += copy_metadata(pkg)
     except Exception:
         pass
 
