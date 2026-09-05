@@ -27,7 +27,7 @@ jobs:
         id: pick
         run: |
           RID="${{ github.event.inputs.run_id }}"
-          [ -z "$RID" ] && RID=$(gh run list --workflow "build-mac-intel.yml" --status success -L 1 --json databaseId --jq '.[0].databaseId')
+          [ -z "$RID" ] && RID=$(gh run list --workflow "build-mac-intel.yml" --status success -L 1 --json databaseId --jq '.[0].databaseId' -R "${{ github.repository }}")
           echo "用 run_id=$RID"
           gh run download "$RID" -n compound-mac-intel-lite -D lite -R "${{ github.repository }}"
           ls -lh lite
