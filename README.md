@@ -14,6 +14,13 @@ Tauri v2 桌面壳,打包"第二大脑"全本地客户端。产品架构见 `unl
 - M5:微信助手(8767 控制口)接成网页开关。
 - M6:.app/.pkg 一键装 + 真机全测,再横移 arm Mac / Windows。
 
+## 版本变体与内存要求(★重要)
+- **轻量版(lite)**:图片 OCR 用 rapidocr。**8GB 内存可用**。Mac Intel / Windows 都出 lite。
+- **高精版(HD,仅 Mac Intel)**:图片 OCR 用 paddle PP-StructureV3(表格/公式/版面还原)。**必须 ≥16GB 内存** —— 推理峰值 ~5GB,8GB 机器实测会 OOM 被系统杀(2026-09-05 mac2 8GB 实测崩;30GB runner 实测 loaded+HTTP200+表格还原 HTML 表跑通)。HD 且 CPU 上较慢(一张图 ~130-160s)。
+  - 8GB 及低内存机器请装 lite;16GB+ 才装 HD。
+  - HD 打包在 macOS 旧系统(如 macOS 12)上有一串坑已全修(numpy/scipy 锁 OpenBLAS 版、freeze_support、site.USER_SITE、paddlex 依赖守卫元数据/late-patch、async 改 sync 预加载),见 `.github/workflows/build-mac-intel-hd.yml` 注释 + 记忆库 compound_hd_paddle_9fixes_2026-09-05。
+  - CI 里有 OCR 自测(build-mac-intel-hd.yml 非致命自测 + verify-hd-ocr.yml 大内存 runner)作永久回归守卫。
+
 ## 结构
 - `frontend/` — React 网页 UI(源自 unlimited-ocr/web/frontend;那边是源头,此处随构建同步)。
 - `src-tauri/` — Tauri v2 壳(Rust)。
