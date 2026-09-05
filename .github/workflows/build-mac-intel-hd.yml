@@ -85,6 +85,18 @@ jobs:
           arch -x86_64 .venv-paddle/bin/python -m PyInstaller --noconfirm compound-paddle.spec
           file dist/compound-paddle/compound-paddle
           test -x dist/compound-paddle/compound-paddle && echo "✓ paddle worker x86_64 冻结成功"
+          # ★★高精 OCR 自测(非致命):用刚冻好的 worker 真跑一张图,证明"内存充足时 PP-StructureV3 推理
+          #   能完整跑通"(8GB 机器推理峰值~5GB会OOM,故本地/mac2无法验证;runner内存更大)。并打印 runner
+          #   内存。跑通=实证足够内存即可用,且此后作为永久回归守卫。全程 || true 不阻断构建。
+          echo "=== runner 内存 ==="; sysctl -n hw.memsize | awk '{printf "%.1f GB\n",$1/1073741824}'
+          arch -x86_64 .venv-paddle/bin/python -c "from PIL import Image,ImageDraw; im=Image.new('RGB',(760,260),'white'); d=ImageDraw.Draw(im); d.text((30,100),'Compound HD OCR selftest 20260905',fill=(0,0,0)); im.save('/tmp/octest.png')" || true
+          ./dist/compound-paddle/compound-paddle --host 127.0.0.1 --port 8791 > /tmp/pw_self.log 2>&1 & echo $! > /tmp/pwpid
+          for i in $(seq 1 72); do curl -s --max-time 5 http://127.0.0.1:8791/health >/dev/null 2>&1 && break; sleep 5; done
+          curl -s -X POST -F file=@/tmp/octest.png http://127.0.0.1:8791/ocr/image --max-time 300 -o /tmp/ocr_self.json -w "OCR HTTP=%{http_code} time=%{time_total}s\n" || echo "OCR请求失败(可能OOM)"
+          kill "$(cat /tmp/pwpid)" 2>/dev/null || true
+          echo "=== worker 日志尾 ==="; tail -8 /tmp/pw_self.log || true
+          echo "=== OCR 结果 ==="; cat /tmp/ocr_self.json 2>/dev/null || echo "(无输出)"; echo
+          arch -x86_64 .venv-paddle/bin/python -c "import json; d=json.load(open('/tmp/ocr_self.json')); m=d.get('markdown','').strip(); print('✅✅高精OCR自测通过 markdown=',repr(m[:150])) if m else print('❌自测无输出')" || echo "❌自测失败(runner内存不足OOM 或 其它)"
 
       - name: Tauri 打高精版 .app/.dmg(内嵌主+paddle 两 x86_64 二进制)
         env:
