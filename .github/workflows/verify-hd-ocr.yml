@@ -41,8 +41,12 @@ jobs:
           python3 -c "from PIL import Image,ImageDraw; im=Image.new('RGB',(760,260),'white'); d=ImageDraw.Draw(im); d.text((30,100),'Compound HD OCR selftest 20260905 hello',fill=(0,0,0)); im.save('/tmp/octest.png')"
           DMG=$(ls hd/*.dmg | head -1); echo "DMG=$DMG"
           hdiutil attach "$DMG" -nobrowse -noverify -mountpoint /tmp/mnt
-          PW="/tmp/mnt/Compound 高精版.app/Contents/Resources/compound-paddle/compound-paddle"
-          xattr -dr com.apple.quarantine "/tmp/mnt/Compound 高精版.app" 2>/dev/null || true
+          # ★DMG是只读的,paddlex初始化要往 paddle_models/temp 写→只读会崩。复刻真实安装:拷到可写目录再跑。
+          rm -rf /tmp/app && mkdir -p /tmp/app
+          cp -R "/tmp/mnt/Compound 高精版.app" /tmp/app/
+          hdiutil detach /tmp/mnt 2>/dev/null || true
+          PW="/tmp/app/Compound 高精版.app/Contents/Resources/compound-paddle/compound-paddle"
+          xattr -dr com.apple.quarantine "/tmp/app/Compound 高精版.app" 2>/dev/null || true
           "$PW" --host 127.0.0.1 --port 8791 > /tmp/pw_self.log 2>&1 & echo $! > /tmp/pwpid
           echo "等引擎预加载(worker 启动即预加载,好了才开 /health)…"
           for i in $(seq 1 90); do curl -s --max-time 5 http://127.0.0.1:8791/health >/dev/null 2>&1 && break; sleep 5; done
