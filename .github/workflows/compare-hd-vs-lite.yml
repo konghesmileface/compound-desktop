@@ -1,0 +1,67 @@
+# 对比:同一张"带表格"的图,分别用 HD(paddle PP-StructureV3)和 lite(rapidocr)识别,
+# 并排输出,直观看结构化图上高精版是否更牛(表格还原成 markdown 表 vs 一堆散字)。
+# 大内存 Intel runner(8G会OOM)。手动触发。
+name: Compare HD vs lite OCR
+
+on:
+  workflow_dispatch:
+    inputs:
+      run_id:
+        description: 'HD 构建 run_id(留空=最新成功HD构建)'
+        required: false
+        default: ''
+
+jobs:
+  compare:
+    runs-on: macos-15-large
+    steps:
+      - name: runner 规格
+        run: sysctl -n hw.memsize | awk '{printf "runner内存 %.1f GB\n",$1/1073741824}'; uname -m
+      - name: 造一张带表格的测试图
+        run: |
+          python3 -m pip install --break-system-packages --quiet pillow
+          python3 - <<'PY'
+          from PIL import Image, ImageDraw, ImageFont
+          W,H=700,320; im=Image.new('RGB',(W,H),'white'); d=ImageDraw.Draw(im)
+          try: f=ImageFont.truetype('/System/Library/Fonts/Supplemental/Arial.ttf',30)
+          except Exception: f=ImageFont.load_default()
+          rows=[['Item','Price','Qty'],['Apple','5.00','10'],['Banana','3.50','20'],['Orange','4.20','15']]
+          x0,y0,cw,rh=40,40,200,58
+          for r in range(len(rows)+1): d.line([(x0,y0+r*rh),(x0+3*cw,y0+r*rh)],fill='black',width=2)
+          for c in range(4): d.line([(x0+c*cw,y0),(x0+c*cw,y0+len(rows)*rh)],fill='black',width=2)
+          for ri,row in enumerate(rows):
+              for ci,cell in enumerate(row):
+                  d.text((x0+ci*cw+15,y0+ri*rh+14),cell,fill='black',font=f)
+          im.save('/tmp/table.png'); print('table.png saved')
+          PY
+      - name: 取HD产物
+        id: pick
+        run: |
+          RID="${{ github.event.inputs.run_id }}"
+          [ -z "$RID" ] && RID=$(gh run list --workflow "build-mac-intel-hd.yml" --status success -L 1 --json databaseId --jq '.[0].databaseId')
+          echo "rid=$RID" >> "$GITHUB_OUTPUT"; echo "run_id=$RID"
+          gh run download "$RID" -n compound-mac-intel-hd -D hd -R "${{ github.repository }}"
+        env:
+          GH_TOKEN: ${{ github.token }}
+      - name: HD(paddle PP-StructureV3)识别
+        run: |
+          DMG=$(ls hd/*.dmg|head -1); hdiutil attach "$DMG" -nobrowse -noverify -mountpoint /tmp/mnt
+          rm -rf /tmp/app && mkdir -p /tmp/app && cp -R "/tmp/mnt/Compound 高精版.app" /tmp/app/ && hdiutil detach /tmp/mnt || true
+          PW="/tmp/app/Compound 高精版.app/Contents/Resources/compound-paddle/compound-paddle"
+          "$PW" --host 127.0.0.1 --port 8791 > /tmp/pw.log 2>&1 & echo $!>/tmp/pwpid
+          for i in $(seq 1 90); do curl -s --max-time 5 http://127.0.0.1:8791/health >/dev/null 2>&1 && break; sleep 5; done
+          curl -s -X POST -F file=@/tmp/table.png http://127.0.0.1:8791/ocr/image --max-time 300 -o /tmp/hd.json -w "HD OCR HTTP=%{http_code} time=%{time_total}s\n"
+          kill "$(cat /tmp/pwpid)" 2>/dev/null||true
+          echo "======== HD(PP-StructureV3)输出 markdown ========"
+          python3 -c "import json;print(json.load(open('/tmp/hd.json')).get('markdown',''))"
+      - name: lite(rapidocr)识别 同一张图
+        run: |
+          python3 -m pip install --break-system-packages --quiet rapidocr-onnxruntime
+          echo "======== lite(rapidocr)输出 ========"
+          python3 - <<'PY'
+          from rapidocr_onnxruntime import RapidOCR
+          e=RapidOCR(); res,_=e('/tmp/table.png')
+          if not res: print('(rapidocr 无输出)')
+          else:
+              for box,txt,score in res: print(repr(txt))
+          PY
