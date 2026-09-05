@@ -1,0 +1,65 @@
+# 在 Apple Silicon(M芯片)runner 上冒烟测 x86_64 lite 客户端经 Rosetta 能否跑。
+# 用户手上没有 M 芯片机,GitHub macos-15 runner 就是真 Apple Silicon。
+# 能测:sidecar 启动 / /health / 入库 API / OCR(rapidocr) / backends。测不了:GUI 点击交互(headless)。
+# 手动触发:gh workflow run verify-arm64-mac.yml
+name: Verify Apple Silicon (M-chip via Rosetta)
+
+on:
+  workflow_dispatch:
+    inputs:
+      run_id:
+        description: 'lite Mac 构建 run_id(留空=最新成功)'
+        required: false
+        default: ''
+
+jobs:
+  verify:
+    runs-on: macos-15   # Apple Silicon (arm64)
+    steps:
+      - name: 确认是 Apple Silicon + 装 Rosetta
+        run: |
+          echo "=== 架构(应为 arm64)==="; uname -m
+          sysctl -n machdep.cpu.brand_string 2>/dev/null || true
+          sysctl -n hw.memsize | awk '{printf "runner内存 %.1f GB\n",$1/1073741824}'
+          echo "=== 装 Rosetta 2(跑 x86 二进制)==="
+          softwareupdate --install-rosetta --agree-to-license 2>&1 | tail -3 || echo "rosetta 装取跳过(可能已在)"
+      - name: 取 lite Mac 产物(x86_64)
+        id: pick
+        run: |
+          RID="${{ github.event.inputs.run_id }}"
+          [ -z "$RID" ] && RID=$(gh run list --workflow "build-mac-intel.yml" --status success -L 1 --json databaseId --jq '.[0].databaseId')
+          echo "用 run_id=$RID"
+          gh run download "$RID" -n compound-mac-intel-lite -D lite -R "${{ github.repository }}"
+          ls -lh lite
+        env:
+          GH_TOKEN: ${{ github.token }}
+      - name: 挂载 + 拷到可写目录 + 去隔离
+        run: |
+          DMG=$(ls lite/*.dmg | head -1); echo "DMG=$DMG"
+          hdiutil attach "$DMG" -nobrowse -noverify -mountpoint /tmp/mnt
+          rm -rf /tmp/app && mkdir -p /tmp/app
+          cp -R /tmp/mnt/*.app /tmp/app/
+          hdiutil detach /tmp/mnt || true
+          APP=$(ls -d /tmp/app/*.app | head -1); echo "APP=$APP"
+          xattr -dr com.apple.quarantine "$APP" 2>/dev/null || true
+          echo "APP=$APP" >> "$GITHUB_ENV"
+          echo "=== sidecar 二进制架构(应显 x86_64,靠 Rosetta 跑)==="
+          file "$APP/Contents/Resources/compound-sidecar/compound-sidecar"
+      - name: 启动 sidecar(x86 经 Rosetta)+ 测后端
+        run: |
+          SC="$APP/Contents/Resources/compound-sidecar/compound-sidecar"
+          "$SC" --host 127.0.0.1 --port 8760 > /tmp/sc.log 2>&1 & echo $! > /tmp/scpid
+          echo "等 sidecar 起来(最多 90s)…"
+          for i in $(seq 1 45); do curl -s --max-time 4 http://127.0.0.1:8760/health >/dev/null 2>&1 && break; sleep 2; done
+          echo "=== /health ==="
+          curl -s --max-time 8 http://127.0.0.1:8760/health || echo "❌ health 无响应"
+          echo; echo "=== 入库一个 txt(测入库管线经 Rosetta)==="
+          echo "Apple Silicon Rosetta 冒烟测试 hello 你好" > /tmp/t.txt
+          curl -s --max-time 60 -F "files=@/tmp/t.txt" http://127.0.0.1:8760/api/upload -w " HTTP=%{http_code}\n" || echo "upload 失败"
+          echo "=== 造图测 OCR(rapidocr 经 Rosetta)==="
+          python3 -m pip install --break-system-packages --quiet pillow 2>/dev/null || true
+          python3 -c "from PIL import Image,ImageDraw;im=Image.new('RGB',(500,140),'white');d=ImageDraw.Draw(im);d.text((20,55),'Rosetta OCR test 20260906',fill=(0,0,0));im.save('/tmp/o.png')" 2>/dev/null || echo "造图跳过"
+          [ -f /tmp/o.png ] && curl -s --max-time 180 -F "files=@/tmp/o.png" http://127.0.0.1:8760/api/upload -w " OCR上传 HTTP=%{http_code}\n"
+          echo "=== sidecar 日志尾(看有无 Rosetta/崩溃报错)==="; tail -25 /tmp/sc.log
+          kill "$(cat /tmp/scpid)" 2>/dev/null || true
+          echo "=== 结论:sidecar 在 Apple Silicon 经 Rosetta 若 health=ok 且 upload=200 即通 ==="
