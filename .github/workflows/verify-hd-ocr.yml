@@ -1,0 +1,58 @@
+# 独立验证:在 GitHub 大内存 Intel runner 上,下载最新 HD 产物、真跑一张图 OCR,
+# 证明"内存充足时 PP-StructureV3 推理能完整识别文字"(8GB机推理峰值~5GB会OOM,本地/mac2无法验证)。
+# 手动触发:gh workflow run verify-hd-ocr.yml -f run_id=<HD构建的run_id>
+name: Verify HD OCR (large runner)
+
+on:
+  workflow_dispatch:
+    inputs:
+      run_id:
+        description: 'HD 构建的 run_id(从中取 compound-mac-intel-hd 产物);留空=取最新成功的HD构建'
+        required: false
+        default: ''
+
+jobs:
+  verify:
+    runs-on: macos-15-large    # Intel x86_64 大内存 runner(远大于8G,原生跑x86_64 paddle,无需Rosetta)
+    steps:
+      - name: 打印 runner 规格
+        run: |
+          echo "=== runner 内存 ==="; sysctl -n hw.memsize | awk '{printf "%.1f GB\n",$1/1073741824}'
+          echo "=== 架构 ==="; uname -m; sysctl -n machdep.cpu.brand_string 2>/dev/null || true
+      - name: 取最新 HD 产物 run_id
+        id: pick
+        run: |
+          RID="${{ github.event.inputs.run_id }}"
+          if [ -z "$RID" ]; then
+            RID=$(gh run list --workflow "build-mac-intel-hd.yml" --status success -L 1 --json databaseId --jq '.[0].databaseId')
+          fi
+          echo "rid=$RID" >> "$GITHUB_OUTPUT"; echo "用 run_id=$RID"
+        env:
+          GH_TOKEN: ${{ github.token }}
+      - name: 下载 HD 产物
+        run: |
+          gh run download "${{ steps.pick.outputs.rid }}" -n compound-mac-intel-hd -D hd -R "${{ github.repository }}"
+          ls -lh hd
+        env:
+          GH_TOKEN: ${{ github.token }}
+      - name: 挂载 .app + 高精 OCR 自测(真识别一张图)
+        run: |
+          python3 -m pip install --quiet pillow || true
+          python3 -c "from PIL import Image,ImageDraw; im=Image.new('RGB',(760,260),'white'); d=ImageDraw.Draw(im); d.text((30,100),'Compound HD OCR selftest 20260905 hello',fill=(0,0,0)); im.save('/tmp/octest.png')"
+          DMG=$(ls hd/*.dmg | head -1); echo "DMG=$DMG"
+          hdiutil attach "$DMG" -nobrowse -noverify -mountpoint /tmp/mnt
+          PW="/tmp/mnt/Compound 高精版.app/Contents/Resources/compound-paddle/compound-paddle"
+          xattr -dr com.apple.quarantine "/tmp/mnt/Compound 高精版.app" 2>/dev/null || true
+          "$PW" --host 127.0.0.1 --port 8791 > /tmp/pw_self.log 2>&1 & echo $! > /tmp/pwpid
+          echo "等引擎预加载(worker 启动即预加载,好了才开 /health)…"
+          for i in $(seq 1 90); do curl -s --max-time 5 http://127.0.0.1:8791/health >/dev/null 2>&1 && break; sleep 5; done
+          echo "=== health ==="; curl -s http://127.0.0.1:8791/health; echo
+          echo "=== 推理时盯内存 ==="
+          ( for i in $(seq 1 40); do echo "[$((i*3))s] $(ps -o rss= -p $(cat /tmp/pwpid) 2>/dev/null | awk '{printf "%dMB",$1/1024}') free=$(vm_stat | awk '/Pages free/{print $3}')"; sleep 3; done ) &
+          MONPID=$!
+          curl -s -X POST -F file=@/tmp/octest.png http://127.0.0.1:8791/ocr/image --max-time 300 -o /tmp/ocr_self.json -w "OCR HTTP=%{http_code} time=%{time_total}s\n"
+          kill $MONPID 2>/dev/null || true
+          kill "$(cat /tmp/pwpid)" 2>/dev/null || true
+          echo "=== worker 日志尾 ==="; tail -10 /tmp/pw_self.log
+          echo "=== OCR 结果 ==="; cat /tmp/ocr_self.json; echo
+          python3 -c "import json; d=json.load(open('/tmp/ocr_self.json')); m=d.get('markdown','').strip(); assert m, 'OCR无输出(可能OOM)'; print('✅✅✅ 高精OCR自测通过!识别文字=', repr(m[:200]))"
