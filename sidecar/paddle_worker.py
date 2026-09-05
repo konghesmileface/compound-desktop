@@ -61,11 +61,23 @@ def _engine_lazy():
     with _lock:
         if _engine is None and _engine_err is None:
             try:
-                # ★依赖守卫误判(缺 paddlex[ocr])已在 spec 用 copy_metadata 打进 dist-info 元数据根治,
-                #   is_dep_available 自然为真。绝不能在这里再 `from paddlex.utils import deps` 做 monkeypatch:
-                #   那会先初始化一次 paddlex(repo_manager.initialize 置全局标志),paddleocr 再导入 paddlex 时
-                #   二次 init→RuntimeError: PDX has already been initialized(实测)。只导入一次 paddleocr。
+                # ★先 import paddleocr:paddlex 在此只初始化一次(repo_manager.initialize)。此时 image_reader
+                #   等模块级 `if is_dep_available("opencv-contrib-python"): import cv2` 已靠 spec 的 copy_metadata
+                #   元数据自然为真、正常导入 cv2。
                 from paddleocr import PPStructureV3
+                # ★再关掉 paddlex 的"额外集"依赖守卫(require_extra):PP-StructureV3 __init__ 用
+                #   pipeline_requires_extra 装饰器,构造时查 is_extra_available("ocr")——它遍历 ocr 全部依赖,
+                #   只要有一个的 dist-info 没被 copy_metadata 覆盖到就误判→DependencyError。构建时确装了
+                #   paddlex[ocr]、模块都在包里(假阴性)。★必须放在 import paddleocr 之后:此时 paddlex 已缓存,
+                #   `from paddlex.utils import deps` 不会二次触发 paddlex 初始化(治 PDX already initialized)。
+                try:
+                    from paddlex.utils import deps as _pxdeps
+                    _pxdeps.is_dep_available = lambda *a, **k: True
+                    _pxdeps.is_extra_available = lambda *a, **k: True
+                    _pxdeps.require_deps = lambda *a, **k: None
+                    _pxdeps.require_extra = lambda *a, **k: None
+                except Exception as _pe:
+                    print(f"[paddle] 依赖守卫patch跳过: {_pe}", flush=True)
                 # ★完整高精 PP-StructureV3(方案第二节):识别+表格SLANeXt+公式PP-FormulaNet+版面 全开。
                 #   建议 16G 内存(方案已注明)。仅方向分类/去扭曲/图表识别这几个预处理关掉(不在方案清单、省资源)。
                 _engine = PPStructureV3(
