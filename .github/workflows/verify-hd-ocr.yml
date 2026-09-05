@@ -37,7 +37,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
       - name: 挂载 .app + 高精 OCR 自测(真识别一张图)
         run: |
-          python3 -m pip install --quiet pillow || true
+          python3 -m pip install --break-system-packages --quiet pillow
           python3 -c "from PIL import Image,ImageDraw; im=Image.new('RGB',(760,260),'white'); d=ImageDraw.Draw(im); d.text((30,100),'Compound HD OCR selftest 20260905 hello',fill=(0,0,0)); im.save('/tmp/octest.png')"
           DMG=$(ls hd/*.dmg | head -1); echo "DMG=$DMG"
           hdiutil attach "$DMG" -nobrowse -noverify -mountpoint /tmp/mnt
