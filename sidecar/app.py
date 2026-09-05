@@ -1343,8 +1343,13 @@ def analysis_status(authorization: str = Header(None)):
             if l["key"] in ("intel", "entities") and not _has_key and l["pct"] < 100:
                 l["needs_key"] = True
         overall = int(sum(l["pct"] for l in layers) / len(layers))
+        # ★后台建卡/情报调 LLM 若失败(尤其余额不足),透出最近错误,前端显示"AI欠费"而非无限转圈
+        _llm = getattr(LLM, "LAST_LLM", {"ok": True, "kind": "", "msg": ""})
+        _llm_err = None
+        if not _llm.get("ok") and _llm.get("kind") in ("quota", "auth"):
+            _llm_err = {"kind": _llm.get("kind"), "msg": _llm.get("msg")}
         return {"layers": layers, "overall_pct": overall, "has_key": _has_key,
-                "done": all(l["pct"] >= 100 for l in layers)}
+                "done": all(l["pct"] >= 100 for l in layers), "llm_error": _llm_err}
     finally:
         con.close()
 

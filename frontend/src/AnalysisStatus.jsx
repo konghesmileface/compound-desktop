@@ -52,12 +52,15 @@ export default function AnalysisStatus() {
   const layers = (st && st.layers) || []
   const running = layers.find((l) => l.pct < 100)
 
+  // ★AI 欠费/key 错误:即使没有正在进行的活儿,也要冒出来提示(否则用户永远不知道后台因欠费停了)
+  const llmErr = st && st.llm_error
   // 啥都没有就不显示
-  if (!acts.length && !analyzing) return null
+  if (!acts.length && !analyzing && !llmErr) return null
 
-  // 胶囊主文案:有导入活动优先报导入,否则报分析
-  const pillText = acts.length ? acts[0].title : ('分析中 ' + (st ? st.overall_pct : 0) + '%')
-  const pillColor = acts.length ? acts[0].color : '#8b8cff'
+  // 胶囊主文案:欠费优先报警,其次导入,再次分析
+  const pillText = llmErr ? (llmErr.kind === 'quota' ? 'AI 余额不足' : 'AI key 无效')
+    : acts.length ? acts[0].title : ('分析中 ' + (st ? st.overall_pct : 0) + '%')
+  const pillColor = llmErr ? '#f87171' : acts.length ? acts[0].color : '#8b8cff'
 
   return (
     <div className={'anz' + (open ? ' open' : '')}>
@@ -82,6 +85,15 @@ export default function AnalysisStatus() {
                   </div>
                 </div>
               ))}
+            </div>
+          )}
+
+          {/* ★AI 额度/key 错误:后台建卡/情报调 LLM 失败(尤其余额不足),醒目提示而非无限转圈 */}
+          {st && st.llm_error && (
+            <div className="anz-llm-err" style={{ margin: '4px 0 10px', padding: '11px 13px', borderRadius: 10, background: 'rgba(239,68,68,.12)', border: '1px solid rgba(239,68,68,.4)', color: '#fca5a5', fontSize: 13, lineHeight: 1.55 }}>
+              <b style={{ color: '#f87171' }}>{st.llm_error.kind === 'quota' ? 'AI 账户余额不足 / 额度用尽' : 'AI key 无效'}</b>
+              <div style={{ marginTop: 3 }}>{st.llm_error.msg}</div>
+              <div style={{ marginTop: 4, opacity: .85 }}>承诺雷达 / 人脉图谱要用 AI,{st.llm_error.kind === 'quota' ? '充值后' : '改好 key 后'}会自动继续,已入库的聊天不受影响。</div>
             </div>
           )}
 

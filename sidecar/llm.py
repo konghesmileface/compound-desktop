@@ -82,6 +82,21 @@ def fast_model():
     return fast or None   # None → chat() 回落到质量模型
 
 
+# ★最近一次 LLM 结果状态(给前端透出:后台建卡/情报静默失败时,前端能显示"AI欠费"而非无限转圈)。
+#   kind: "" 正常 / "quota" 余额不足 / "auth" key无效 / "network" 连不上 / "other";msg 是人话。
+LAST_LLM = {"ok": True, "kind": "", "msg": "", "ts": 0}
+
+def _classify_kind(friendly: str) -> str:
+    if "余额不足" in friendly or "额度" in friendly: return "quota"
+    if "key 无效" in friendly or "没有权限" in friendly: return "auth"
+    if "连不上" in friendly or "超时" in friendly or "网络" in friendly: return "network"
+    return "other"
+
+def _note_llm(ok: bool, friendly: str = ""):
+    import time as _t
+    LAST_LLM.update(ok=ok, kind=("" if ok else _classify_kind(friendly)), msg=("" if ok else friendly), ts=int(_t.time()))
+
+
 def chat(messages, temperature: float = 0.4, max_tokens: int = 2000, model: str = None) -> str:
     """带"空返回重试":deepseek-v4-flash 会间歇性返回空字符串(~25%),
     直接用会击穿"今日发现/连接发现"。这里最多试 3 次,空/异常都重试,轻微退避。"""
@@ -125,6 +140,7 @@ def chat(messages, temperature: float = 0.4, max_tokens: int = 2000, model: str 
                 data = json.load(r)
             content = ((data.get("choices") or [{}])[0].get("message", {}) or {}).get("content") or ""
             if content.strip():
+                _note_llm(True)   # ★成功→清除欠费/错误标记(前端恢复正常)
                 return content
             last_err = "空返回(max_tokens=%d)" % mt
         except urllib.error.HTTPError as e:
@@ -139,7 +155,9 @@ def chat(messages, temperature: float = 0.4, max_tokens: int = 2000, model: str 
         except Exception as e:
             last_err = e
         time.sleep(0.6 * (attempt + 1))
-    raise RuntimeError(_friendly_err(last_err))
+    _friendly = _friendly_err(last_err)
+    _note_llm(False, _friendly)   # ★记下最近失败原因,供 /api/analysis_status 透出到前端
+    raise RuntimeError(_friendly)
 
 
 def _friendly_err(err) -> str:
@@ -153,6 +171,12 @@ def _friendly_err(err) -> str:
     if any(k in low for k in ("connection refused", "getaddrinfo", "name or service",
                               "failed to establish", "urlopen error", "network is unreachable")):
         return "连不上 AI 服务。请确认你的网络能正常上网、能访问 AI 服务地址(公司网 / 校园网可能屏蔽),再试。"
+    # ★余额不足/额度用尽:各家 LLM 欠费返回 402 或 insufficient_balance/insufficient_quota/quota exceeded 等。
+    #   必须在 401 之前判(有的家欠费也回 401),否则会被误报成"key 无效"或最后兜底的"网络失败",坑用户。
+    if ("402" in s or "insufficient" in low or "quota" in low or "balance" in low
+            or "exceeded your current" in low or "欠费" in s or "余额不足" in s or "arrears" in low):
+        return ("你的 AI 账户余额不足 / 额度已用尽。key 没问题、不用改 —— 请到你的 AI 服务商平台"
+                "(如 DeepSeek / 通义 / 你填的那家)充值或提升额度后,再继续使用。")
     if "401" in s or "403" in s or "unauthorized" in low or ("invalid" in low and "key" in low):
         return "AI key 无效或没有权限。请到「设置」检查 key 是否填对、账户是否还有余额。"
     if "空返回" in s or "empty" in low or "max_tokens" in low:
