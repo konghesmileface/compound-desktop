@@ -63,3 +63,26 @@ jobs:
           echo "=== sidecar 日志尾(看有无 Rosetta/崩溃报错)==="; tail -25 /tmp/sc.log
           kill "$(cat /tmp/scpid)" 2>/dev/null || true
           echo "=== 结论:sidecar 在 Apple Silicon 经 Rosetta 若 health=ok 且 upload=200 即通 ==="
+
+      - name: open 完整客户端(x86 Tauri 壳经 Rosetta)+ 截图验证 GUI 弹窗渲染
+        run: |
+          echo "=== open 完整 .app(壳自己拉 sidecar + WebView 渲染前端)==="
+          open "$APP"
+          echo "等 15s 让窗口弹出 + WebView 渲染登录页…"; sleep 15
+          echo "=== 进程:desktop 壳 + sidecar 是否都起来 ==="
+          ps -ax -o pid,comm | grep -iE "compound-desktop|compound-sidecar" | grep -v grep || echo "⚠️没抓到 compound 进程"
+          echo "=== 截屏整个桌面(看客户端窗口有没有渲染出来)==="
+          screencapture -x /tmp/arm_gui.png 2>&1 || echo "screencapture 失败(runner 可能无图形会话)"
+          ls -lh /tmp/arm_gui.png 2>/dev/null && echo "✓ 截图已生成" || echo "✗ 无截图"
+          # 再等几秒截第二张(WebView 可能还在加载)
+          sleep 8; screencapture -x /tmp/arm_gui2.png 2>&1 || true
+          echo "=== 关闭客户端 ==="
+          osascript -e 'quit app "Compound"' 2>/dev/null || pkill -f "Compound.app/Contents/MacOS" || true
+          pkill -f compound-sidecar 2>/dev/null || true
+      - name: 上传 GUI 截图(下载看 arm 上界面渲染)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: arm64-gui-screenshot
+          path: /tmp/arm_gui*.png
+          if-no-files-found: warn
