@@ -327,6 +327,15 @@ def _clean_ocr_lines(lines):
     return dedup
 
 
+_RAPIDOCR_ENG = None   # ★rapidocr 引擎单例:模型加载重,复用一个,别每张图 new(否则慢+反复吃内存)
+def _rapidocr_engine():
+    global _RAPIDOCR_ENG
+    if _RAPIDOCR_ENG is None:
+        from rapidocr import RapidOCR
+        _RAPIDOCR_ENG = RapidOCR()
+    return _RAPIDOCR_ENG
+
+
 def _ocr_image_file(path):
     """图片OCR:★高精版(设了 PADDLE_OCR_URL)优先走 paddle PP-StructureV3(版面/表格更强);
     失败或轻量版回落 rapidocr(快)。返回清洗后的行列表。"""
@@ -346,9 +355,10 @@ def _ocr_image_file(path):
         except Exception as e:
             print("[ocr] paddle 失败,回落 rapidocr:", str(e)[:80])
     try:
-        from rapidocr import RapidOCR
-        res, _ = RapidOCR()(path)
-        return _clean_ocr_lines([x[1] for x in (res or [])])
+        eng = _rapidocr_engine()   # ★缓存单例:原来每张图都 RapidOCR() 重新加载模型(慢+吃内存),改复用
+        if eng is not None:
+            res, _ = eng(path)
+            return _clean_ocr_lines([x[1] for x in (res or [])])
     except ImportError:
         pass
     r = _sp.run(["curl", "-s", "-X", "POST", "http://127.0.0.1:8100/ocr/image",

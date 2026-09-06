@@ -178,11 +178,14 @@ def _start_bg_analyzer():
                                     print(f"[bg-analyze] dockind {owner}: {_e}")
                                 # 承诺雷达 intel:每轮处理 ≤3 个未缓存微信会话
                                 # ★门槛改消息数(与建卡一致,不受分页波动):会话消息数>=15 才抽承诺雷达
+                                # ★LIMIT 用参数化(? 占位),绝不用 "...%d" % _AB —— SQL 里有 LIKE '微信_与%' 的 %',
+                                #   整串做 % 格式化会把 %' 当格式符→"unsupported format character"每轮抛异常→bg-analyze
+                                #   无限空转烧满 CPU(本会话改消息数门槛时引入的 P0,实测 CPU 300%+ 客户端卡死)。
                                 pend = con.execute(
                                     "SELECT d.id, d.filename FROM documents d WHERE d.owner=? AND d.filename LIKE '微信_与%' "
                                     "AND (SELECT COALESCE(SUM(1 + LENGTH(text) - LENGTH(REPLACE(text, char(10), ''))),0) FROM pages WHERE doc_id=d.id) >= 15 "
-                                    "AND NOT EXISTS(SELECT 1 FROM chat_intel ci WHERE ci.username=d.owner AND ci.contact=REPLACE(REPLACE(d.filename,'微信_与',''),'.txt','')) LIMIT %d" % _AB,
-                                    (owner,)).fetchall()
+                                    "AND NOT EXISTS(SELECT 1 FROM chat_intel ci WHERE ci.username=d.owner AND ci.contact=REPLACE(REPLACE(d.filename,'微信_与',''),'.txt','')) LIMIT ?",
+                                    (owner, _AB)).fetchall()
                                 for did, fn in pend:
                                     contact = fn.replace("微信_与", "").replace(".txt", "")
                                     text = "\n".join(p[0] for p in con.execute("SELECT text FROM pages WHERE doc_id=? ORDER BY page_no", (did,)).fetchall())
@@ -196,8 +199,8 @@ def _start_bg_analyzer():
                                 # 人脉图谱 entities:每轮处理 ≤3 个未抽实体的文档
                                 pend2 = con.execute(
                                     "SELECT d.id FROM documents d WHERE d.owner=? "
-                                    "AND NOT EXISTS(SELECT 1 FROM analysis_processed ap WHERE ap.owner=d.owner AND ap.layer='entities' AND ap.doc_id=d.id) LIMIT %d" % _AB,
-                                    (owner,)).fetchall()
+                                    "AND NOT EXISTS(SELECT 1 FROM analysis_processed ap WHERE ap.owner=d.owner AND ap.layer='entities' AND ap.doc_id=d.id) LIMIT ?",
+                                    (owner, _AB)).fetchall()
                                 for (did,) in pend2:
                                     text = "\n".join(p[0] for p in con.execute("SELECT text FROM pages WHERE doc_id=? ORDER BY page_no", (did,)).fetchall())[:6000]
                                     try: _EN.extract_doc_entities(con, did, owner, text)
@@ -4740,9 +4743,11 @@ def save_settings(cfg: dict = Body(...), authorization: str = Header(None)):
 
 
 @app.post("/api/settings/test")
-def test_settings(authorization: str = Header(None)):
+def test_settings(payload: dict = Body(default=None), authorization: str = Header(None)):
     _me(authorization)   # P0-2:测试接口同样需登录
-    return LLM.test_key()
+    # ★payload 有 llm_key 等 = 测前端当前填的配置(不用先保存);空 = 测已保存配置(兼容旧调用)
+    ov = payload if (payload and payload.get("llm_key")) else None
+    return LLM.test_key(ov)
 
 
 @app.post("/api/embed")

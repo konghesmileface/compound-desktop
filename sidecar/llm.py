@@ -20,7 +20,7 @@ _SETTINGS_PATH_OLD = os.path.join(os.path.dirname(os.path.abspath(__file__)), "s
 PROVIDER_DEFAULTS = {
     "deepseek": ("https://api.deepseek.com", "deepseek-v4-pro", "deepseek-v4-flash"),
     "qwen": ("https://dashscope.aliyuncs.com/compatible-mode/v1", "qwen-max", "qwen-flash"),          # 稳定别名,自动跟最新代
-    "doubao": ("https://ark.cn-beijing.volces.com/api/v3", "doubao-pro-32k", "doubao-lite-32k"),      # ★豆包多需填「接入点ID」,见设置提示
+    "doubao": ("https://ark.cn-beijing.volces.com/api/v3", "doubao-seed-2-1-pro-260628", "doubao-seed-2-0-mini-260428"),  # ★火山方舟:模型名要带准确版本号,旧doubao-pro-32k已下线;去控制台复制
     "kimi": ("https://api.moonshot.cn/v1", "kimi-k2.5", "kimi-k2.5"),
     "zhipu": ("https://open.bigmodel.cn/api/paas/v4", "glm-4.6", "glm-4.5-flash"),
     "openai": ("https://api.openai.com/v1", "gpt-5", "gpt-5-mini"),
@@ -97,10 +97,18 @@ def _note_llm(ok: bool, friendly: str = ""):
     LAST_LLM.update(ok=ok, kind=("" if ok else _classify_kind(friendly)), msg=("" if ok else friendly), ts=int(_t.time()))
 
 
-def chat(messages, temperature: float = 0.4, max_tokens: int = 2000, model: str = None) -> str:
+def chat(messages, temperature: float = 0.4, max_tokens: int = 2000, model: str = None, cfg_override: dict = None) -> str:
     """带"空返回重试":deepseek-v4-flash 会间歇性返回空字符串(~25%),
-    直接用会击穿"今日发现/连接发现"。这里最多试 3 次,空/异常都重试,轻微退避。"""
-    prov, base, dmodel, key = resolved()
+    直接用会击穿"今日发现/连接发现"。这里最多试 3 次,空/异常都重试,轻微退避。
+    ★cfg_override:测试连通时前端传当前填的 key/model/provider/base_url,免"必须先保存才能测"。"""
+    if cfg_override:
+        prov = cfg_override.get("llm_provider") or "deepseek"
+        _d = PROVIDER_DEFAULTS.get(prov, PROVIDER_DEFAULTS["deepseek"])
+        base = (cfg_override.get("llm_base_url") or _d[0]).rstrip("/")
+        dmodel = cfg_override.get("llm_model") or _d[1]
+        key = cfg_override.get("llm_key") or ""
+    else:
+        prov, base, dmodel, key = resolved()
     model = model or dmodel
     if not key and prov != "ollama":
         raise RuntimeError("未配置 AI key,请到「设置」页填写")
@@ -184,10 +192,10 @@ def _friendly_err(err) -> str:
     return "AI 连接失败,请检查网络和 key 后重试。"
 
 
-def test_key() -> dict:
-    """测试当前配置能否连通。"""
+def test_key(cfg_override: dict = None) -> dict:
+    """测试连通。cfg_override 有值=测前端当前填的配置(不用先保存);无=测已保存配置。"""
     try:
-        out = chat([{"role": "user", "content": "回复:ok"}], max_tokens=10)
+        out = chat([{"role": "user", "content": "回复:ok"}], max_tokens=10, cfg_override=cfg_override or None)
         return {"ok": True, "reply": out[:40]}
     except Exception as e:
         return {"ok": False, "error": str(e)}

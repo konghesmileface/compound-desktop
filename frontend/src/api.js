@@ -158,7 +158,7 @@ export const api = {
   orderDelete: (orderId) => fetch('/api/orders/delete', { method: 'POST', headers: { 'Content-Type': 'application/json', ...authHeaders() }, body: JSON.stringify({ order_id: orderId }) }).then(j),
   getSettings: () => fetch('/api/settings', { headers: authHeaders() }).then(j),
   saveSettings: (cfg) => fetch('/api/settings', { method: 'POST', headers: { 'Content-Type': 'application/json', ...authHeaders() }, body: JSON.stringify(cfg) }).then(j),
-  testSettings: () => fetch('/api/settings/test', { method: 'POST', headers: { ...authHeaders() } }).then(j),
+  testSettings: (cfg) => fetch('/api/settings/test', { method: 'POST', headers: { 'Content-Type': 'application/json', ...authHeaders() }, body: JSON.stringify(cfg || {}) }).then(j),
   ask: (query, history = [], contact = '') => fetch('/api/ask', { method: 'POST', headers: { 'Content-Type': 'application/json', ...authHeaders() }, body: JSON.stringify({ query, history, contact }) }).then(async (r) => {
     if (r.status === 401) { try { localStorage.removeItem('auth') } catch { /* noop */ } location.reload(); throw new Error('401') }
     if (!r.ok) { let d = ''; try { d = (await r.json()).detail || '' } catch { /* noop */ } throw new Error(d || String(r.status)) }

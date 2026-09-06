@@ -37,7 +37,7 @@ const myUser = () => { try { const a = JSON.parse(localStorage.getItem('auth') |
 const PROVIDERS = [
   { key: 'deepseek', name: 'DeepSeek', hint: '便宜、中文好。platform.deepseek.com', model: 'deepseek-v4-pro', fast: 'deepseek-v4-flash' },
   { key: 'qwen', name: '通义千问', hint: '阿里。bailian.console.aliyun.com', model: 'qwen-max', fast: 'qwen-flash', alts: ['qwen-plus'] },
-  { key: 'doubao', name: '豆包', hint: '字节。模型名多需填你的「接入点ID」', model: 'doubao-pro-32k', fast: 'doubao-lite-32k' },
+  { key: 'doubao', name: '豆包', hint: '字节·火山方舟。★模型名要填准确ID(带版本号,如 doubao-seed-2-0-mini-260428),去 console.volcengine.com/ark 复制;旧的 doubao-pro-32k 已下线', model: 'doubao-seed-2-1-pro-260628', fast: 'doubao-seed-2-0-mini-260428', alts: ['doubao-seed-2-1-turbo-260628', 'doubao-seed-2-0-lite-260428', 'glm-5-2-260617'] },
   { key: 'kimi', name: 'Kimi', hint: '月之暗面。platform.moonshot.cn', model: 'kimi-k2.5', fast: 'kimi-k2.5' },
   { key: 'zhipu', name: '智谱 GLM', hint: 'open.bigmodel.cn。glm-4.5-flash 便宜', model: 'glm-4.6', fast: 'glm-4.5-flash' },
   { key: 'openai', name: 'OpenAI', hint: 'platform.openai.com', model: 'gpt-5', fast: 'gpt-5-mini' },
@@ -157,7 +157,9 @@ export default function Settings({ auth, onLogout, onNick, section = 'all' }) {
   }
   async function test() {
     setTesting(true); setStatus(null)
-    try { const r = await api.testSettings(); setStatus(r.ok ? { ok: true, msg: '连通 ✓ 模型回复:' + (r.reply || '') } : { ok: false, msg: '连不通:' + (r.error || '') }) }
+    // ★填了 key 就直接测当前填的(不用先保存);没填就测已保存的配置
+    const ov = (cfg.llm_key || '').trim() ? cfg : null
+    try { const r = await api.testSettings(ov); setStatus(r.ok ? { ok: true, msg: '连通 ✓ 模型回复:' + (r.reply || '') } : { ok: false, msg: '连不通:' + (r.error || '') }) }
     catch { setStatus({ ok: false, msg: '测试失败' }) }
     setTesting(false)
   }
@@ -291,9 +293,9 @@ export default function Settings({ auth, onLogout, onNick, section = 'all' }) {
         </div>
         <div className="set-twomodel-tip">
           <b>为什么分两个模型?</b> 我们把活儿分两档跑,在<b>不影响质量</b>的前提下给你<b>最省成本、最快</b>的体验:
-          <span className="stm-row"><span className="stm-tag stm-q">质量模型</span> 产出交付物(PPT / 报告 / 深度分析)—— 用强模型保证质量</span>
-          <span className="stm-row"><span className="stm-tag stm-f">快模型</span> 批量分析(联系人情报 / 主题命名 / 问答)—— 用便宜快模型,秒回又省钱</span>
-          <span className="stm-note">都可留空用推荐默认;未来出了新模型,直接填新名字即可,无需等我们更新。</span>
+          <span className="stm-row"><span className="stm-tag stm-q">质量模型</span> 产出交付物(PPT / 报告 / 深度分析)—— 填该厂商<b>最强的那款</b>(名字里带 <b>pro / max / opus / 4.6</b> 的),保证质量</span>
+          <span className="stm-row"><span className="stm-tag stm-f">快模型</span> 批量分析(联系人情报 / 主题命名 / 问答)—— 填<b>便宜快的那款</b>(名字里带 <b>flash / mini / lite / air / turbo</b> 的),秒回又省钱</span>
+          <span className="stm-note">不确定就用推荐默认(下拉第一个);两个也可以填同一个模型。未来出新模型直接填新名字即可,无需等我们更新。</span>
         </div>
         <div className="set-2col">
           <div className="set-field">
