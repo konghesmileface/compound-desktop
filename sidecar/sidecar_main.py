@@ -142,8 +142,13 @@ def _late_patch_ocr():
                     pass
             return None
 
+        # ★关键:patch 在主线程执行,此时 os.environ["PADDLE_OCR_URL"](_spawn_paddle_worker 刚设)
+        #   一定可读。把 URL 闭包捕获,_patched 在入库后台线程直接用捕获值,绝不再运行时重读环境
+        #   (入库线程读 os.environ/BRAIN_DATA/gettempdir 都会失效,这是反复踩的谜题)。
+        _cap = _resolve()
+
         def _patched(path):
-            pu = _resolve()
+            pu = _cap or _resolve()   # ★优先用主线程 patch 时捕获的 URL
             if pu:
                 try:
                     r = _sp.run(["curl", "-s", "-m", "180", "-X", "POST", pu.rstrip("/") + "/ocr/image",
@@ -158,11 +163,10 @@ def _late_patch_ocr():
             return _orig(path)
 
         _mi._ocr_image_file = _patched
-        # 顺带把 URL 补进本进程 os.environ:process_image 的 method 标记读它→标成 ocr:paddle
-        _u = _resolve()
-        if _u and not os.environ.get("PADDLE_OCR_URL"):
-            os.environ["PADDLE_OCR_URL"] = _u
-        print("[sidecar] ★#6 media_ingest OCR 已 late-patch(paddle URL 从文件读)", flush=True)
+        # process_image 的 backend 标记(旧代码读 os.environ)→主线程补设,尽量标成 ocr:paddle
+        if _cap and not os.environ.get("PADDLE_OCR_URL"):
+            os.environ["PADDLE_OCR_URL"] = _cap
+        print(f"[sidecar] ★#6 media_ingest OCR 已 late-patch(captured_url={_cap})", flush=True)
     except Exception as e:
         print(f"[sidecar] OCR late-patch 失败: {e}", flush=True)
 
