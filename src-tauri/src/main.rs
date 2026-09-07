@@ -93,9 +93,11 @@ fn open_external(url: String) {
     let _ = Command::new("open").arg(&url).spawn();
     #[cfg(target_os = "windows")]
     {
-        // ★用 explorer 直接开默认浏览器(不经 cmd,不弹黑框);加 CREATE_NO_WINDOW 双保险。
+        // ★#8修:explorer.exe 打开带查询参数的 http URL 不可靠(支付宝支付页被当文档/路径打开)→
+        //   改用 cmd start(Windows 打开 URL 的标准方式)。start 第一个引号参数是窗口标题、必须留空 "",
+        //   否则带 & 或空格的 URL 会被 start 误当标题解析。CREATE_NO_WINDOW 不弹黑框。
         use std::os::windows::process::CommandExt;
-        let _ = Command::new("explorer.exe").arg(&url).creation_flags(0x08000000).spawn();
+        let _ = Command::new("cmd").args(["/c", "start", "", &url]).creation_flags(0x08000000).spawn();
     }
     #[cfg(target_os = "linux")]
     let _ = Command::new("xdg-open").arg(&url).spawn();

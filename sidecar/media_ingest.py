@@ -336,21 +336,37 @@ def _rapidocr_engine():
     return _RAPIDOCR_ENG
 
 
+def _resolve_paddle_url():
+    """解析本机 paddle worker URL(高精版)。★#6修(v2):打包环境入库后台线程读不到运行时 os.environ
+    设的 PADDLE_OCR_URL→按 sidecar_main 落盘顺序回退读文件(BRAIN_DATA/paddle_url.txt 优先,
+    再 gettempdir 下 paddle_url.txt / 旧名 compound_paddle_url.txt)。返回 (url, 来源) 便于诊断。"""
+    u = os.environ.get("PADDLE_OCR_URL")
+    if u:
+        return u, "env"
+    import tempfile as _tf
+    for _d, _fn in ((os.environ.get("BRAIN_DATA"), "paddle_url.txt"),
+                    (_tf.gettempdir(), "paddle_url.txt"),
+                    (_tf.gettempdir(), "compound_paddle_url.txt")):
+        if not _d:
+            continue
+        try:
+            _p = os.path.join(_d, _fn)
+            if os.path.exists(_p):
+                v = open(_p).read().strip()
+                if v:
+                    return v, "file:" + _p
+        except Exception:
+            pass
+    return None, "none"
+
+
 def _ocr_image_file(path):
-    """图片OCR:★高精版(设了 PADDLE_OCR_URL)优先走 paddle PP-StructureV3(版面/表格更强);
+    """图片OCR:★高精版(paddle worker 在)优先走 paddle PP-StructureV3(版面/表格更强);
     失败或轻量版回落 rapidocr(快)。返回清洗后的行列表。"""
     import json as _j
     import subprocess as _sp
-    # ★高精:paddle worker 在(PADDLE_OCR_URL)→ 优先用它(否则高精版白装 paddle、图片仍走 rapidocr)
-    _pu = os.environ.get("PADDLE_OCR_URL")
-    if not _pu:   # ★#6修:打包环境下入库后台线程读不到运行时 os.environ[]= 设的值→读 worker 落盘 URL 兜底
-        try:
-            import tempfile as _tf
-            _pf = os.path.join(_tf.gettempdir(), "compound_paddle_url.txt")
-            if os.path.exists(_pf):
-                _pu = (open(_pf).read().strip() or None)
-        except Exception:
-            _pu = None
+    _pu, _src = _resolve_paddle_url()   # ★#6修(v2):os.environ→BRAIN_DATA文件→gettempdir文件
+    print(f"[ocr-debug] paddle_url={_pu} src={_src} BRAIN_DATA={os.environ.get('BRAIN_DATA')}", flush=True)
     if _pu:
         try:
             r = _sp.run(["curl", "-s", "-m", "180", "-X", "POST", _pu.rstrip("/") + "/ocr/image",
@@ -400,17 +416,7 @@ def process_image(con, path, vault_dir, force=False, progress_cb=None):
             progress_cb(1, 1)
         except Exception:
             pass
-    def _pu_now():   # ★#6修:与 _ocr_image_file 一致——os.environ 读不到时回退 worker 落盘 URL
-        _u = os.environ.get("PADDLE_OCR_URL")
-        if _u:
-            return _u
-        try:
-            import tempfile as _tf
-            _pf = os.path.join(_tf.gettempdir(), "compound_paddle_url.txt")
-            return (open(_pf).read().strip() or None) if os.path.exists(_pf) else None
-        except Exception:
-            return None
-    _ocr_bk = "ocr:paddle" if _pu_now() else "ocr:rapidocr"
+    _ocr_bk = "ocr:paddle" if _resolve_paddle_url()[0] else "ocr:rapidocr"
     con.execute("DELETE FROM documents WHERE source_path=?", (path,))
     cur = con.execute(
         "INSERT INTO documents(source_path,filename,pages,backend,file_hash,ingested_at)"

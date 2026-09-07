@@ -97,16 +97,19 @@ def _spawn_paddle_worker():
         import tempfile as _tf
         subprocess.Popen([worker, "--host", "127.0.0.1", "--port", str(port)],
                          cwd=_tf.gettempdir())
-        os.environ["PADDLE_OCR_URL"] = f"http://127.0.0.1:{port}"
-        # ★#6修:同时把 URL 落盘。入库在后台线程跑,打包(PyInstaller)环境下 media_ingest 有时读不到
-        #   运行时 os.environ[]= 设的值→高精版图片仍走 rapidocr、paddle 白装(mac2 macOS12 实测)。
-        #   写文件兜底,跨线程/进程都可靠;media_ingest os.environ 读不到时回退读此文件。
-        try:
-            with open(os.path.join(_tf.gettempdir(), "compound_paddle_url.txt"), "w") as _uf:
-                _uf.write(f"http://127.0.0.1:{port}")
-        except Exception:
-            pass
-        print(f"[sidecar] 高精 paddle worker 已拉起 :{port}", flush=True)
+        _url = f"http://127.0.0.1:{port}"
+        os.environ["PADDLE_OCR_URL"] = _url
+        # ★#6修(v2):URL 落盘到多个确定路径。实测(mac2 macOS12)入库后台线程既读不到运行时 os.environ[]=
+        #   设的值,gettempdir 兜底也失效→高精版图片仍走 rapidocr、paddle 白装。改写 BRAIN_DATA(启动环境
+        #   变量、所有线程稳定继承、跨进程可靠)为主 + gettempdir 兜底;media_ingest 按同顺序读。
+        for _d in (os.environ.get("BRAIN_DATA"), _tf.gettempdir()):
+            if _d:
+                try:
+                    with open(os.path.join(_d, "paddle_url.txt"), "w") as _uf:
+                        _uf.write(_url)
+                except Exception:
+                    pass
+        print(f"[sidecar] 高精 paddle worker 已拉起 :{port} (URL已落盘 BRAIN_DATA/gettempdir)", flush=True)
     except Exception as e:
         print(f"[sidecar] paddle worker 启动失败: {e}", flush=True)
 
