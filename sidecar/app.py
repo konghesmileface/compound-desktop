@@ -166,6 +166,27 @@ def _start_bg_analyzer():
                 try:
                     con = _con()
                     try:
+                        # ★#7修:msg_count 持久化列 + 增量回填。原来 intel/建卡两处每轮都对全库微信会话
+                        #   重算 SUM(LENGTH-REPLACE) 消息数(大库782文档/1.5万页→每15秒全扫一遍→CPU 300%
+                        #   持续不降,接口全被饿死)。改成算一次存进 documents.msg_count 列,之后只读列。
+                        try:
+                            _cols = [r[1] for r in con.execute("PRAGMA table_info(documents)")]
+                            if "msg_count" not in _cols:
+                                con.execute("ALTER TABLE documents ADD COLUMN msg_count INTEGER")
+                                con.commit()
+                        except Exception:
+                            pass
+                        try:
+                            _bf = con.execute("SELECT id FROM documents WHERE filename LIKE '微信_与%' "
+                                              "AND msg_count IS NULL LIMIT ?", (max(_AB * 4, 20),)).fetchall()
+                            for (_bid,) in _bf:
+                                _mc = con.execute("SELECT COALESCE(SUM(1 + LENGTH(text) - LENGTH(REPLACE(text, char(10), ''))),0) "
+                                                  "FROM pages WHERE doc_id=?", (_bid,)).fetchone()[0] or 0
+                                con.execute("UPDATE documents SET msg_count=? WHERE id=?", (_mc, _bid))
+                            if _bf:
+                                con.commit(); worked = True
+                        except Exception as _e:
+                            print(f"[bg-analyze] msg_count回填: {_e}")
                         cfg = LLM.load_cfg()
                         if cfg.get("llm_key"):   # intel/entities 都要 LLM,没 key 不跑
                             con.execute("CREATE TABLE IF NOT EXISTS analysis_processed(owner TEXT, layer TEXT, doc_id INTEGER, PRIMARY KEY(owner,layer,doc_id))")
@@ -183,7 +204,7 @@ def _start_bg_analyzer():
                                 #   无限空转烧满 CPU(本会话改消息数门槛时引入的 P0,实测 CPU 300%+ 客户端卡死)。
                                 pend = con.execute(
                                     "SELECT d.id, d.filename FROM documents d WHERE d.owner=? AND d.filename LIKE '微信_与%' "
-                                    "AND (SELECT COALESCE(SUM(1 + LENGTH(text) - LENGTH(REPLACE(text, char(10), ''))),0) FROM pages WHERE doc_id=d.id) >= 15 "
+                                    "AND COALESCE(d.msg_count,0) >= 15 "   # ★#7修:读持久化列 msg_count,不再每轮子查询 SUM 全扫 pages
                                     "AND NOT EXISTS(SELECT 1 FROM chat_intel ci WHERE ci.username=d.owner AND ci.contact=REPLACE(REPLACE(d.filename,'微信_与',''),'.txt','')) LIMIT ?",
                                     (owner, _AB)).fetchall()
                                 for did, fn in pend:
@@ -215,22 +236,16 @@ def _start_bg_analyzer():
                                 #   会话跨过 pages>=3 门槛→卡忽有忽无,用户实测"人脉卡变少")。消息数=各页 text 换行和,稳定。
                                 #   门槛:消息数>=15(约够聊出内容);重入判断:存的 msgcount != 当前消息数 才重建。
                                 _MIN_MSGS = 15
-                                _cands = con.execute(
-                                    "SELECT d.id, d.filename FROM documents d WHERE d.owner=? AND d.filename LIKE '微信_与%' "
-                                    "AND NOT EXISTS(SELECT 1 FROM card_hidden ch WHERE ch.username=d.owner AND ch.contact=REPLACE(REPLACE(d.filename,'微信_与',''),'.txt','')) ",
-                                    (owner,)).fetchall()
-                                pend3 = []
-                                for _cdid, _cfn in _cands:
-                                    _ct = _cfn.replace("微信_与", "").replace(".txt", "")
-                                    _msgs = con.execute("SELECT COALESCE(SUM(1 + LENGTH(text) - LENGTH(REPLACE(text, char(10), ''))),0) FROM pages WHERE doc_id=?", (_cdid,)).fetchone()[0] or 0
-                                    if _msgs < _MIN_MSGS:
-                                        continue
-                                    _rc = con.execute("SELECT msgcount FROM relationship_cards WHERE username=? AND contact=?", (owner, _ct)).fetchone()
-                                    if _rc and _rc[0] == _msgs:   # 已有卡且消息数没变→跳过(不因分页变化重建)
-                                        continue
-                                    pend3.append((_cdid, _cfn, _msgs))
-                                    if len(pend3) >= _perf_profile()["analyze_batch"]:
-                                        break
+                                # ★#7修:用持久化列 d.msg_count 一条 SQL 筛出待建卡会话。原来每轮 python 遍历
+                                #   全部微信会话、逐个 SUM 算消息数(即使卡早建好也每轮全算)→大库持续烧满 CPU。
+                                #   现在已建卡且 msgcount 未变的会话被 NOT EXISTS 直接排除,不再重算;卡建完→候选空→歇。
+                                pend3 = con.execute(
+                                    "SELECT d.id, d.filename, d.msg_count FROM documents d WHERE d.owner=? AND d.filename LIKE '微信_与%' "
+                                    "AND COALESCE(d.msg_count,0) >= ? "
+                                    "AND NOT EXISTS(SELECT 1 FROM card_hidden ch WHERE ch.username=d.owner AND ch.contact=REPLACE(REPLACE(d.filename,'微信_与',''),'.txt','')) "
+                                    "AND NOT EXISTS(SELECT 1 FROM relationship_cards rc WHERE rc.username=d.owner AND rc.contact=REPLACE(REPLACE(d.filename,'微信_与',''),'.txt','') AND rc.msgcount=d.msg_count) "
+                                    "LIMIT ?",
+                                    (owner, _MIN_MSGS, _AB)).fetchall()
                                 for _cdid, _cfn, _cmsgs in pend3:
                                     _contact = _cfn.replace("微信_与", "").replace(".txt", "")
                                     _ctext = "\n".join(p[0] for p in con.execute("SELECT text FROM pages WHERE doc_id=? ORDER BY page_no LIMIT 40", (_cdid,)).fetchall())

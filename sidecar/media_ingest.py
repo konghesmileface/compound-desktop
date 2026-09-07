@@ -343,6 +343,14 @@ def _ocr_image_file(path):
     import subprocess as _sp
     # ★高精:paddle worker 在(PADDLE_OCR_URL)→ 优先用它(否则高精版白装 paddle、图片仍走 rapidocr)
     _pu = os.environ.get("PADDLE_OCR_URL")
+    if not _pu:   # ★#6修:打包环境下入库后台线程读不到运行时 os.environ[]= 设的值→读 worker 落盘 URL 兜底
+        try:
+            import tempfile as _tf
+            _pf = os.path.join(_tf.gettempdir(), "compound_paddle_url.txt")
+            if os.path.exists(_pf):
+                _pu = (open(_pf).read().strip() or None)
+        except Exception:
+            _pu = None
     if _pu:
         try:
             r = _sp.run(["curl", "-s", "-m", "180", "-X", "POST", _pu.rstrip("/") + "/ocr/image",
@@ -392,7 +400,17 @@ def process_image(con, path, vault_dir, force=False, progress_cb=None):
             progress_cb(1, 1)
         except Exception:
             pass
-    _ocr_bk = "ocr:paddle" if os.environ.get("PADDLE_OCR_URL") else "ocr:rapidocr"
+    def _pu_now():   # ★#6修:与 _ocr_image_file 一致——os.environ 读不到时回退 worker 落盘 URL
+        _u = os.environ.get("PADDLE_OCR_URL")
+        if _u:
+            return _u
+        try:
+            import tempfile as _tf
+            _pf = os.path.join(_tf.gettempdir(), "compound_paddle_url.txt")
+            return (open(_pf).read().strip() or None) if os.path.exists(_pf) else None
+        except Exception:
+            return None
+    _ocr_bk = "ocr:paddle" if _pu_now() else "ocr:rapidocr"
     con.execute("DELETE FROM documents WHERE source_path=?", (path,))
     cur = con.execute(
         "INSERT INTO documents(source_path,filename,pages,backend,file_hash,ingested_at)"

@@ -98,6 +98,14 @@ def _spawn_paddle_worker():
         subprocess.Popen([worker, "--host", "127.0.0.1", "--port", str(port)],
                          cwd=_tf.gettempdir())
         os.environ["PADDLE_OCR_URL"] = f"http://127.0.0.1:{port}"
+        # ★#6修:同时把 URL 落盘。入库在后台线程跑,打包(PyInstaller)环境下 media_ingest 有时读不到
+        #   运行时 os.environ[]= 设的值→高精版图片仍走 rapidocr、paddle 白装(mac2 macOS12 实测)。
+        #   写文件兜底,跨线程/进程都可靠;media_ingest os.environ 读不到时回退读此文件。
+        try:
+            with open(os.path.join(_tf.gettempdir(), "compound_paddle_url.txt"), "w") as _uf:
+                _uf.write(f"http://127.0.0.1:{port}")
+        except Exception:
+            pass
         print(f"[sidecar] 高精 paddle worker 已拉起 :{port}", flush=True)
     except Exception as e:
         print(f"[sidecar] paddle worker 启动失败: {e}", flush=True)
