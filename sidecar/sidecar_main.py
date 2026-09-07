@@ -114,6 +114,59 @@ def _spawn_paddle_worker():
         print(f"[sidecar] paddle worker 启动失败: {e}", flush=True)
 
 
+def _late_patch_ocr():
+    """★#6:入口文件覆盖 media_ingest._ocr_image_file。media_ingest 经 import 链被 PyInstaller 打包时
+    常带旧字节码(实测本机lite+mac2 HD 的 [ocr-debug] 诊断均 0=运行旧代码,而 sidecar_main 作为
+    Analysis 入口文件必读最新)→ 高精版图片读不到 paddle URL、白走 rapidocr。这里在入口文件(必新)里
+    monkey-patch OCR 函数,从落盘文件(BRAIN_DATA/gettempdir 的 paddle_url.txt)读 worker URL,
+    绕过打包旧代码。参考 [[compound_hd_paddle_9fixes]] 的 late-patch 手法。"""
+    try:
+        import media_ingest as _mi
+        import json as _j, subprocess as _sp, tempfile as _tf
+        _orig = _mi._ocr_image_file
+
+        def _resolve():
+            u = os.environ.get("PADDLE_OCR_URL")
+            if u:
+                return u
+            for _d in (os.environ.get("BRAIN_DATA"), _tf.gettempdir()):
+                if not _d:
+                    continue
+                p = os.path.join(_d, "paddle_url.txt")
+                try:
+                    if os.path.exists(p):
+                        v = open(p).read().strip()
+                        if v:
+                            return v
+                except Exception:
+                    pass
+            return None
+
+        def _patched(path):
+            pu = _resolve()
+            if pu:
+                try:
+                    r = _sp.run(["curl", "-s", "-m", "180", "-X", "POST", pu.rstrip("/") + "/ocr/image",
+                                 "-F", "file=@" + path], capture_output=True, text=True, timeout=185)
+                    d = _j.loads(r.stdout)
+                    t = d.get("markdown") or d.get("text") or ""
+                    lines = _mi._clean_ocr_lines(str(t).split("\n"))
+                    if lines:
+                        return lines
+                except Exception as e:
+                    print("[ocr] paddle 失败,回落 rapidocr:", str(e)[:80], flush=True)
+            return _orig(path)
+
+        _mi._ocr_image_file = _patched
+        # 顺带把 URL 补进本进程 os.environ:process_image 的 method 标记读它→标成 ocr:paddle
+        _u = _resolve()
+        if _u and not os.environ.get("PADDLE_OCR_URL"):
+            os.environ["PADDLE_OCR_URL"] = _u
+        print("[sidecar] ★#6 media_ingest OCR 已 late-patch(paddle URL 从文件读)", flush=True)
+    except Exception as e:
+        print(f"[sidecar] OCR late-patch 失败: {e}", flush=True)
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--host", default="127.0.0.1")
@@ -301,6 +354,7 @@ def main():
 
     import uvicorn
     import app as _app  # web/app.py(扁平化到此目录)
+    _late_patch_ocr()   # ★#6:入口文件覆盖 media_ingest OCR(治其打包旧字节码→高精版图片读不到 paddle URL)
     uvicorn.run(_app.app, host=args.host, port=args.port, log_level="info")
 
 
