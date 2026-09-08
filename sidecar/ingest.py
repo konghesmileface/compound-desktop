@@ -299,9 +299,11 @@ def process_image(con, backend, img_path, vault_dir, render_dpi, force=False, pr
         try:
             import subprocess as _sp
             import json as _j
-            _r = _sp.run(["curl", "-s", "-m", "180", "--noproxy", "*", "-X", "POST",
+            # ★超时给足:paddle PP-StructureV3 处理复杂大图(实测 4.7M 签证表约需 180-230s)较久,
+            #   180s 会超时→白处理还回落 rapidocr。放到 600s,复杂图也能真正用上 paddle。
+            _r = _sp.run(["curl", "-s", "-m", "600", "--noproxy", "*", "-X", "POST",
                           _pu.rstrip("/") + "/ocr/image", "-F", "file=@" + img_path],
-                         capture_output=True, text=True, timeout=185)
+                         capture_output=True, text=True, timeout=610)
             _d = _j.loads(_r.stdout)
             _t = _d.get("markdown") or _d.get("text") or ""
             if _t.strip():
