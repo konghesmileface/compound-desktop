@@ -29,7 +29,7 @@ function Radar({ dims }) {
   const ring = (f) => dims.map((_, i) => pt(i, R * f).join(',')).join(' ')
   const area = dims.map((d, i) => pt(i, R * Math.max(4, Math.min(100, d.score || 0)) / 100).join(',')).join(' ')
   return (
-    <svg className="mr2-radar" viewBox={`0 0 ${W} ${H}`} width="100%" preserveAspectRatio="xMidYMid meet">
+    <svg className="mr2-radar" viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="xMidYMid meet">
       {[0.25, 0.5, 0.75, 1].map((f, i) => <polygon key={i} points={ring(f)} fill="none" stroke="rgba(255,255,255,0.09)" strokeWidth="1" />)}
       {dims.map((_, i) => { const [x, y] = pt(i, R); return <line key={i} x1={cx} y1={cy} x2={x} y2={y} stroke="rgba(255,255,255,0.08)" strokeWidth="1" /> })}
       <polygon points={area} fill="rgba(139, 140, 255,0.16)" stroke="#8b8cff" strokeWidth="1.6" strokeLinejoin="round" />

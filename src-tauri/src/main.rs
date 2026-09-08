@@ -93,11 +93,13 @@ fn open_external(url: String) {
     let _ = Command::new("open").arg(&url).spawn();
     #[cfg(target_os = "windows")]
     {
-        // ★#8修:explorer.exe 打开带查询参数的 http URL 不可靠(支付宝支付页被当文档/路径打开)→
-        //   改用 cmd start(Windows 打开 URL 的标准方式)。start 第一个引号参数是窗口标题、必须留空 "",
-        //   否则带 & 或空格的 URL 会被 start 误当标题解析。CREATE_NO_WINDOW 不弹黑框。
+        // ★#8修(v2):explorer.exe 会把URL当文档打开;cmd start 又会把 URL 里的 & 当命令分隔符截断→
+        //   支付宝只收到 & 前半段、报 "missing-method 缺少方法名参数"(实测)。改用
+        //   rundll32 url.dll,FileProtocolHandler —— Windows 打开 URL 的系统 API,原样传递任意含 & 的完整URL。
         use std::os::windows::process::CommandExt;
-        let _ = Command::new("cmd").args(["/c", "start", "", &url]).creation_flags(0x08000000).spawn();
+        let _ = Command::new("rundll32.exe")
+            .args(["url.dll,FileProtocolHandler", &url])
+            .creation_flags(0x08000000).spawn();
     }
     #[cfg(target_os = "linux")]
     let _ = Command::new("xdg-open").arg(&url).spawn();

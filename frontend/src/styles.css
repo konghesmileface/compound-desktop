@@ -1264,7 +1264,9 @@ input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; appearance: 
 .mr2-arch-card.on .mr2-arch-k { color: #c4b5fd; }
 .mr2-arch-name { font-size: 17px; font-weight: 800; color: #f3f5fa; margin: 3px 0 5px; }
 .mr2-arch-line { font-size: 11.5px; color: var(--text-2); line-height: 1.55; }
-.mr2-radar { display: block; width: 100%; max-width: 372px; margin: 14px auto 4px; overflow: visible; }
+/* ★#9修:width:100% 会让 svg 撑满容器→margin auto 无空间居中,html2canvas 导出 PNG 雷达偏左。
+   改固定宽 340px + margin:auto,webview2 显示和 html2canvas 导出都能真正居中。max-width:100% 防小屏溢出。 */
+.mr2-radar { display: block; width: 340px; max-width: 100%; margin: 14px auto 4px; overflow: visible; }
 .mr2-radar-lbl { fill: #cbd3e0; font-size: 11px; font-weight: 600; }
 .mr2-radar-sc { fill: #8b8cff; font-size: 12px; font-weight: 800; }
 .mr2-dims { margin: 20px 0 6px; display: flex; flex-direction: column; gap: 9px; }
