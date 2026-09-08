@@ -278,36 +278,67 @@ def process_image(con, backend, img_path, vault_dir, render_dpi, force=False, pr
     if not force and already_ingested(con, img_path, fhash):
         print(f"  ⏭  已入库,跳过: {os.path.basename(img_path)}")
         return "skipped"
-    # 用内置 RapidOCR 识别(auto/rapidocr/t430 都回落到本地引擎,保证图片总能识别)
-    try:
-        import numpy as np
-        from PIL import Image
-        # ★HEIC/HEIF(iPhone 默认照片格式):裸 PIL 打不开 → "cannot identify image file"。
-        #   IMG_EXTS 声称支持 .heic,必须注册 pillow-heif 打开器,否则用户导 iPhone 照片必崩。
+    # ★#6:高精版优先走 paddle worker(PP-StructureV3 版面/表格更强)。图片入库跑在后台线程,读运行时
+    #   os.environ[]=设的 PADDLE_OCR_URL 不可靠(反复实测入库线程读不到)→ 改读 sidecar_main 落盘的文件,
+    #   优先全局固定的 /tmp 路径(绕过 gettempdir/os.environ 在入库线程失效)。paddle 没成功再回落 rapidocr。
+    text = ""
+    method = "ocr:rapidocr"
+    _pu = None
+    for _pf in ("/tmp/compound_paddle_url.txt",
+                os.path.join(os.environ.get("BRAIN_DATA", ""), "paddle_url.txt")):
         try:
-            from pillow_heif import register_heif_opener
-            register_heif_opener()
+            if _pf and os.path.exists(_pf):
+                _v = open(_pf).read().strip()
+                if _v:
+                    _pu = _v
+                    break
         except Exception:
             pass
-        ocr = B.RapidOCRBackend()._engine_lazy()
-        im = Image.open(img_path).convert("RGB")
-        res = ocr(np.array(im))
-        # ★新 rapidocr:返回 RapidOCROutput 对象(含 .txts,不可解包);旧包:返回 (result_list, elapse)。
-        #   旧式 `result, _ = ocr(...)` 在新包上崩 "cannot unpack non-iterable RapidOCROutput"。与 backends.py 对齐。
-        if hasattr(res, "txts"):
-            txts = list(res.txts) if res.txts else []
-        elif isinstance(res, tuple) and res and res[0]:
-            txts = [item[1] for item in res[0]]
-        else:
-            txts = []
-        text = "\n".join(txts)
-        method = "ocr:rapidocr" if text.strip() else "ocr:rapidocr(empty)"
-    except Exception as e:
-        text, method = f"<!-- 图片 OCR 失败: {e} -->", "error"
+    print(f"[ingest-ocr] paddle_url={_pu} img={os.path.basename(img_path)}", flush=True)
+    if _pu:
+        try:
+            import subprocess as _sp
+            import json as _j
+            _r = _sp.run(["curl", "-s", "-m", "180", "--noproxy", "*", "-X", "POST",
+                          _pu.rstrip("/") + "/ocr/image", "-F", "file=@" + img_path],
+                         capture_output=True, text=True, timeout=185)
+            _d = _j.loads(_r.stdout)
+            _t = _d.get("markdown") or _d.get("text") or ""
+            if _t.strip():
+                text = _t
+                method = "ocr:paddle"
+        except Exception as _e:
+            print(f"  paddle 失败,回落 rapidocr: {str(_e)[:80]}", flush=True)
+    # 内置 RapidOCR(paddle 未成功时;auto/rapidocr/t430 都回落本地引擎,保证图片总能识别)
+    if not text.strip():
+        try:
+            import numpy as np
+            from PIL import Image
+            # ★HEIC/HEIF(iPhone 默认照片格式):裸 PIL 打不开→必须注册 pillow-heif,否则导 iPhone 照片崩。
+            try:
+                from pillow_heif import register_heif_opener
+                register_heif_opener()
+            except Exception:
+                pass
+            ocr = B.RapidOCRBackend()._engine_lazy()
+            im = Image.open(img_path).convert("RGB")
+            res = ocr(np.array(im))
+            # ★新 rapidocr 返回 RapidOCROutput(.txts,不可解包);旧包返回 (list, elapse)。与 backends.py 对齐。
+            if hasattr(res, "txts"):
+                txts = list(res.txts) if res.txts else []
+            elif isinstance(res, tuple) and res and res[0]:
+                txts = [item[1] for item in res[0]]
+            else:
+                txts = []
+            text = "\n".join(txts)
+            method = "ocr:rapidocr" if text.strip() else "ocr:rapidocr(empty)"
+        except Exception as e:
+            text, method = f"<!-- 图片 OCR 失败: {e} -->", "error"
+    _bk = "paddle" if method == "ocr:paddle" else "rapidocr"
     con.execute("DELETE FROM documents WHERE source_path=?", (img_path,))
     cur = con.execute(
         "INSERT INTO documents(source_path,filename,pages,backend,file_hash,ingested_at) VALUES(?,?,?,?,?,?)",
-        (img_path, os.path.basename(img_path), 1, "rapidocr", fhash, _dt.datetime.now().isoformat(timespec="seconds")))
+        (img_path, os.path.basename(img_path), 1, _bk, fhash, _dt.datetime.now().isoformat(timespec="seconds")))
     doc_id = cur.lastrowid
     con.execute("INSERT INTO pages(doc_id,page_no,method,text) VALUES(?,?,?,?)", (doc_id, 1, method, text))
     os.makedirs(vault_dir, exist_ok=True)

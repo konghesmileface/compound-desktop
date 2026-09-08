@@ -102,14 +102,16 @@ def _spawn_paddle_worker():
         # ★#6修(v2):URL 落盘到多个确定路径。实测(mac2 macOS12)入库后台线程既读不到运行时 os.environ[]=
         #   设的值,gettempdir 兜底也失效→高精版图片仍走 rapidocr、paddle 白装。改写 BRAIN_DATA(启动环境
         #   变量、所有线程稳定继承、跨进程可靠)为主 + gettempdir 兜底;media_ingest 按同顺序读。
-        for _d in (os.environ.get("BRAIN_DATA"), _tf.gettempdir()):
+        for _d, _fn in ((os.environ.get("BRAIN_DATA"), "paddle_url.txt"),
+                        (_tf.gettempdir(), "paddle_url.txt"),
+                        ("/tmp", "compound_paddle_url.txt")):   # ★/tmp 全局固定,入库后台线程读最稳(ingest.py 优先读它)
             if _d:
                 try:
-                    with open(os.path.join(_d, "paddle_url.txt"), "w") as _uf:
+                    with open(os.path.join(_d, _fn), "w") as _uf:
                         _uf.write(_url)
                 except Exception:
                     pass
-        print(f"[sidecar] 高精 paddle worker 已拉起 :{port} (URL已落盘 BRAIN_DATA/gettempdir)", flush=True)
+        print(f"[sidecar] 高精 paddle worker 已拉起 :{port} (URL已落盘 /tmp+BRAIN_DATA+gettempdir)", flush=True)
     except Exception as e:
         print(f"[sidecar] paddle worker 启动失败: {e}", flush=True)
 
