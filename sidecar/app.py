@@ -2702,7 +2702,7 @@ def _bust_account_cache(authorization):
         pass
 
 
-PAYWALL_ENFORCE = os.environ.get("PAYWALL_ENFORCE", "0") == "1"   # ★默认关:后端就位但不锁人;前端付费墙上线后翻成1才真拦
+PAYWALL_ENFORCE = os.environ.get("PAYWALL_ENFORCE", "1") == "1"   # ★默认开:注册10天试用到期未付费→402硬拦(2026-09-08 上线正式收费)
 
 
 def _me(authorization):

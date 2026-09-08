@@ -81,7 +81,7 @@ function SubscribeFlow({ plans, onPaid, compact, alipayOn = true, wechatOn = fal
     catch { toast('查询失败,请稍后再试', 'err') }
   }
 
-  const pl = (plans && plans.length) ? plans : [{ id: 'year', amount: 199, subject: '年' }, { id: 'month', amount: 29, subject: '月' }]
+  const pl = (plans && plans.length) ? plans : [{ id: 'year', amount: 199, subject: '年' }]
   const bothPay = alipayOn && wechatOn
   const isWx = order && order.method === 'wechat'
   if (stage === 'paying') {
