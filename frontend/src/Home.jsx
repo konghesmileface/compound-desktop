@@ -76,14 +76,6 @@ function cardMeta(c) {
   return []
 }
 
-function renderAnswer(text, sources, onOpen) {
-  return String(text).split(/(【来源\d+】)/g).map((p, i) => {
-    const m = p.match(/【来源(\d+)】/)
-    if (m) { const n = +m[1], s = sources && sources[n - 1]; return <sup key={i} className="cite" onClick={() => s && onOpen(s.doc_id)}>{n}</sup> }
-    return <span key={i}>{p}</span>
-  })
-}
-
 const PPT_THEMES = [['deep', '深空'], ['clean', '简约'], ['warm', '暖阳'], ['forest', '松林']]
 
 function GenBar({ topic }) {
@@ -332,7 +324,7 @@ export default function Home({ onOpen, onUnread }) {
             )}
             {open.chat.map((m, i) => (<div key={i} className={'msg ' + m.role}>
               {m.role === 'assistant' && <div className="msg-tag">{m.proactive ? '第二大脑 · 主动发现' : '第二大脑'}</div>}
-              <div className={'msg-body' + (m.proactive ? ' msg-proactive' : '')}>{m.role === 'assistant' ? renderAnswer(m.content, m.sources, onOpen) : m.content}</div>
+              <div className={'msg-body' + (m.proactive ? ' msg-proactive' : '')}>{m.role === 'assistant' ? renderRich(m.content, m.sources, onOpen) : m.content}</div>
             </div>))}
             {cloading && <div className="msg assistant"><div className="msg-tag">第二大脑</div><div className="msg-body"><span className="spinner" style={{ width: 16, height: 16, display: 'inline-block' }} /> 正在通读你的知识库,通常几秒…</div></div>}
             <div ref={endRef} />
