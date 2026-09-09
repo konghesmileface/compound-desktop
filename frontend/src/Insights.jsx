@@ -30,10 +30,16 @@ export default function Insights({ onOpen, onAsk }) {
   const [checkup, setCheckup] = useState(null)
 
   useEffect(() => {
-    if (tab === 'portrait' && portrait === null) api.portrait().then(setPortrait).catch(() => setPortrait({ by_type: {}, narrative: '' }))
-    if (tab === 'balance' && balance === null) api.balance().then(setBalance).catch(() => setBalance({}))
-    if (tab === 'panorama' && panorama === null) api.panorama().then(setPanorama).catch(() => setPanorama({ topics: [] }))
-    if (tab === 'checkup' && checkup === null) api.checkup().then(setCheckup).catch(() => setCheckup({ they_wait: [], i_went_cold: [] }))
+    // ★空(含后台分析未跑完时拉到的空)则重进 tab 自动重拉,不必重启 app。
+    //   (mac2/Windows 实测:分析跑完前进过洞察→拉到空缓存进 React state→原来 ===null 守卫致永不刷新)
+    const emptyPor = (p) => !p || (!p.narrative && !((p.groups || []).length) && !Object.values(p.by_type || {}).some((a) => (a || []).length))
+    const emptyBal = (b) => !b || !Object.keys(b).length
+    const emptyPan = (p) => !p || !((p.topics || []).length)
+    const emptyChk = (c) => !c || !Object.values(c).some((v) => Array.isArray(v) && v.length)
+    if (tab === 'portrait' && emptyPor(portrait)) api.portrait().then(setPortrait).catch(() => setPortrait({ by_type: {}, narrative: '' }))
+    if (tab === 'balance' && emptyBal(balance)) api.balance().then(setBalance).catch(() => setBalance({}))
+    if (tab === 'panorama' && emptyPan(panorama)) api.panorama().then(setPanorama).catch(() => setPanorama({ topics: [] }))
+    if (tab === 'checkup' && emptyChk(checkup)) api.checkup().then(setCheckup).catch(() => setCheckup({ they_wait: [], i_went_cold: [] }))
   }, [tab])
 
   const porInflight = useRef(false)
