@@ -224,10 +224,14 @@ def _start_bg_analyzer():
                                     (owner, _AB)).fetchall()
                                 for (did,) in pend2:
                                     text = "\n".join(p[0] for p in con.execute("SELECT text FROM pages WHERE doc_id=? ORDER BY page_no", (did,)).fetchall())[:6000]
-                                    try: _EN.extract_doc_entities(con, did, owner, text)
-                                    except Exception as _e: print(f"[bg-analyze] entities {did}: {_e}")
-                                    con.execute("INSERT OR IGNORE INTO analysis_processed(owner,layer,doc_id) VALUES(?,?,?)", (owner, "entities", did))
-                                    con.commit(); worked = True
+                                    try:
+                                        _EN.extract_doc_entities(con, did, owner, text)
+                                        # ★只有抽取成功才标"已处理";失败(如429)会抛出→不标→下轮重抽。
+                                        #   (原来无论成败都标→429时实体抽空却被标已处理→人脉图永远空,mac2实测77微信文档全空)
+                                        con.execute("INSERT OR IGNORE INTO analysis_processed(owner,layer,doc_id) VALUES(?,?,?)", (owner, "entities", did))
+                                        con.commit(); worked = True
+                                    except Exception as _e:
+                                        print(f"[bg-analyze] entities {did}: {_e}")
                                 # ★人脉卡预热(对齐 106 cardwarm.py:106 靠该脚本自动预热了 504 张卡,客户端单机无脚本→
                                 #   必须 bg 自驱,否则人脉页永远空。/api/relationships 默认 generate=False 只读缓存、
                                 #   "缺的交给后台 warm"——这里就是那个 warm)。每轮 ≤2 张,LLM 节流护机器。

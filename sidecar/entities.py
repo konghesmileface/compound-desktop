@@ -52,13 +52,12 @@ def extract_doc_entities(con, doc_id, owner, text):
             '只输出JSON:{"entities":[{"name":"武汉交通银行","type":"公司"},{"name":"同业存单","type":"产品"}]}')
     # ★绕开 llm.py(它有 max(mt,2000) 地板 + 空返回翻倍到8000,而 flash 会硬生成到 max_tokens 不停,
     #   导致 finish=length、时间正比 max_tokens、一篇几十秒)。这里直连 API、max_tokens=600、单次、容错解析。
-    import urllib.request
+    import urllib.request, urllib.error
     ents = []
-    try:
-        prov, base, dmodel, key = LLM.resolved()
-        model = LLM.fast_model() or dmodel
-        # ★用户选最高质量:开 thinking(规范全称+最全,建人脉图最准)。max_tokens 给足 6000,
-        #   否则思考吃空 content(实测 finish=length、content空)。约47s/篇。
+    prov, base, dmodel, key = LLM.resolved()
+    # ★这里直连 API(绕开 llm.py 的 max_tokens 地板/空返回翻倍,flash 慢的坑),所以也**不享受 llm.chat 的 429 回落**——
+    #   必须自己带回落:快模型撞 429/限流→改用质量模型重试(火山 mini 常 429,不回落则实体抽取静默返0→人脉图永远空)。
+    def _call(model):
         body = json.dumps({"model": model,
                            "messages": [{"role": "system", "content": sysp}, {"role": "user", "content": sample}],
                            "temperature": 0.1, "max_tokens": 6000}).encode("utf-8")
@@ -67,19 +66,30 @@ def extract_doc_entities(con, doc_id, owner, text):
                                      method="POST")
         op = urllib.request.build_opener(urllib.request.ProxyHandler({}))
         with op.open(req, timeout=150) as r:   # 推理慢,给足超时
-            out = ((json.load(r).get("choices") or [{}])[0].get("message", {}) or {}).get("content") or ""
-        # 容错解析:直接正则抽 name/type 对(截断也能提取,不依赖完整JSON)
-        for mm in re.finditer(r'"name"\s*:\s*"([^"]{1,40})"\s*,\s*"type"\s*:\s*"([^"]{0,12})"', out):
-            ents.append({"name": mm.group(1), "type": mm.group(2)})
-        if not ents:  # 兜底:整段JSON
-            m = re.search(r"\{.*\}", out, re.S)
-            if m:
-                try:
-                    ents = json.loads(m.group(0)).get("entities") or []
-                except Exception:
-                    ents = []
-    except Exception:
-        ents = []
+            return ((json.load(r).get("choices") or [{}])[0].get("message", {}) or {}).get("content") or ""
+    _fast = LLM.fast_model() or dmodel
+    try:
+        try:
+            out = _call(_fast)
+        except urllib.error.HTTPError as he:
+            # 快模型 429/限流 → 回落质量模型;其它 HTTP 错直接抛(让上层不标"已处理"→重试)
+            if he.code == 429 and _fast != dmodel:
+                out = _call(dmodel)
+            else:
+                raise
+    except Exception as e:
+        # ★LLM/网络失败:抛出,绝不返0(否则 bg-analyze 会把这篇标"已处理"→永不重抽→人脉图永远空,mac2实测)
+        raise RuntimeError("实体抽取 LLM 失败: %s" % e)
+    # 容错解析:直接正则抽 name/type 对(截断也能提取,不依赖完整JSON)
+    for mm in re.finditer(r'"name"\s*:\s*"([^"]{1,40})"\s*,\s*"type"\s*:\s*"([^"]{0,12})"', out):
+        ents.append({"name": mm.group(1), "type": mm.group(2)})
+    if not ents:  # 兜底:整段JSON
+        m = re.search(r"\{.*\}", out, re.S)
+        if m:
+            try:
+                ents = json.loads(m.group(0)).get("entities") or []
+            except Exception:
+                ents = []
     con.execute("DELETE FROM kb_entities WHERE doc_id=?", (doc_id,))
     seen = {}
     for e in ents:
