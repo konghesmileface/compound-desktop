@@ -147,6 +147,8 @@ export function PaywallModal({ account, onClose, onPaid }) {
   const [closing, setClosing] = useState(false)
   useEffect(() => { api.plans().then((r) => { setPlans(r.plans || []); setPay({ alipay: !!r.alipay_enabled, wechat: !!r.wechat_enabled }) }).catch(() => setPlans([])) }, [])
   const expired = account && account.status === 'expired'
+  // 曾付费(有tier_until)的到期=会员到期;从没付过费的=试用到期。文案要分开,别把老会员当试用户
+  const wasPaid = expired && !!account.tier_until
   // 到期=硬墙(不可关,必须订阅);试用主动点开的=可关,带退出动画
   const dismissable = !expired && !!onClose
   const doClose = () => { if (!dismissable || closing) return; setClosing(true); setTimeout(() => onClose && onClose(), 230) }
@@ -155,7 +157,7 @@ export function PaywallModal({ account, onClose, onPaid }) {
       <div className="pw-modal glass">
         {dismissable && <button className="nd-x" onClick={doClose} aria-label="关闭"><IconClose /></button>}
         <div className="pw-kicker">第二大脑 · 会员</div>
-        <h1 className="pw-title">{expired ? '试用已结束,继续解锁你的第二大脑' : '解锁第二大脑的全部能力'}</h1>
+        <h1 className="pw-title">{expired ? (wasPaid ? '会员已到期,续费继续你的第二大脑' : '试用已结束,继续解锁你的第二大脑') : '解锁第二大脑的全部能力'}</h1>
         <p className="pw-lead">你已经把资料喂给了它 —— 别停在这里。订阅后,它会持续替你思考、发现、经营,并每月为你谱一部专属短片。</p>
         <div className="pw-perks">
           {PERKS.map(([t, d], i) => (
@@ -200,15 +202,17 @@ export function MembershipSection() {
   useEffect(() => { load() }, [load])
 
   const status = acc ? acc.status : 'trial'
+  const wasPaid = !!(acc && acc.tier_until)
   const HERO = {
     paid: { badge: '会员', title: '会员有效', icon: (<svg viewBox="0 0 24 24" fill="currentColor"><path d="M3 7.5l4.2 3.4L12 4l4.8 6.9L21 7.5 19.4 18H4.6L3 7.5z" /></svg>) },
     trial: { badge: '试用', title: '免费试用中', icon: (<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="9" /><path d="M12 7v5l3 2" strokeLinecap="round" /></svg>) },
-    expired: { badge: '已过期', title: '试用已结束', icon: (<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="4" y="10" width="16" height="10" rx="2" /><path d="M8 10V7a4 4 0 0 1 8 0v3" strokeLinecap="round" /></svg>) },
+    expired: { badge: '已过期', title: wasPaid ? '会员已到期' : '试用已结束', icon: (<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="4" y="10" width="16" height="10" rx="2" /><path d="M8 10V7a4 4 0 0 1 8 0v3" strokeLinecap="round" /></svg>) },
   }
   const heroSub = () => {
     if (!acc) return '加载中…'
     if (acc.status === 'paid') return '到期 ' + fmtDate(acc.tier_until) + ' · 剩 ' + (acc.days_left || 0) + ' 天'
     if (acc.status === 'trial') return '还剩 ' + (acc.days_left || 0) + ' 天 · 试用到 ' + fmtDate(acc.trial_until)
+    if (wasPaid) return '会员已于 ' + fmtDate(acc.tier_until) + ' 到期 · 续费后继续使用'
     return '订阅后继续解锁全部能力,并每月获得一部专属短片'
   }
   const del = async (oid) => {
