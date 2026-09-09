@@ -927,7 +927,16 @@ def daily_news(refresh: int = 0, authorization: str = Header(None)):
 # ===== 通用计算结果缓存(DB级,重启不丢):签名=库内容,变了才重算 =====
 def _docs_sig(con, owner):
     r = con.execute("SELECT COUNT(*), COALESCE(SUM(pages),0) FROM documents WHERE owner=?", (owner,)).fetchone()
-    return "%s:%s" % (r[0], r[1])
+    # ★把实体/卡片/情报数纳入签名:它们由后台增量生成(文档数不变),依赖它们的缓存
+    #   (人脉关系网 rel_graph / relationships / 联系人画像)必须随之失效重算,
+    #   否则实体抽出前算的空图缓存永不更新→用户实测 mac2/Windows 洞察人脉关系网一直空。
+    try:
+        e = con.execute("SELECT COUNT(*) FROM kb_entities WHERE owner=?", (owner,)).fetchone()[0]
+        rc = con.execute("SELECT COUNT(*) FROM relationship_cards WHERE username=?", (owner,)).fetchone()[0]
+        ci = con.execute("SELECT COUNT(*) FROM chat_intel WHERE username=?", (owner,)).fetchone()[0]
+    except Exception:
+        e = rc = ci = 0
+    return "%s:%s:%s:%s:%s" % (r[0], r[1], e, rc, ci)
 
 
 def _db_cached(con, owner, name, builder):
