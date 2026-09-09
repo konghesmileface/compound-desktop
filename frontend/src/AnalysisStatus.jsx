@@ -104,13 +104,14 @@ export default function AnalysisStatus() {
               <div className="anz-sub-h">深挖分析 · {st.overall_pct}%</div>
               <div className="anz-layers">
                 {layers.map((l, i) => (
-                  <div key={i} className={'anz-layer' + (l.pct >= 100 ? ' done' : l.needs_key ? ' needkey' : running && running.key === l.key ? ' active' : '')}>
+                  <div key={i} className={'anz-layer' + (l.pct >= 100 ? ' done' : l.needs_key ? ' needkey' : (l.loading || (running && running.key === l.key)) ? ' active' : '')}>
                     <div className="anz-l-top">
                       <span className="anz-l-name">{l.label}{l.pct >= 100 && <span className="anz-l-tick">✓</span>}</span>
-                      <span className="anz-l-n">{l.needs_key ? '需配 AI key' : `${l.done}/${l.total}`}</span>
+                      <span className="anz-l-n">{l.needs_key ? '需配 AI key' : l.loading ? '模型加载中…' : `${l.done}/${l.total}`}</span>
                     </div>
-                    <div className="anz-l-bar"><i style={{ width: l.pct + '%' }} /></div>
+                    <div className="anz-l-bar"><i className={l.loading ? 'loading' : ''} style={{ width: l.pct + '%' }} /></div>
                     {l.needs_key ? <div className="anz-l-hint" style={{ color: '#fbbf24' }}>这一层要用 AI 分析 —— 去「设置」填一个 AI key 就会自动开始跑</div>
+                      : l.loading ? <div className="anz-l-hint" style={{ color: '#7cc4ff' }}>正在加载语义模型(首次较慢：要把 2.3G 模型读进内存,8G 机器约几分钟)—— 加载完会自动开始嵌入,不是卡住了</div>
                       : (running && running.key === l.key && <div className="anz-l-hint">{l.hint}</div>)}
                   </div>
                 ))}

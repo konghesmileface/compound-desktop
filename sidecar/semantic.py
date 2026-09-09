@@ -48,18 +48,33 @@ CREATE TABLE IF NOT EXISTS page_embeddings (
 """
 
 
+_model_loading = False
+
+def model_ready() -> bool:
+    """嵌入模型是否已加载进内存(bge-m3 2.3G,8G机首次加载数分钟)。
+    前端据此在'语义问答'层显示'模型加载中'而非干巴巴 0/61 看着像卡死。"""
+    return _model is not None
+
+def model_loading() -> bool:
+    """当前是否正在加载嵌入模型。"""
+    return _model_loading
+
 def get_model():
-    global _model
+    global _model, _model_loading
     if _model is None:
-        from sentence_transformers import SentenceTransformer
-        m = EMBED_MODEL
-        # EMBED_MODEL 若是本地路径(首启下载点)但模型还没下好/缺失 → 兜底回落 HF 仓库名,
-        # 让 sentence-transformers 自己下(不让语义功能彻底死)。
-        if os.path.sep in m and not (
-                os.path.isfile(os.path.join(m, "config.json")) or
-                os.path.isfile(os.path.join(m, "modules.json"))):
-            m = "BAAI/bge-m3"
-        _model = SentenceTransformer(m)
+        _model_loading = True
+        try:
+            from sentence_transformers import SentenceTransformer
+            m = EMBED_MODEL
+            # EMBED_MODEL 若是本地路径(首启下载点)但模型还没下好/缺失 → 兜底回落 HF 仓库名,
+            # 让 sentence-transformers 自己下(不让语义功能彻底死)。
+            if os.path.sep in m and not (
+                    os.path.isfile(os.path.join(m, "config.json")) or
+                    os.path.isfile(os.path.join(m, "modules.json"))):
+                m = "BAAI/bge-m3"
+            _model = SentenceTransformer(m)
+        finally:
+            _model_loading = False
     return _model
 
 

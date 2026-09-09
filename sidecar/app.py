@@ -1369,6 +1369,15 @@ def analysis_status(authorization: str = Header(None)):
         for l in layers:
             if l["key"] in ("intel", "entities") and not _has_key and l["pct"] < 100:
                 l["needs_key"] = True
+        # ★语义问答层:模型没就绪+还有待嵌页 → 标 loading,前端显示"语义模型加载中(首次较慢)"
+        #   而非干巴巴 0/61 看着像卡死(bge-m3 2.3G 在8G机首次加载进内存要数分钟,尤其Windows)。
+        try:
+            if not S.model_ready():
+                for l in layers:
+                    if l["key"] == "embed" and l["done"] < l["total"]:
+                        l["loading"] = True
+        except Exception:
+            pass
         overall = int(sum(l["pct"] for l in layers) / len(layers))
         # ★后台建卡/情报调 LLM 若失败(尤其余额不足),透出最近错误,前端显示"AI欠费"而非无限转圈
         _llm = getattr(LLM, "LAST_LLM", {"ok": True, "kind": "", "msg": ""})
