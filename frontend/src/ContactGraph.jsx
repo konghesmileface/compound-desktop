@@ -26,8 +26,10 @@ export default function ContactGraph({ onOpen }) {
   }, [])
 
   useEffect(() => {
-    if (_graphCache) return   // 已有缓存,本次挂载不再重拉
-    api.relGraph().then((g) => { _graphCache = g; setGraph(g) }).catch(() => setGraph({ nodes: [], edges: [] }))
+    // ★只复用"有内容"的缓存;空缓存(首次实体还没抽出/被429抽空时拉过)必须重拉,
+    //   否则后台把实体补齐后前端永远显示旧空图(mac2实测:实体补到36节点,前端仍空)。
+    if (_graphCache && (_graphCache.nodes || []).length) return
+    api.relGraph().then((g) => { if ((g.nodes || []).length) _graphCache = g; setGraph(g) }).catch(() => setGraph({ nodes: [], edges: [] }))
   }, [])
   // 力导调参:加大斥力 + 拉长连线,把挤成一团的节点摊开
   useEffect(() => {
