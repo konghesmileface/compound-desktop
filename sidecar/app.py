@@ -187,10 +187,13 @@ def _start_bg_analyzer():
                                 con.commit(); worked = True
                         except Exception as _e:
                             print(f"[bg-analyze] msg_count回填: {_e}")
-                        cfg = LLM.load_cfg()
-                        if cfg.get("llm_key"):   # intel/entities 都要 LLM,没 key 不跑
+                        if True:   # ★AI key 判断改到 owner 循环内(每账号各自的 key,见下 set_owner),这里恒进
                             con.execute("CREATE TABLE IF NOT EXISTS analysis_processed(owner TEXT, layer TEXT, doc_id INTEGER, PRIMARY KEY(owner,layer,doc_id))")
                             for (owner,) in con.execute("SELECT DISTINCT owner FROM documents WHERE filename LIKE '微信_与%'").fetchall():
+                                # ★该账号独立设置:设当前账号上下文,读它自己的 AI key;没配 key 就跳过(不用别人的 key)
+                                LLM.set_owner(owner)
+                                if not LLM.load_cfg().get("llm_key"):
+                                    continue
                                 # doc_kind:群/对话判定 + 真实最后联系日期(纯正则无LLM,便宜;喂给人脉卡显示)
                                 try:
                                     if _DK.ensure_doc_kind(con, owner):
@@ -2735,7 +2738,9 @@ def _me(authorization):
             raise HTTPException(402, {"error": "membership_required",
                                      "status": acc.get("status"), "days_left": acc.get("days_left"),
                                      "trial_until": acc.get("trial_until"), "tier_until": acc.get("tier_until")})
+        LLM.set_owner(acc.get("ident"))   # ★设当前账号上下文→load_cfg/AI key 按该账号读(每账号独立设置)
         return acc.get("ident")
+    LLM.set_owner(acc if isinstance(acc, str) else "")
     return acc   # 兼容极旧缓存(纯 ident 字符串)
 
 

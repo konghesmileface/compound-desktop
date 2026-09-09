@@ -32,28 +32,58 @@ PROVIDER_DEFAULTS = {
 }
 
 
+# ★★每账号独立设置(含 AI key):按"当前账号"读写 settings_<owner>.json,不同账号互不干扰。
+#   当前账号=线程本地上下文,由 app._me()(每个鉴权接口都调)/后台分析循环 设置。
+#   load_cfg/resolved/fast_model 都走这里→签名不变、自动变成每账号。
+import threading as _thr
+_ctx = _thr.local()
+
+def set_owner(owner):
+    """设置当前线程的账号上下文(app._me 里调,后台分析每个 owner 前调)。"""
+    _ctx.owner = str(owner or "")
+
+def get_owner():
+    return getattr(_ctx, "owner", "") or ""
+
+def _owner_path(owner):
+    import re as _re
+    safe = _re.sub(r"[^0-9A-Za-z_.\-]", "_", str(owner))[:64] or "_"
+    return os.path.join(BRAIN, "settings_%s.json" % safe)
+
+def _write_cfg(path, cfg):
+    with open(path, "w", encoding="utf-8") as f:
+        json.dump(cfg, f, ensure_ascii=False, indent=2)
+
+
 def load_cfg() -> dict:
+    owner = get_owner()
+    if owner:
+        p = _owner_path(owner)
+        try:
+            with open(p, "r", encoding="utf-8") as f:
+                return json.load(f)
+        except Exception:
+            pass
+        # ★新账号(无自己的设置文件)=空,绝不继承别人的 key。
+        #   不做全局→账号自动迁移(否则"新账号先登录"会把机主 key 继承过去,正是要避免的)。
+        #   现有机主账号更新后需重新填一次 key(一次性;换来彻底隔离)。
+        return {}
+    # 无 owner 上下文(极少见:未鉴权/后台未设 owner)→ 读全局兼容
     try:
         with open(SETTINGS_PATH, "r", encoding="utf-8") as f:
             return json.load(f)
     except Exception:
         pass
-    # 兼容:老版本把 settings.json 写进了包内,迁移读一次(读到就顺手迁到数据目录)
     try:
         with open(_SETTINGS_PATH_OLD, "r", encoding="utf-8") as f:
-            cfg = json.load(f)
-        try:
-            save_cfg(cfg)   # 迁到 BRAIN_DATA
-        except Exception:
-            pass
-        return cfg
+            return json.load(f)
     except Exception:
         return {}
 
 
 def save_cfg(cfg: dict):
-    with open(SETTINGS_PATH, "w", encoding="utf-8") as f:
-        json.dump(cfg, f, ensure_ascii=False, indent=2)
+    owner = get_owner()
+    _write_cfg(_owner_path(owner) if owner else SETTINGS_PATH, cfg)
 
 
 def resolved():
