@@ -163,6 +163,16 @@ def chat(messages, temperature: float = 0.4, max_tokens: int = 2000, model: str 
         except Exception as e:
             last_err = e
         time.sleep(0.6 * (attempt + 1))
+    # ★快模型被限流(429 / rate limit / too many requests)→自动回落质量模型重试一次。
+    #   火山 doubao mini 快模型常 429,而 build_intel(承诺雷达)/建卡等后台任务都用快模型,
+    #   不回落就静默失败→承诺雷达永远填不满(实测 mac2 卡在 24/39)。质量模型有余量、能跑通。
+    #   仅当本次用的不是默认质量模型时回落,避免死循环(回落调用 model==dmodel 不会再回落)。
+    _le = str(last_err).lower()
+    if model != dmodel and ("429" in _le or "too many request" in _le or "rate limit" in _le or "rate_limit" in _le):
+        try:
+            return chat(messages, temperature=temperature, max_tokens=max_tokens, model=dmodel, cfg_override=cfg_override)
+        except Exception:
+            pass
     _friendly = _friendly_err(last_err)
     _note_llm(False, _friendly)   # ★记下最近失败原因,供 /api/analysis_status 透出到前端
     raise RuntimeError(_friendly)
@@ -185,6 +195,10 @@ def _friendly_err(err) -> str:
             or "exceeded your current" in low or "欠费" in s or "余额不足" in s or "arrears" in low):
         return ("你的 AI 账户余额不足 / 额度已用尽。key 没问题、不用改 —— 请到你的 AI 服务商平台"
                 "(如 DeepSeek / 通义 / 你填的那家)充值或提升额度后,再继续使用。")
+    if "429" in s or "too many request" in low or "rate limit" in low or "rate_limit" in low or "requests per" in low or "tpm" in low or "rpm" in low:
+        return ("AI 模型额度 / 并发已用尽(服务商返回 429)。这不是慢,是该模型暂时拒绝了请求 —— "
+                "多为这个模型的免费额度 / 并发上限用完(不一定是账户欠费,换个模型往往还能用)。"
+                "已自动回落到你的质量模型继续;若仍失败,请到你的 AI 服务商平台给该模型充值 / 提额,或在「设置」换一个模型。")
     if "401" in s or "403" in s or "unauthorized" in low or ("invalid" in low and "key" in low):
         return "AI key 无效或没有权限。请到「设置」检查 key 是否填对、账户是否还有余额。"
     if "空返回" in s or "empty" in low or "max_tokens" in low:
