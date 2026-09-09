@@ -35,17 +35,17 @@ const myUser = () => { try { const a = JSON.parse(localStorage.getItem('auth') |
 // model=质量模型默认(交付物/深度),fast=快模型默认(批量抽取/交互,省成本+秒回)。
 // alts=下拉候选(只放联网核实过的稳定名,不猜);输入框=datalist 下拉+可手输,必填。
 const PROVIDERS = [
-  { key: 'deepseek', name: 'DeepSeek', hint: '便宜、中文好。platform.deepseek.com', model: 'deepseek-v4-pro', fast: 'deepseek-v4-flash' },
-  { key: 'qwen', name: '通义千问', hint: '阿里。bailian.console.aliyun.com', model: 'qwen-max', fast: 'qwen-flash', alts: ['qwen-plus'] },
-  { key: 'doubao', name: '豆包', hint: '字节·火山方舟。★模型名要填准确ID(带版本号,如 doubao-seed-2-0-mini-260428),去 console.volcengine.com/ark 复制;旧的 doubao-pro-32k 已下线', model: 'doubao-seed-2-1-pro-260628', fast: 'doubao-seed-2-0-mini-260428', alts: ['doubao-seed-2-1-turbo-260628', 'doubao-seed-2-0-lite-260428', 'glm-5-2-260617'] },
-  { key: 'kimi', name: 'Kimi', hint: '月之暗面。platform.moonshot.cn', model: 'kimi-k2.5', fast: 'kimi-k2.5' },
-  { key: 'zhipu', name: '智谱 GLM', hint: 'open.bigmodel.cn。glm-4.5-flash 便宜', model: 'glm-4.6', fast: 'glm-4.5-flash' },
-  { key: 'openai', name: 'OpenAI', hint: 'platform.openai.com', model: 'gpt-5', fast: 'gpt-5-mini' },
-  { key: 'claude', name: 'Claude', hint: 'Anthropic。opus-4-8 最强 · sonnet-4-6 均衡 · haiku-4-5 最快', model: 'claude-sonnet-4-6', fast: 'claude-haiku-4-5', alts: ['claude-opus-4-8', 'claude-fable-5', 'claude-haiku-4-5'] },
-  { key: 'gemini', name: 'Gemini', hint: '谷歌。aistudio.google.com', model: 'gemini-2.5-pro', fast: 'gemini-2.5-flash' },
-  { key: 'siliconflow', name: '硅基流动', hint: '一个 key 用众多开源模型。siliconflow.cn', model: 'deepseek-ai/DeepSeek-V3.2', fast: 'Qwen/Qwen3-8B' },
-  { key: 'hunyuan', name: '腾讯混元', hint: '腾讯云。cloud.tencent.com/product/hunyuan', model: 'hunyuan-t1-latest', fast: 'hunyuan-lite' },
-  { key: 'ollama', name: '本地 Ollama', hint: '全免费离线,需本机装 Ollama', model: 'llama3', fast: 'llama3' },
+  { key: 'deepseek', name: 'DeepSeek', hint: '便宜、中文好。platform.deepseek.com', base: 'https://api.deepseek.com', model: 'deepseek-v4-pro', fast: 'deepseek-v4-flash' },
+  { key: 'qwen', name: '通义千问', hint: '阿里。bailian.console.aliyun.com', base: 'https://dashscope.aliyuncs.com/compatible-mode/v1', model: 'qwen-max', fast: 'qwen-flash', alts: ['qwen-plus'] },
+  { key: 'doubao', name: '豆包', hint: '字节·火山方舟。★模型名要填准确ID(带版本号,如 doubao-seed-2-0-mini-260428),去 console.volcengine.com/ark 复制;旧的 doubao-pro-32k 已下线', base: 'https://ark.cn-beijing.volces.com/api/v3', model: 'doubao-seed-2-1-pro-260628', fast: 'doubao-seed-2-0-mini-260428', alts: ['doubao-seed-2-1-turbo-260628', 'doubao-seed-2-0-lite-260428', 'glm-5-2-260617'] },
+  { key: 'kimi', name: 'Kimi', hint: '月之暗面。platform.moonshot.cn', base: 'https://api.moonshot.cn/v1', model: 'kimi-k2.5', fast: 'kimi-k2.5' },
+  { key: 'zhipu', name: '智谱 GLM', hint: 'open.bigmodel.cn。glm-4.5-flash 便宜', base: 'https://open.bigmodel.cn/api/paas/v4', model: 'glm-4.6', fast: 'glm-4.5-flash' },
+  { key: 'openai', name: 'OpenAI', hint: 'platform.openai.com', base: 'https://api.openai.com/v1', model: 'gpt-5', fast: 'gpt-5-mini' },
+  { key: 'claude', name: 'Claude', hint: 'Anthropic。opus-4-8 最强 · sonnet-4-6 均衡 · haiku-4-5 最快', base: 'https://api.anthropic.com/v1', model: 'claude-sonnet-4-6', fast: 'claude-haiku-4-5', alts: ['claude-opus-4-8', 'claude-fable-5', 'claude-haiku-4-5'] },
+  { key: 'gemini', name: 'Gemini', hint: '谷歌。aistudio.google.com', base: 'https://generativelanguage.googleapis.com/v1beta/openai', model: 'gemini-2.5-pro', fast: 'gemini-2.5-flash' },
+  { key: 'siliconflow', name: '硅基流动', hint: '一个 key 用众多开源模型。siliconflow.cn', base: 'https://api.siliconflow.cn/v1', model: 'deepseek-ai/DeepSeek-V3.2', fast: 'Qwen/Qwen3-8B' },
+  { key: 'hunyuan', name: '腾讯混元', hint: '腾讯云。cloud.tencent.com/product/hunyuan', base: 'https://api.hunyuan.cloud.tencent.com/v1', model: 'hunyuan-t1-latest', fast: 'hunyuan-lite' },
+  { key: 'ollama', name: '本地 Ollama', hint: '全免费离线,需本机装 Ollama', base: 'http://127.0.0.1:11434/v1', model: 'llama3', fast: 'llama3' },
 ]
 // 该厂商的下拉候选(质量/快默认 + 核实过的备选,去重)
 const provModels = (p) => [...new Set([p.model, p.fast, ...(p.alts || [])].filter(Boolean))]
@@ -133,7 +133,7 @@ export default function Settings({ auth, onLogout, onNick, section = 'all' }) {
       setSaved(s)
       const p = PROVIDERS.find((x) => x.key === (s.llm_provider || 'deepseek')) || PROVIDERS[0]
       // 必填:老配置留空的,带入该厂商推荐默认
-      setCfg((c) => ({ ...c, llm_provider: p.key, llm_model: s.llm_model || p.model, llm_fast_model: s.llm_fast_model || p.fast || p.model, llm_base_url: s.llm_base_url || '' }))
+      setCfg((c) => ({ ...c, llm_provider: p.key, llm_model: s.llm_model || p.model, llm_fast_model: s.llm_fast_model || p.fast || p.model, llm_base_url: s.llm_base_url || p.base || '' }))
     }).catch(() => {})
   }, [])
 
@@ -279,7 +279,7 @@ export default function Settings({ auth, onLogout, onNick, section = 'all' }) {
         <div className="prov-grid">
           {PROVIDERS.map((p) => (
             <div key={p.key} className={'prov-card' + (cfg.llm_provider === p.key ? ' on' : '')}
-                 onClick={() => setCfg((c) => ({ ...c, llm_provider: p.key, llm_model: p.model, llm_fast_model: p.fast || p.model }))}>
+                 onClick={() => setCfg((c) => ({ ...c, llm_provider: p.key, llm_model: p.model, llm_fast_model: p.fast || p.model, llm_base_url: p.base || '' }))}>
               <div className="prov-name">{p.name}</div>
               <div className="prov-hint">{p.hint}</div>
             </div>
