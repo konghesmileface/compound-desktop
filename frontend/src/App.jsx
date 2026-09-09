@@ -75,6 +75,10 @@ export default function App() {
   const [onboard, setOnboard] = useState(() => localStorage.getItem('onboarded') !== '1' || (typeof window !== 'undefined' && window.location.search.includes('onboard')))
   const finishOnboard = () => { localStorage.setItem('onboarded', '1'); setOnboard(false) }
   const saveAuth = (a) => { setAuth(a); if (a) localStorage.setItem('auth', JSON.stringify(a)); else localStorage.removeItem('auth') }
+  // ★切换账号(登录/登出):写完 auth 后整页重载,彻底清掉上个账号残留的前端缓存
+  //   (数据列表/人脉图 _graphCache/画像 等 React state + 模块级缓存)。后端已按 owner 隔离、
+  //   新账号接口返回空,问题只在前端不重置→重载即干净。(nick 更新不走这个,避免丢设置页状态)
+  const switchAuth = (a) => { saveAuth(a); try { window.location.reload() } catch (e) { /* noop */ } }
   // 支付宝扫码回跳:云端 callback 把结果放在 URL hash 里带回
   const [alipayTicket, setAlipayTicket] = useState(null)
   React.useEffect(() => {
@@ -82,7 +86,7 @@ export default function App() {
     if (!h.includes('alipay')) return
     const q = new URLSearchParams(h.slice(1))
     if (q.get('alipay_token')) {
-      saveAuth({ token: q.get('alipay_token'), username: q.get('alipay_ident'), nickname: q.get('alipay_nick') || q.get('alipay_ident') })
+      switchAuth({ token: q.get('alipay_token'), username: q.get('alipay_ident'), nickname: q.get('alipay_nick') || q.get('alipay_ident') })
       toast('支付宝登录成功', 'ok')
     } else if (q.get('alipay_bind')) {
       setAlipayTicket(q.get('alipay_bind'))
@@ -167,7 +171,7 @@ export default function App() {
   }
 
   // 全局登录门:没登录先看登录/注册,登录后才进 app
-  if (!auth) return (<><Landing onAuthed={saveAuth} />{alipayTicket && <AlipayBindModal ticket={alipayTicket} onAuthed={saveAuth} onClose={() => setAlipayTicket(null)} />}{typeof window !== 'undefined' && window.location.search.includes('onboard') && onboard && <Onboard onDone={finishOnboard} onGoto={() => {}} />}<UIHost /><UpdateBanner /></>)
+  if (!auth) return (<><Landing onAuthed={switchAuth} />{alipayTicket && <AlipayBindModal ticket={alipayTicket} onAuthed={switchAuth} onClose={() => setAlipayTicket(null)} />}{typeof window !== 'undefined' && window.location.search.includes('onboard') && onboard && <Onboard onDone={finishOnboard} onGoto={() => {}} />}<UIHost /><UpdateBanner /></>)
 
   return (
     <div className="app">
@@ -195,7 +199,7 @@ export default function App() {
           <button className={'rail-logout' + (tab === 'settings' ? ' active' : '')} title="设置" onClick={() => setTab('settings')}>
             <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="3" /><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" /></svg>
           </button>
-          <button className="rail-logout" title="退出登录" onClick={async () => { if (await confirmDialog('退出当前账号?', '退出')) { saveAuth(null); toast('已退出', 'ok') } }}>
+          <button className="rail-logout" title="退出登录" onClick={async () => { if (await confirmDialog('退出当前账号?', '退出')) { switchAuth(null); toast('已退出', 'ok') } }}>
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" /><path d="M16 17l5-5-5-5" /><path d="M21 12H9" /></svg>
           </button>
         </div>
@@ -216,8 +220,8 @@ export default function App() {
         {tab === 'library' && <Library onOpen={setOpenDoc} reloadKey={reloadKey} />}
         {tab === 'ingest' && <Ingest onDone={bump} />}
         {tab === 'help' && <Help />}
-        {tab === 'account' && <Settings section="account" auth={auth} onLogout={() => { saveAuth(null); toast('已退出', 'ok') }} onNick={(nick) => saveAuth({ ...auth, nickname: nick })} />}
-        {tab === 'settings' && <Settings section="settings" auth={auth} onLogout={() => { saveAuth(null); toast('已退出', 'ok') }} onNick={(nick) => saveAuth({ ...auth, nickname: nick })} />}
+        {tab === 'account' && <Settings section="account" auth={auth} onLogout={() => { switchAuth(null); toast('已退出', 'ok') }} onNick={(nick) => saveAuth({ ...auth, nickname: nick })} />}
+        {tab === 'settings' && <Settings section="settings" auth={auth} onLogout={() => { switchAuth(null); toast('已退出', 'ok') }} onNick={(nick) => saveAuth({ ...auth, nickname: nick })} />}
         </ErrorBoundary>
 
         {nodeDoc != null && (
