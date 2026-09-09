@@ -3172,7 +3172,7 @@ def _tts_gen(text, gender, who="", slow=False, vkey=None):
 
 def _img_key():
     try:
-        return json.load(open(os.path.join(os.environ.get("BRAIN_DATA", "/home/kb/brain"), "settings.json"))).get("image_key")
+        return LLM.load_cfg().get("image_key")   # ★走 load_cfg=按当前账号读(每账号独立设置)
     except Exception:
         return None
 
