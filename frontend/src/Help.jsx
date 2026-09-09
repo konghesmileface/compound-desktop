@@ -1,6 +1,7 @@
 import React, { useState } from 'react'
 import Guide, { SOURCES, SYNC_DL } from './Guide'
 import { openExternal } from './api'
+import { toast } from './ui'
 
 // 「说明」独立页:全平台使用手册 —— 功能总览 + 数据导入图文 + 同步状态 + AI模型/OCR/账号关键设置。
 // 铁律:入口藏了=等于没做 —— 这页常驻左侧导航,不再埋在任何页面底部。
@@ -151,7 +152,22 @@ export default function Help() {
       ))}
 
       <div className="help-contact glass">
-        <b>搞不定?我们帮接。</b>把卡住那一步的截图和你的电脑系统(Windows / Intel Mac / Apple 芯片 Mac)发给我们,远程陪你装到通;数据量大的也可以整体交给我们代接。
+        <b>联系我们 · 搞不定?我们帮接。</b>把卡住那一步的截图和你的电脑系统(Windows / Intel Mac / Apple 芯片 Mac)发到下面的邮箱,远程陪你装到通;数据量大的也可以整体交给我们代接。
+        <div style={{ marginTop: 10, display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+          <span style={{ opacity: 0.65 }}>邮箱</span>
+          <a
+            href="mailto:hekong@spdt.freeqiye.com"
+            style={{ fontWeight: 600 }}
+            onClick={(e) => { e.preventDefault(); openExternal('mailto:hekong@spdt.freeqiye.com') }}
+          >hekong@spdt.freeqiye.com</a>
+          <button
+            type="button" className="btn" style={{ padding: '2px 12px', fontSize: 12 }}
+            onClick={() => {
+              try { navigator.clipboard.writeText('hekong@spdt.freeqiye.com').then(() => toast('邮箱已复制', 'ok')) }
+              catch { toast('复制失败,请手动选中邮箱', 'err') }
+            }}
+          >复制</button>
+        </div>
       </div>
 
       {guideKey && <Guide sourceKey={guideKey} onClose={() => setGuideKey(null)} />}
