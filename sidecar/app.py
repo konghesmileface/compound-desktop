@@ -204,7 +204,7 @@ def _start_bg_analyzer():
                                 #   无限空转烧满 CPU(本会话改消息数门槛时引入的 P0,实测 CPU 300%+ 客户端卡死)。
                                 pend = con.execute(
                                     "SELECT d.id, d.filename FROM documents d WHERE d.owner=? AND d.filename LIKE '微信_与%' "
-                                    "AND COALESCE(d.msg_count,0) >= 15 "   # ★#7修:读持久化列 msg_count,不再每轮子查询 SUM 全扫 pages
+                                    "AND COALESCE(d.msg_count,0) >= 2 "   # ★#7修:读持久化列 msg_count;门槛用户定=2(铺满全部聊天,别过滤掉消息少的联系人)
                                     "AND NOT EXISTS(SELECT 1 FROM chat_intel ci WHERE ci.username=d.owner AND ci.contact=REPLACE(REPLACE(d.filename,'微信_与',''),'.txt','')) LIMIT ?",
                                     (owner, _AB)).fetchall()
                                 for did, fn in pend:
@@ -234,8 +234,8 @@ def _start_bg_analyzer():
                                 con.execute("CREATE TABLE IF NOT EXISTS card_hidden(username TEXT, contact TEXT, PRIMARY KEY(username,contact))")
                                 # ★建卡门槛/指纹改用"消息条数"而非页数(pages 受分页策略波动:重新入库同样内容分页边界变了→
                                 #   会话跨过 pages>=3 门槛→卡忽有忽无,用户实测"人脉卡变少")。消息数=各页 text 换行和,稳定。
-                                #   门槛:消息数>=15(约够聊出内容);重入判断:存的 msgcount != 当前消息数 才重建。
-                                _MIN_MSGS = 15
+                                #   门槛:消息数>=2(用户定,铺满全部聊天,别过滤消息少的);重入判断:存的 msgcount != 当前消息数 才重建。
+                                _MIN_MSGS = 2
                                 # ★#7修:用持久化列 d.msg_count 一条 SQL 筛出待建卡会话。原来每轮 python 遍历
                                 #   全部微信会话、逐个 SUM 算消息数(即使卡早建好也每轮全算)→大库持续烧满 CPU。
                                 #   现在已建卡且 msgcount 未变的会话被 NOT EXISTS 直接排除,不再重算;卡建完→候选空→歇。
@@ -1323,9 +1323,9 @@ def analysis_status(authorization: str = Header(None)):
                              "WHERE d.owner=? AND d.backend='wechat'", (me,)).fetchone()[0] or 0
         emb = con.execute("SELECT COUNT(*) FROM page_embeddings pe JOIN pages p ON p.id=pe.page_id "
                           "JOIN documents d ON d.id=p.doc_id WHERE d.owner=? AND d.backend='wechat'", (me,)).fetchone()[0] or 0
-        # ★分母统一用"消息数>=15的会话数"(与建卡/intel门槛一致,不受分页波动→进度百分比不再跳):
+        # ★分母统一用"消息数>=2的会话数"(与建卡/intel门槛一致,不受分页波动→进度百分比不再跳):
         _mcnt = con.execute("SELECT COUNT(*) FROM documents d WHERE d.owner=? AND d.filename LIKE '微信_与%' "
-                            "AND (SELECT COALESCE(SUM(1 + LENGTH(text) - LENGTH(REPLACE(text, char(10), ''))),0) FROM pages WHERE doc_id=d.id) >= 15", (me,)).fetchone()[0] or 0
+                            "AND (SELECT COALESCE(SUM(1 + LENGTH(text) - LENGTH(REPLACE(text, char(10), ''))),0) FROM pages WHERE doc_id=d.id) >= 2", (me,)).fetchone()[0] or 0
         docs2 = _mcnt
         docs3 = _mcnt
         try:
