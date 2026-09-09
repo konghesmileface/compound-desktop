@@ -73,7 +73,15 @@ _res_cache = {}
 def _data_sig(con, owner):
     r = con.execute("SELECT COUNT(*), COALESCE(SUM(pages),0) FROM documents "
                     "WHERE owner=? AND filename LIKE '微信_与%'", (owner,)).fetchone()
-    return "%s:%s" % (r[0], r[1])
+    # ★纳入实体/卡片/情报数:业务全景/联系人画像等 @_cached 洞察依赖它们,后台增量抽出(文档数不变)时
+    #   必须让缓存失效重算,否则实体抽出前算的空结果永久留在 insights_cache(重启不丢)→业务全景永远空(mac2实测)。
+    try:
+        e = con.execute("SELECT COUNT(*) FROM kb_entities WHERE owner=?", (owner,)).fetchone()[0]
+        rc = con.execute("SELECT COUNT(*) FROM relationship_cards WHERE username=?", (owner,)).fetchone()[0]
+        ci = con.execute("SELECT COUNT(*) FROM chat_intel WHERE username=?", (owner,)).fetchone()[0]
+    except Exception:
+        e = rc = ci = 0
+    return "%s:%s:%s:%s:%s" % (r[0], r[1], e, rc, ci)
 
 
 def _cached(fn):
