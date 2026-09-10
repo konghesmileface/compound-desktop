@@ -2620,9 +2620,10 @@ button.oc-node { background: none; border: none; padding: 0; margin: 0; cursor: 
 .oc-search input::placeholder { color: var(--text-3); }
 .oc-search-x { background: none; border: none; color: var(--text-3); font-size: 16px; cursor: pointer; line-height: 1; padding: 0 2px; }
 .oc-core { z-index: 20; display: flex; align-items: center; }
-.oc-ringwrap-lg { padding: 3px; flex: none; transition: transform 0.25s cubic-bezier(.2,.8,.2,1); }
+/* ★圆圈层级高于卡片:卡片 margin-left:-6px 的重叠藏到圆圈背后(连接效果),不再盖住圆圈右侧 */
+.oc-ringwrap-lg { padding: 3px; flex: none; position: relative; z-index: 2; transition: transform 0.25s cubic-bezier(.2,.8,.2,1); }
 .oc-core:hover .oc-ringwrap-lg { transform: scale(1.08); }
-.oc-card { margin-left: -6px; padding: 6px 12px 6px 16px; border-radius: 0 13px 13px 0;
+.oc-card { position: relative; z-index: 1; margin-left: -6px; padding: 6px 12px 6px 16px; border-radius: 0 13px 13px 0;
   background: linear-gradient(100deg, rgba(18,24,38,0.62), rgba(14,19,30,0.9) 30%);
   border: 1px solid rgba(255,255,255,0.1); border-left: none; white-space: nowrap;
   box-shadow: 0 8px 26px -12px rgba(0,0,0,0.7); backdrop-filter: blur(6px); text-align: left; }

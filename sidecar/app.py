@@ -2916,16 +2916,23 @@ def _fetch_friend_persona(authorization, other):
         return None, "", other
 
 
-_avatar_pushed = set()    # 每进程每用户一次:把本人已设头像同步上云(老用户也生效)
-def _push_my_avatar_once(con, me, authorization):
+_avatar_pushed = set()    # 每进程每用户一次:把本人已设昵称+头像同步上云(老用户改过资料的也生效)
+def _push_my_profile_once(con, me, authorization):
     if not authorization or me in _avatar_pushed:
         return
     _avatar_pushed.add(me)
     try:
         con.execute("CREATE TABLE IF NOT EXISTS avatars (username TEXT PRIMARY KEY, dataurl TEXT)")
         r = con.execute("SELECT dataurl FROM avatars WHERE username=?", (me,)).fetchone()
-        if r and r[0]:
-            _push_avatar_to_cloud(authorization, r[0])
+        av = r[0] if (r and r[0]) else None
+        nick = None
+        try:
+            rn = con.execute("SELECT nickname FROM users2 WHERE phone=?", (me,)).fetchone()
+            nick = rn[0] if (rn and rn[0]) else None
+        except Exception:
+            pass
+        if av is not None or nick:
+            _push_profile_to_cloud(authorization, nickname=nick, avatar=av)
     except Exception:
         pass
 
@@ -3046,7 +3053,7 @@ def people(authorization: str = Header(None)):
         # ★全新客户端:personas 表要带 emb 列(否则下句 SELECT emb 崩 no such column→前端误报"请先登录")
         con.execute("CREATE TABLE IF NOT EXISTS personas (username TEXT PRIMARY KEY, data TEXT, mbti TEXT, emb TEXT)")
         _ensure_my_persona(con, me, authorization)   # 换机/新登录:先从云拉回本人画像,好友契合度才算得出
-        _push_my_avatar_once(con, me, authorization)  # ★把本人已设头像同步上云,好友实时可见
+        _push_my_profile_once(con, me, authorization)  # ★把本人已设昵称+头像同步上云,好友实时可见
         try: con.execute("ALTER TABLE personas ADD COLUMN emb TEXT")  # 老库补列
         except Exception: pass
         myp, _ = _my_persona(con, me)
@@ -4044,17 +4051,28 @@ def reset_password(payload: dict = Body(...)):
 
 
 # ========== 头像(base64 data url,存库) ==========
-def _push_avatar_to_cloud(authorization, dataurl):
-    """把我的头像推到云社交库,好友即可实时看到最新头像(失败静默)。空串=清除。"""
+def _push_profile_to_cloud(authorization, nickname=None, avatar=None):
+    """把我的昵称/头像推到云社交库,好友即可实时看到最新(失败静默)。avatar空串=清除头像。"""
     if not authorization:
+        return
+    body = {}
+    if nickname:
+        body["nickname"] = nickname
+    if avatar is not None:
+        body["avatar"] = avatar
+    if not body:
         return
     def _do():
         try:
-            _cloud_proxy("POST", "/social/profile", authorization, {"avatar": dataurl or ""})
+            _cloud_proxy("POST", "/social/profile", authorization, body)
         except Exception:
             pass
     import threading as _th
     _th.Thread(target=_do, daemon=True).start()
+
+def _push_avatar_to_cloud(authorization, dataurl):
+    """兼容旧调用:只推头像。"""
+    _push_profile_to_cloud(authorization, avatar=(dataurl or ""))
 
 @app.post("/api/avatar")
 def set_avatar(payload: dict = Body(...), authorization: str = Header(None)):
@@ -4124,6 +4142,7 @@ def auth_update_profile(payload: dict = Body(...), authorization: str = Header(N
                     "age=excluded.age,zodiac=excluded.zodiac,mbti=excluded.mbti,bio=excluded.bio",
                     (me, nick, gender, age, zodiac, mbti, bio))
         con.commit()
+        _push_profile_to_cloud(authorization, nickname=nick)   # ★昵称同步上云,好友实时可见(原来只存本地users2→好友看不到)
         return {"ok": True, "nickname": nick, "gender": gender, "age": age, "zodiac": zodiac, "mbti": mbti, "bio": bio}
     finally:
         con.close()
