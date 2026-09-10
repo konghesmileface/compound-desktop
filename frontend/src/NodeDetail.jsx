@@ -63,9 +63,18 @@ export default function NodeDetail({ docId, onClose, onOpenReader, onOpenNode })
     setD(null); setSim([]); setGen(null); setConn('loading'); setChat(null)
     api.docSummary(docId).then((r) => alive && setD(r)).catch(() => alive && setD({ error: true }))
     api.similar(docId).then((r) => alive && setSim(r.similar || [])).catch(() => {})
-    api.connections(docId).then((r) => alive && setConn(r)).catch(() => alive && setConn({ error: true }))
+    // 发现连接用质量模型深挖,后台算 30~100s→异步:analyzing 时保持转圈并每 4s 轮询,算好即显示(不会超时)
+    let connTimer = null
+    const pollConn = () => {
+      api.connections(docId).then((r) => {
+        if (!alive) return
+        if (r && r.status === 'analyzing') { connTimer = setTimeout(pollConn, 4000) }
+        else setConn(r)
+      }).catch(() => alive && setConn({ error: true }))
+    }
+    pollConn()
     api.chatNode(docId).then((r) => alive && setChat(r)).catch(() => {})
-    return () => { alive = false }
+    return () => { alive = false; if (connTimer) clearTimeout(connTimer) }
   }, [docId])
 
   const isChat = chat && chat.is_chat

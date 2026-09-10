@@ -2471,9 +2471,84 @@ def _link_expl_prompt(con, it):
             "\"do\":\"建议用户现在做的一件具体的事,不超过30字\"}") % (it["a"], sa, it["b"], sb)
 
 
+# ── 发现连接:异步计算 + 前端轮询 ───────────────────────────────────────────
+# ★为什么异步:发现连接用质量模型(pro)深挖跨界关联,而 pro 是推理模型,同一份真机文档
+#   实测单次要 30~67s(给的 max_tokens 越多它思考越久)。前端 WKWebView 网络请求 ~60s 就超时,
+#   同步无论给多少 token 都会被掐断→显示「暂时连不出关联」;而 sidecar 后台其实算完写了缓存→
+#   用户过会儿再点又出来(用户实测现象)。解法:第一次点立刻返回 status=analyzing,后台线程慢慢算,
+#   前端每几秒轮询缓存,算好即显示。永不超时,且保留 pro 质量(不降级成快模型)。
+_CONN_JOBS = set()        # 正在后台计算的 doc_id(去重,避免同一份被并发重复算)
+_CONN_TRANSIENT = {}      # doc_id -> 终态结果(空文本/无候选/失败):不值得写永久缓存,取一次即弃
+_CONN_LOCK = __import__("threading").Lock()
+
+def _conn_cache_ok(con, doc_id, res):
+    con.execute("CREATE TABLE IF NOT EXISTS doc_connections (doc_id INTEGER PRIMARY KEY, data TEXT)")
+    con.execute("INSERT OR REPLACE INTO doc_connections(doc_id,data) VALUES(?,?)",
+                (doc_id, json.dumps(res, ensure_ascii=False))); con.commit()
+
+def _compute_connections(doc_id, me, filename):
+    """后台线程:算发现连接,成功写永久缓存,空/错写内存终态。前端轮询取结果。"""
+    try:
+        LLM.set_owner(me)   # ★新线程必须重设账号上下文,否则 load_cfg 读不到该账号的 AI key
+        con = _con()
+        try:
+            rows = con.execute("SELECT text FROM pages WHERE doc_id=? AND length(trim(text))>0 ORDER BY page_no LIMIT 4", (doc_id,)).fetchall()
+            sample = "\n".join(S.clean_ocr(r[0] or "")[:900] for r in rows)[:3000]
+            if not sample.strip():
+                _CONN_TRANSIENT[doc_id] = {"doc_id": doc_id, "connections": [], "spark": "这份文档没有可读文本,暂时连不出关联。"}
+                return
+            mine = _my_ids(con, me)
+            srcs = S.retrieve(con, sample[:600], topk=40)
+            seen = {doc_id}; cands = []
+            for sc in srcs:
+                did = sc.get("doc_id")
+                if did in seen or did not in mine:
+                    continue
+                seen.add(did); cands.append({"doc_id": did, "filename": sc.get("filename"), "snip": (sc.get("text") or "")[:220]})
+                if len(cands) >= 6:
+                    break
+            if not cands:
+                _CONN_TRANSIENT[doc_id] = {"doc_id": doc_id, "connections": [], "spark": "库里还没有能和它连起来的其它文档,多喂点东西给你的第二大脑。"}
+                return
+            ctx = ("【当前文档】《%s》:\n%s\n\n【候选关联文档】\n" % (filename, sample[:1500])) + "\n".join(
+                "[%d]《%s》: %s" % (c["doc_id"], c["filename"], c["snip"]) for c in cands)
+            sysp = ("你是第二大脑的联想引擎。用户点开一份文档,你要从候选文档里挖出他自己可能都忘了的、非显而易见的跨界连接。"
+                    "铁律:不是简单说'都讲金融',而是点出共享的深层思路/方法/隐喻,给他惊喜和启发。"
+                    "★但只在**真有实质关联**时才连;若当前文档内容单薄、或候选和它并无真实共同点,就如实说'暂无明显关联',connections 给空数组、spark 一句实在话,**绝不为了凑数强行发散或牵强附会**。中文。只输出JSON:{"
+                    '"connections":[{"doc_id":候选文档编号,"insight":"一句话:这份和《当前文档》在什么深层点上相连(点名共享的思路/方法),别空泛"}],'
+                    '"spark":"一句跨界灵感:把这些连接碰撞起来能激发什么新想法/新产出,具体有启发"}')
+            # 后台无超时压力→给足 token 让 pro 一次算成(4000起,chat 内截断会自动重试加倍到 8000/16000)
+            out = LLM.chat([{"role": "system", "content": sysp}, {"role": "user", "content": ctx}],
+                           temperature=0.6, max_tokens=4000)
+            m = re.search(r"\{.*\}", out, re.S); data = json.loads(m.group(0)) if m else {}
+            fn = {c["doc_id"]: c["filename"] for c in cands}
+            conns = []
+            for cc in (data.get("connections") or []):
+                did = cc.get("doc_id")
+                try:
+                    did = int(did)
+                except Exception:
+                    did = None
+                if did in fn:
+                    conns.append({"doc_id": did, "filename": fn[did], "insight": (cc.get("insight") or "")[:200]})
+            res = {"doc_id": doc_id, "connections": conns[:4], "spark": (data.get("spark") or "")[:280]}
+            if conns:
+                _conn_cache_ok(con, doc_id, {"connections": res["connections"], "spark": res["spark"]})  # 只缓存有内容的
+            else:
+                _CONN_TRANSIENT[doc_id] = res   # 真的没连出来:给一次实话,不永久缓存(下次可重算)
+        finally:
+            con.close()
+    except Exception as e:
+        # 失败写内存终态(取一次即弃),让前端停止轮询、显示失败,而不是无限转圈;绝不写永久缓存
+        _CONN_TRANSIENT[doc_id] = {"doc_id": doc_id, "error": True, "spark": "", "connections": [], "err": str(e)[:150]}
+    finally:
+        with _CONN_LOCK:
+            _CONN_JOBS.discard(doc_id)
+
+
 @app.get("/api/connections/{doc_id}")
 def connections(doc_id: int, refresh: int = 0, authorization: str = Header(None)):
-    """主动发现连接:点开一份文档,AI 从全库挖出你可能忘了的非显而易见的跨界关联 + 一句跨界灵感。"""
+    """主动发现连接(异步):点开文档立刻返回 status=analyzing,后台用质量模型深挖,前端轮询取结果。"""
     if not (1 <= doc_id < 2**63):
         raise HTTPException(404, "没有这份文档")
     con = _con()
@@ -2487,48 +2562,20 @@ def connections(doc_id: int, refresh: int = 0, authorization: str = Header(None)
             c = con.execute("SELECT data FROM doc_connections WHERE doc_id=?", (doc_id,)).fetchone()
             if c:
                 return {"doc_id": doc_id, "cached": True, **json.loads(c[0])}
-        rows = con.execute("SELECT text FROM pages WHERE doc_id=? AND length(trim(text))>0 ORDER BY page_no LIMIT 4", (doc_id,)).fetchall()
-        sample = "\n".join(S.clean_ocr(r[0] or "")[:900] for r in rows)[:3000]
-        if not sample.strip():
-            return {"doc_id": doc_id, "connections": [], "spark": "这份文档没有可读文本,暂时连不出关联。"}
-        mine = _my_ids(con, me)
-        srcs = S.retrieve(con, sample[:600], topk=40)
-        seen = {doc_id}; cands = []
-        for sc in srcs:
-            did = sc.get("doc_id")
-            if did in seen or did not in mine:
-                continue
-            seen.add(did); cands.append({"doc_id": did, "filename": sc.get("filename"), "snip": (sc.get("text") or "")[:220]})
-            if len(cands) >= 6:
-                break
-        if not cands:
-            return {"doc_id": doc_id, "connections": [], "spark": "库里还没有能和它连起来的其它文档,多喂点东西给你的第二大脑。"}
-        ctx = ("【当前文档】《%s》:\n%s\n\n【候选关联文档】\n" % (d[0], sample[:1500])) + "\n".join(
-            "[%d]《%s》: %s" % (c["doc_id"], c["filename"], c["snip"]) for c in cands)
-        sysp = ("你是第二大脑的联想引擎。用户点开一份文档,你要从候选文档里挖出他自己可能都忘了的、非显而易见的跨界连接。"
-                "铁律:不是简单说'都讲金融',而是点出共享的深层思路/方法/隐喻,给他惊喜和启发。"
-                "★但只在**真有实质关联**时才连;若当前文档内容单薄、或候选和它并无真实共同点,就如实说'暂无明显关联',connections 给空数组、spark 一句实在话,**绝不为了凑数强行发散或牵强附会**。中文。只输出JSON:{"
-                '"connections":[{"doc_id":候选文档编号,"insight":"一句话:这份和《当前文档》在什么深层点上相连(点名共享的思路/方法),别空泛"}],'
-                '"spark":"一句跨界灵感:把这些连接碰撞起来能激发什么新想法/新产出,具体有启发"}')
-        try:
-            out = LLM.chat([{"role": "system", "content": sysp}, {"role": "user", "content": ctx}], temperature=0.6, max_tokens=1200)
-            m = re.search(r"\{.*\}", out, re.S); data = json.loads(m.group(0)) if m else {}
-        except Exception as e:
-            raise HTTPException(400, "联想失败(检查模型/key): %s" % e)
-        fn = {c["doc_id"]: c["filename"] for c in cands}
-        conns = []
-        for cc in (data.get("connections") or []):
-            did = cc.get("doc_id")
-            try:
-                did = int(did)
-            except Exception:
-                did = None
-            if did in fn:
-                conns.append({"doc_id": did, "filename": fn[did], "insight": (cc.get("insight") or "")[:200]})
-        res = {"connections": conns[:4], "spark": (data.get("spark") or "")[:280]}
-        if conns:  # 空结果不缓存,避免偶发空被永久缓存住(同 today)
-            con.execute("INSERT OR REPLACE INTO doc_connections(doc_id,data) VALUES(?,?)", (doc_id, json.dumps(res, ensure_ascii=False))); con.commit()
-        return {"doc_id": doc_id, "cached": False, **res}
+            t = _CONN_TRANSIENT.pop(doc_id, None)   # 空/失败终态:取一次即弃(下次点可重算)
+            if t is not None:
+                return t
+        else:
+            _CONN_TRANSIENT.pop(doc_id, None)       # 强制刷新:清掉上次终态,重算
+        # 启动/复用后台计算,立刻返回 analyzing(前端据此转圈+轮询)
+        with _CONN_LOCK:
+            fresh = doc_id not in _CONN_JOBS
+            if fresh:
+                _CONN_JOBS.add(doc_id)
+        if fresh:
+            import threading
+            threading.Thread(target=_compute_connections, args=(doc_id, me, d[0]), daemon=True).start()
+        return {"doc_id": doc_id, "status": "analyzing"}
     finally:
         con.close()
 
