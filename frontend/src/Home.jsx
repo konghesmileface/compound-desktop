@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react'
 import { createPortal } from 'react-dom'
-import { api, openExternal } from './api'
+import { api, openExternal, downloadOutput } from './api'
 import { IconSearch, IconClose } from './icons'
 import { toast, confirmDialog, Thinking, Empty } from './ui'
 import { renderRich } from './AskDrawer'
@@ -100,7 +100,7 @@ function GenBar({ topic }) {
         ))}
       </span>
       {file && file.preview && <button className="btn gen-btn" onClick={() => setPreview(true)}>预览</button>}
-      {file && <button type="button" className="gen-dl" onClick={() => openExternal(file.url)}>下载《{file.title}》.{extOf(file.format)}</button>}
+      {file && <button type="button" className="gen-dl" onClick={() => downloadOutput(file.file, file.url)}>下载《{file.title}》.{extOf(file.format)}</button>}
       {preview && file && file.preview && (
         <div className="guide-overlay" onClick={() => setPreview(false)}>
           <div className="prev-modal glass" onClick={(e) => e.stopPropagation()}>

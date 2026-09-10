@@ -4585,6 +4585,29 @@ def helper_save(payload: dict = Body(...)):
     return {"ok": True, "path": dst}
 
 
+@app.post("/api/save_output")
+def save_output(payload: dict = Body(...), authorization: str = Header(None)):
+    """把产出文档(PPT/Word/Excel)直接拷到用户「下载」文件夹,返回路径供文件管理器高亮。
+    ★绕开浏览器下载:openExternal 会拉起系统浏览器→多开 tab + 恢复浏览器主页(用户实测点下载
+    冒出两个标签,一个还是浏览器自己的旧会话页)。本地拷贝秒完成、无浏览器打扰。"""
+    _me(authorization)
+    fname = os.path.basename(str(payload.get("file") or "").strip())
+    if not fname or "/" in fname or "\\" in fname or ".." in fname:
+        raise HTTPException(400, "非法文件名")
+    src = os.path.join(G.OUT_DIR, fname)
+    if not os.path.exists(src):
+        raise HTTPException(404, "文件不存在")
+    downloads = os.path.join(os.path.expanduser("~"), "Downloads")
+    try:
+        os.makedirs(downloads, exist_ok=True)
+    except Exception:
+        pass
+    dst = os.path.join(downloads, fname)
+    import shutil as _sh
+    _sh.copyfile(src, dst)
+    return {"ok": True, "path": dst}
+
+
 @app.get("/api/music-list")
 def music_list():
     out = {"epic": [], "calm": [], "uplift": []}

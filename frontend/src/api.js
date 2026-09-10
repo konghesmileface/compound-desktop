@@ -41,6 +41,22 @@ export function openExternal(url) {
   try { window.open(full, '_blank') } catch { /* noop */ }
 }
 
+// 产出文档(PPT/Word/Excel)下载:桌面版直接存到「下载」文件夹 + 文件管理器高亮,不开浏览器
+// (openExternal 会拉起浏览器→多开 tab + 恢复浏览器旧主页,用户实测点下载冒两个标签)。web 端/失败→浏览器兜底。
+export async function downloadOutput(file, urlFallback) {
+  if (typeof window !== 'undefined' && window.__TAURI__ && window.__TAURI__.core && file) {
+    try {
+      const r = await fetch('/api/save_output', { method: 'POST', headers: { 'Content-Type': 'application/json', ...authHeaders() }, body: JSON.stringify({ file }) }).then(j)
+      if (r && r.path) {
+        try { window.__TAURI__.core.invoke('reveal_file', { path: r.path }) } catch { /* noop */ }
+        return true
+      }
+    } catch { /* 失败→浏览器兜底 */ }
+  }
+  openExternal(urlFallback || file)
+  return false
+}
+
 // 桌面版下载助手安装包:让 sidecar 直接拷到「下载」文件夹 + 文件管理器高亮,绕开浏览器下载
 // (Windows 浏览器下 .exe 会被 Defender/SmartScreen 联网扫描卡很久)。返回保存路径;非 Tauri 返 null。
 export async function saveHelperLocally(file) {
