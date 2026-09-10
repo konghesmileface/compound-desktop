@@ -4944,9 +4944,9 @@ def save_settings(cfg: dict = Body(...), authorization: str = Header(None)):
     for k in ("llm_provider", "llm_base_url", "llm_model", "llm_fast_model"):
         if k in cfg:
             cur[k] = cfg[k]
-    # key 只在传了非空值时更新(避免打码值覆盖真 key)
+    # key 只在传了非空值时更新(避免打码值覆盖真 key);★strip 去首尾空白(粘贴常带尾随空格→Bearer头无效)
     if cfg.get("llm_key"):
-        cur["llm_key"] = cfg["llm_key"]
+        cur["llm_key"] = str(cfg["llm_key"]).strip()
     for _k in ("ocr_url",):  # OCR服务器地址(客户有百度强OCR填地址即用)
         if _k in cfg:
             cur[_k] = (cfg[_k] or "").strip()

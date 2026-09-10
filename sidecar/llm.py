@@ -93,7 +93,7 @@ def resolved():
     d = PROVIDER_DEFAULTS.get(prov, PROVIDER_DEFAULTS["deepseek"])
     base = (cfg.get("llm_base_url") or d[0]).rstrip("/")
     model = cfg.get("llm_model") or d[1]      # 用户覆盖 > 预置质量模型
-    key = cfg.get("llm_key", "")
+    key = (cfg.get("llm_key") or "").strip()   # ★去首尾空白:粘贴 key 常带尾随空格→Bearer 头带空格被服务商判无效key(实测Windows生成失败真因)
     return prov, base, model, key
 
 
@@ -136,7 +136,7 @@ def chat(messages, temperature: float = 0.4, max_tokens: int = 2000, model: str 
         _d = PROVIDER_DEFAULTS.get(prov, PROVIDER_DEFAULTS["deepseek"])
         base = (cfg_override.get("llm_base_url") or _d[0]).rstrip("/")
         dmodel = cfg_override.get("llm_model") or _d[1]
-        key = cfg_override.get("llm_key") or ""
+        key = (cfg_override.get("llm_key") or "").strip()   # ★同上:去首尾空白
     else:
         prov, base, dmodel, key = resolved()
     model = model or dmodel
