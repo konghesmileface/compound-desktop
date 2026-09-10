@@ -176,11 +176,16 @@ def chat(messages, temperature: float = 0.4, max_tokens: int = 2000, model: str 
             to = 180 if mt >= 6000 else 90
             with opener.open(req, timeout=to) as r:
                 data = json.load(r)
-            content = ((data.get("choices") or [{}])[0].get("message", {}) or {}).get("content") or ""
-            if content.strip():
+            _choice = (data.get("choices") or [{}])[0]
+            content = (_choice.get("message", {}) or {}).get("content") or ""
+            # ★finish_reason=length=输出被 max_tokens 掐断。推理模型(如 v4-pro)思考会吃掉大半
+            #   tokens,剩下半截 JSON 非空但不可用(实测画像:3000 tokens 被思考吃 2641,正文截断
+            #   →上层 json.loads 炸→误报「检查模型/key」)。截断同样要重试加倍,别当成功返回;
+            #   最后一轮仍截断则原样返回(尽力而为,不比旧行为差)。
+            if content.strip() and (_choice.get("finish_reason") != "length" or attempt == 2):
                 _note_llm(True)   # ★成功→清除欠费/错误标记(前端恢复正常)
                 return content
-            last_err = "空返回(max_tokens=%d)" % mt
+            last_err = ("输出被截断" if content.strip() else "空返回") + "(max_tokens=%d)" % mt
         except urllib.error.HTTPError as e:
             # 模型名下线/不存在 → 明确引导用户去设置改,而不是含糊报错(便捷默认哪天失效也能自愈)
             try:
