@@ -1632,6 +1632,7 @@ def matches_api(refresh: int = 0, authorization: str = Header(None)):
             _GEN_JOBS[key] = {"state": "running"}
             def _work():
                 try:
+                    LLM.set_owner(me)   # ★后台线程必须重设账号上下文,否则读不到该账号AI key(见_gen_work)
                     c2 = _con()
                     try:
                         r = CI.supply_demand_matches(c2, me, refresh=False)
@@ -2414,6 +2415,7 @@ def _doc_snip(con, doc_id, n=1100):
 
 
 def _explain_worker(owner, jobs):
+    LLM.set_owner(owner)   # ★后台线程必须重设账号上下文,否则读不到该账号AI key(见_gen_work)
     con = _con()
     try:
         _expl_table(con)
@@ -2620,6 +2622,8 @@ def starmap(chunk: int = 12, k: int = 6, clusters: int = 14, authorization: str 
 def _gen_nudge(card_id, ctype, content, owner=None):
     """卡片主动消息:AI 基于知识库发现"现在能推进的一步"并主动 push。后台线程跑。"""
     try:
+        if owner:
+            LLM.set_owner(owner)   # ★后台线程必须重设账号上下文,否则读不到该账号AI key(见_gen_work)
         con = _con()
         try:
             con.execute("CREATE TABLE IF NOT EXISTS card_msgs (id INTEGER PRIMARY KEY, card_id INTEGER, content TEXT, created TEXT, read INTEGER DEFAULT 0)")
@@ -3548,6 +3552,7 @@ def lifestory(refresh: int = 0, style: str = "cinema", authorization: str = Head
             return {"empty": True, "style": style, "theme_song": _theme, "film_url": _film}
         _LIFE_GEN.add(ckey)
         def _build():
+            LLM.set_owner(me)   # ★后台线程必须重设账号上下文,否则读不到该账号AI key(见_gen_work)
             c2 = _con()
             try:
                 p, mbti = _my_persona(c2, me)
@@ -4509,6 +4514,8 @@ def gen(payload: dict = Body(...), authorization: str = Header(None)):
     _GEN_JOBS[jid] = {"state": "running"}
     def _gen_work():
         try:
+            LLM.set_owner(me)   # ★后台线程必须重设账号上下文,否则 get_owner 为空→load_cfg 读全局 settings(新机器为空)
+                                #   →误报"未配置 AI key",生成必失败(用户实测:Windows全新装无全局key→PPT失败,mac2有历史全局key侥幸能跑)
             tag = _dt.datetime.now().strftime("%m%d%H%M%S")
             r = G.generate(LLM, topic, srcs, fmt, tag, theme)
             _out = {**r, "url": f"/api/download/{r['file']}", "sources": srcs}
