@@ -226,6 +226,7 @@ export default function Life({ onGoto }) {
   const noData = elig.docs === 0
   const noPersona = elig.persona === false
   const eligible = elig.key && (elig.docs || 0) > 0 && elig.persona
+  const eligLoaded = elig.key !== null && elig.docs !== null && elig.persona !== null   // 资格三项都查完才敢判定(否则闪错屏)
 
   useEffect(() => () => clearTimeout(makeTimer.current), [])
   const pollMake = useCallback(function pm() {
@@ -296,8 +297,10 @@ export default function Life({ onGoto }) {
         <div style={{ fontSize: 12.5, color: 'var(--text-3)', marginTop: 6 }}>换设备/新登录首次会从云端下载,稍候即出现</div>
       </div></div>
     )
-    if (making || (gen && gen.generating)) return <GeneratingLife />
-    if (!lib) return <div className="view"><div className="loading-wrap"><div className="spinner" /><div>正在打开你的冥想…</div></div></div>
+    // ★只有真正合格(key+数据+画像)才显示"谱曲中";不合格的新用户绝不假装谱曲(gen.generating
+    //   是一生铅笔片在生成,对没画像的新用户也为真→之前直接卡"谱曲中"永远转)。不合格→走引导页。
+    if (eligible && (making || (gen && gen.generating))) return <GeneratingLife />
+    if (!lib || !eligLoaded) return <div className="view"><div className="loading-wrap"><div className="spinner" /><div>正在打开你的冥想…</div></div></div>
     return <EmptyLife onGoto={onGoto} noKey={noKey} noData={noData} noPersona={noPersona} eligible={eligible} />
   }
 
