@@ -2036,21 +2036,70 @@ def _handoff_watch_loop():
             pass
         _time.sleep(4)
 
-def _handoff_watch_start(me):
+def _handoff_owner_file():
+    # 本机微信归属:handoff 里的聊天是「这台电脑的真实微信」,只属一个人。
+    # 绑定持久化,防同机换账号(测试号/第二账号)登录时把机主微信灌进别的账号造成数据串号。
+    return os.path.join(os.path.expanduser("~"), ".wxsync", "handoff_owner.json")
+
+def _handoff_get_binding():
+    try:
+        import json as _j
+        p = _handoff_owner_file()
+        if os.path.exists(p):
+            v = (_j.load(open(p, encoding="utf-8")) or {}).get("owner")
+            return v or None
+    except Exception:
+        pass
+    return None
+
+def _handoff_set_binding(me):
+    try:
+        import json as _j
+        p = _handoff_owner_file()
+        os.makedirs(os.path.dirname(p), exist_ok=True)
+        with open(p + ".tmp", "w", encoding="utf-8") as f:
+            _j.dump({"owner": me}, f)
+        os.replace(p + ".tmp", p)
+    except Exception:
+        pass
+
+def _handoff_watch_start(me, bind=False):
+    """启动/切换本地 handoff 消费。★核心隔离:handoff 是机主一人的真实微信,
+    仅当 me == 本机绑定 owner 才消费;非绑定账号(测试号/第二账号)登录一律不消费,
+    杜绝把机主微信串进别的账号(用户实测 mac2/Windows 换测试号登录带出前账号数据的真因)。
+    bind=True:用户显式要求把本机微信导入当前账号 → 改绑到 me(以显式操作为准)。"""
+    binding = _handoff_get_binding()
+    if binding is None or bind:
+        # 首个登录本机的账号=机主微信归属;或用户显式改绑
+        _handoff_set_binding(me)
+        binding = me
+    if binding != me:
+        _HANDOFF_OWNER["v"] = None    # 非机主账号 → 不消费,避免数据串号
+        return False
     _HANDOFF_OWNER["v"] = me
     if _HANDOFF_THREAD["v"] is None:
         import threading
         t = threading.Thread(target=_handoff_watch_loop, daemon=True)
         t.start()
         _HANDOFF_THREAD["v"] = t
+    return True
 
 
 @app.post("/api/wechat/watch")
 def wechat_watch(authorization: str = Header(None)):
-    """客户端登录后调用:告知 sidecar 当前用户,启动本地 handoff 消费线程。"""
+    """客户端登录后调用:告知 sidecar 当前用户,启动本地 handoff 消费线程。
+    ★仅机主(本机绑定账号)真正消费;其它账号不消费(防串号)。"""
     me = _me(authorization)
-    _handoff_watch_start(me)
-    return {"ok": True}
+    consuming = _handoff_watch_start(me)
+    return {"ok": True, "bound": consuming}
+
+
+@app.post("/api/wechat/bind")
+def wechat_bind(authorization: str = Header(None)):
+    """用户在本机显式要求把这台电脑的微信导入当前账号 → 改绑并开始消费。"""
+    me = _me(authorization)
+    _handoff_watch_start(me, bind=True)
+    return {"ok": True, "bound": True}
 
 
 # ── iPhone 历史导入(iOS,与微信助手无关):点「开始导入(连手机)」→ 这里后台跑
