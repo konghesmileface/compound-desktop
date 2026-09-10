@@ -150,6 +150,7 @@ def render_ppt(data: dict, tag: str, theme: str = DEFAULT_THEME) -> str:
 
     path = os.path.join(OUT_DIR, f"{_safe(data.get('title', 'ppt'))}_{tag}.pptx")
     prs.save(path)
+    _occ_preview(os.path.basename(path))   # ★也渲 html 预览(前端「预览」按钮据此出现;officecli 版本来有,python-pptx 版原漏了)
     return path
 
 
@@ -361,10 +362,13 @@ def generate(LLM, topic: str, sources: list, fmt: str, tag: str, theme: str = DE
         except Exception:
             path = render_xlsx(data, tag)
     else:
-        try:                                  # 优先 OfficeCLI(专业排版),失败退回 python-pptx
-            path = render_ppt_officecli(data, tag)
-        except Exception:
+        # ★PPT 主路径用 python-pptx(render_ppt):只有它支持用户选的 4 套主题(深空/简约/暖阳/松林)。
+        #   officecli 版(render_ppt_officecli)只套内置布局、不认 theme→选深空还是白底(实测 mac2)。
+        #   故 officecli 仅作回落(python-pptx 万一异常时保底出个文件)。Word/Excel 无主题,仍走 officecli。
+        try:
             path = render_ppt(data, tag, theme)
+        except Exception:
+            path = render_ppt_officecli(data, tag)
     fn = os.path.basename(path)
     hn = fn.rsplit(".", 1)[0] + ".html"
     preview = hn if os.path.exists(os.path.join(OUT_DIR, hn)) else None
