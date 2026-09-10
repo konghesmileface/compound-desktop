@@ -719,12 +719,14 @@ input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; appearance: 
 .msg.assistant .msg-body { font-size: 14px; line-height: 1.78; color: var(--text); white-space: pre-wrap; }
 
 /* ================= Toast + 确认弹窗(自主设计)================= */
-.toaster { position: fixed; top: 24px; left: 50%; transform: translateX(-50%); z-index: 200; display: flex; flex-direction: column; gap: 8px; align-items: center; pointer-events: none; }
+.toaster { position: fixed; top: 24px; left: 50%; transform: translateX(-50%); z-index: 9100; display: flex; flex-direction: column; gap: 8px; align-items: center; pointer-events: none; }
 .toast { padding: 11px 20px; border-radius: 10px; font-size: 13.5px; color: var(--text); background: rgba(20,23,30,0.94); border: 1px solid var(--border-2); box-shadow: 0 8px 30px rgba(0,0,0,0.5); backdrop-filter: blur(14px); animation: toastIn .24s cubic-bezier(0.2,0.8,0.2,1); }
 .toast-ok { border-color: rgba(52,211,153,0.5); }
 .toast-err { border-color: rgba(248,113,113,0.5); }
 @keyframes toastIn { from { opacity: 0; transform: translateY(-10px); } to { opacity: 1; transform: none; } }
-.dialog-overlay { position: fixed; inset: 0; background: rgba(4,6,10,0.6); backdrop-filter: blur(5px); display: grid; place-items: center; z-index: 210; animation: fade .18s ease; }
+/* ★z-index 9000:全局确认框是最高优先级模态,必须盖住一切——尤其付费墙(z-index 4000)。
+   原值 210 被付费墙盖住→硬墙上点「退出登录」弹出的确认框看不见也点不到→像「没反应」、永远退不出(实测 Windows/三端通病)。 */
+.dialog-overlay { position: fixed; inset: 0; background: rgba(4,6,10,0.6); backdrop-filter: blur(5px); display: grid; place-items: center; z-index: 9000; animation: fade .18s ease; }
 /* ★弹窗必须不透明实底:Tauri WKWebView 里 .glass 的 backdrop-filter blur 常失效→半透明穿透、和背景内容混一起看不清(用户实测删除确认框)。给 dialog 加近实底,不靠 blur。 */
 .dialog { position: relative; width: 400px; max-width: 90vw; padding: 30px 28px 22px; border-radius: var(--r-lg); animation: slideIn .24s cubic-bezier(0.2,0.8,0.2,1); background: #12161e; border: 1px solid var(--border); box-shadow: 0 20px 60px rgba(0,0,0,0.65); }
 .dialog-x { position: absolute; top: 16px; right: 16px; width: 24px; height: 24px; display: grid; place-items: center; border-radius: 7px; cursor: pointer; color: var(--text-3); }
