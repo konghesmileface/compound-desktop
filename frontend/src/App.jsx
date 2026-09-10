@@ -245,7 +245,7 @@ export default function App() {
       <AnalysisStatus />
       {onboard && !(account && account.status === 'expired') && <Onboard onDone={finishOnboard} onGoto={(t) => setTab(t)} />}
       <TrialBanner account={account} onUpgrade={() => setPaywall(true)} />
-      {paywall && <PaywallModal account={account} onClose={() => setPaywall(false)} onPaid={() => { paidAtRef.current = Date.now(); setAccount((a) => a ? { ...a, status: 'paid', active: true } : a); setPaywall(false); refreshAccount() }} />}
+      {paywall && <PaywallModal account={account} onClose={() => setPaywall(false)} onPaid={() => { paidAtRef.current = Date.now(); setAccount((a) => a ? { ...a, status: 'paid', active: true } : a); setPaywall(false); refreshAccount() }} onLogout={async () => { if (await confirmDialog('退出当前账号?', '退出')) { switchAuth(null); toast('已退出', 'ok') } }} />}
     </div>
   )
 }

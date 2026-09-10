@@ -3880,6 +3880,9 @@ button.oc-node { background: none; border: none; padding: 0; margin: 0; cursor: 
 .pw-pay-btn { width: 100%; height: 46px; font-size: 15px; font-weight: 650; display: inline-flex; align-items: center; justify-content: center; gap: 9px; border-radius: 12px; }
 .pw-alipay-dot { width: 16px; height: 16px; border-radius: 4px; background: #1677ff; box-shadow: 0 0 0 2px rgba(22,119,255,0.3); }
 .pw-pay-note { font-size: 11.5px; color: var(--text-3); text-align: center; margin-top: 10px; line-height: 1.6; }
+.pw-switch { font-size: 12px; color: var(--text-3); text-align: center; margin-top: 14px; }
+.pw-switch a { color: var(--text-2); text-decoration: underline; text-underline-offset: 3px; }
+.pw-switch a:hover { color: var(--text-1); }
 
 /* 支付方式切换 */
 .pw-methods { display: flex; gap: 10px; margin: 4px 0 12px; }

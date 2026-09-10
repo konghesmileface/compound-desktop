@@ -141,7 +141,7 @@ function SubscribeFlow({ plans, onPaid, compact, alipayOn = true, wechatOn = fal
 }
 
 // 订阅墙:试用到期/未付费时全屏拦截,友好讲价值 + 直接可付
-export function PaywallModal({ account, onClose, onPaid }) {
+export function PaywallModal({ account, onClose, onPaid, onLogout }) {
   const [plans, setPlans] = useState(null)
   const [pay, setPay] = useState({ alipay: true, wechat: false })
   const [closing, setClosing] = useState(false)
@@ -168,6 +168,10 @@ export function PaywallModal({ account, onClose, onPaid }) {
           ))}
         </div>
         <SubscribeFlow plans={plans} onPaid={onPaid} alipayOn={pay.alipay} wechatOn={pay.wechat} />
+        {/* 硬墙时必须留出口:换账号只能从这里走(整屏被墙盖住,侧栏点不到) */}
+        {expired && onLogout && (
+          <div className="pw-switch">想换个账号?<a href="#" onClick={(e) => { e.preventDefault(); onLogout() }}>退出登录</a></div>
+        )}
       </div>
     </div>
   )
