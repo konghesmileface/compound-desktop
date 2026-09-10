@@ -57,7 +57,11 @@ function MatchReport({ me, person, onClose }) {
   const [av, setAv] = useState({}); const [saving, setSaving] = useState(false)
   const posterRef = useRef()
   useEffect(() => { setD(null); setErr(false); api.match(person.username).then(setD).catch(() => setErr(true)) }, [person.username])
-  useEffect(() => { api.getAvatars([me, person.username].join(',')).then((r) => setAv(r.avatars || {})).catch(() => {}) }, [me, person.username])
+  // ★好友头像用云端最新(person.avatar),自己用本地;好友改了头像这里跟着变
+  useEffect(() => {
+    const cloud = person.avatar ? { [person.username]: person.avatar } : {}
+    api.getAvatars([me, person.username].join(',')).then((r) => setAv({ ...cloud, ...(r.avatars || {}) })).catch(() => setAv(cloud))
+  }, [me, person.username, person.avatar])
 
   const avImg = (u, disp, love) => (
     <div className={'mr2-av' + (love ? ' love' : '')}>
@@ -153,7 +157,9 @@ function Grid({ list, onSel, onRemove }) {
         <div key={p.username} className="fr-card glass" onClick={() => onSel(p)}>
           {onRemove && <span className="fr-del" title="移除好友" onClick={(e) => { e.stopPropagation(); onRemove(p) }}><IconClose /></span>}
           <div className="fr-top">
-            <span className="fr-av" style={{ background: `linear-gradient(145deg, hsl(${hue(p.username)} 50% 58%), hsl(${hue(p.username)} 55% 40%))` }}>{initial(p.display)}</span>
+            {p.avatar
+              ? <img className="fr-av" src={p.avatar} alt="" style={{ objectFit: 'cover' }} />
+              : <span className="fr-av" style={{ background: `linear-gradient(145deg, hsl(${hue(p.username)} 50% 58%), hsl(${hue(p.username)} 55% 40%))` }}>{initial(p.display)}</span>}
             <div className="fr-compat"><div className="fr-ring" style={{ background: `conic-gradient(var(--accent) ${p.compat * 3.6}deg, rgba(255,255,255,0.08) 0)` }}><span className="num">{p.compat}</span></div></div>
           </div>
           <div className="fr-name">{p.display}{p.mbti && <span className={'fr-mbti' + (p.mbti_real ? '' : ' mbti-guess')} title={p.mbti_real ? '本人填写' : 'AI 从画像推测'}>{p.mbti}{p.mbti_real ? '' : <i className="mbti-est">推测</i>}</span>}</div>

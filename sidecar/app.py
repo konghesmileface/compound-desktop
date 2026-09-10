@@ -2916,6 +2916,19 @@ def _fetch_friend_persona(authorization, other):
         return None, "", other
 
 
+_avatar_pushed = set()    # 每进程每用户一次:把本人已设头像同步上云(老用户也生效)
+def _push_my_avatar_once(con, me, authorization):
+    if not authorization or me in _avatar_pushed:
+        return
+    _avatar_pushed.add(me)
+    try:
+        con.execute("CREATE TABLE IF NOT EXISTS avatars (username TEXT PRIMARY KEY, dataurl TEXT)")
+        r = con.execute("SELECT dataurl FROM avatars WHERE username=?", (me,)).fetchone()
+        if r and r[0]:
+            _push_avatar_to_cloud(authorization, r[0])
+    except Exception:
+        pass
+
 _persona_pulled = set()   # 每进程每用户尝试一次:从云拉回本人画像(换机/新登录用)
 def _ensure_my_persona(con, me, authorization):
     """★换机/新登录:本地没有本人画像时,从云 shared_personas 拉回自己的画像存本地
@@ -3033,6 +3046,7 @@ def people(authorization: str = Header(None)):
         # ★全新客户端:personas 表要带 emb 列(否则下句 SELECT emb 崩 no such column→前端误报"请先登录")
         con.execute("CREATE TABLE IF NOT EXISTS personas (username TEXT PRIMARY KEY, data TEXT, mbti TEXT, emb TEXT)")
         _ensure_my_persona(con, me, authorization)   # 换机/新登录:先从云拉回本人画像,好友契合度才算得出
+        _push_my_avatar_once(con, me, authorization)  # ★把本人已设头像同步上云,好友实时可见
         try: con.execute("ALTER TABLE personas ADD COLUMN emb TEXT")  # 老库补列
         except Exception: pass
         myp, _ = _my_persona(con, me)
@@ -3060,7 +3074,11 @@ def people(authorization: str = Header(None)):
                 if not fu or fu == me:
                     continue
                 if fu in _by:
+                    # ★好友基本信息实时化:用云端最新昵称/头像覆盖本地缓存(好友改了资料这里就跟着变)
                     _by[fu]["is_friend"] = True
+                    if fr.get("display"):
+                        _by[fu]["display"] = fr.get("display")
+                    _by[fu]["avatar"] = fr.get("avatar")
                     continue
                 if not fr.get("has_persona"):
                     continue
@@ -3068,7 +3086,8 @@ def people(authorization: str = Header(None)):
                 if not _pd:
                     continue
                 _pp = _pd if isinstance(_pd, dict) else json.loads(_pd)
-                out.append({"username": fu, "display": _pp.get("display", _pdisp or fu),
+                out.append({"username": fu, "display": fr.get("display") or _pdisp or _pp.get("display") or fu,
+                            "avatar": fr.get("avatar"),   # ★云端实时头像
                             "one_liner": _pp.get("one_liner", ""), "tags": _pp.get("tags", []),
                             "mbti": _pm, "mbti_real": bool(_pm), "compat": _compat(myp, _pp), "is_friend": True})
         except Exception as _e:
@@ -4025,6 +4044,18 @@ def reset_password(payload: dict = Body(...)):
 
 
 # ========== 头像(base64 data url,存库) ==========
+def _push_avatar_to_cloud(authorization, dataurl):
+    """把我的头像推到云社交库,好友即可实时看到最新头像(失败静默)。空串=清除。"""
+    if not authorization:
+        return
+    def _do():
+        try:
+            _cloud_proxy("POST", "/social/profile", authorization, {"avatar": dataurl or ""})
+        except Exception:
+            pass
+    import threading as _th
+    _th.Thread(target=_do, daemon=True).start()
+
 @app.post("/api/avatar")
 def set_avatar(payload: dict = Body(...), authorization: str = Header(None)):
     me = _me(authorization)
@@ -4036,6 +4067,7 @@ def set_avatar(payload: dict = Body(...), authorization: str = Header(None)):
         con.execute("CREATE TABLE IF NOT EXISTS avatars (username TEXT PRIMARY KEY, dataurl TEXT)")
         con.execute("INSERT OR REPLACE INTO avatars(username,dataurl) VALUES(?,?)", (me, dataurl))
         con.commit()
+        _push_avatar_to_cloud(authorization, dataurl)   # ★同步到云,好友实时可见
         return {"ok": True}
     finally:
         con.close()

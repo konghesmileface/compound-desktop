@@ -38,7 +38,10 @@ export default function StarCloud({ people, onSelect, dim, me }) {
   useEffect(() => {
     let alive = true
     const names = [me, ...people.map((p) => p.username)].filter(Boolean).join(',')
-    api.getAvatars(names).then(({ avatars }) => { if (alive) setImgs(avatars || {}) }).catch(() => {})
+    // ★合并云端好友头像(people 携带的 p.avatar)+ 本地头像(自己):好友改了头像这里跟着变
+    const cloud = Object.fromEntries(people.filter((p) => p.avatar).map((p) => [p.username, p.avatar]))
+    api.getAvatars(names).then(({ avatars }) => { if (alive) setImgs({ ...cloud, ...(avatars || {}) }) })
+      .catch(() => { if (alive) setImgs(cloud) })
     return () => { alive = false }
   }, [people, me])
 
