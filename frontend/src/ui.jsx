@@ -64,12 +64,43 @@ function currentBuildHash() {
   } catch { return null }
 }
 
+// 官网更新源:桌面端定期拉这个 JSON({version, url, notes}),比自身版本新就提示。
+const LATEST_URL = 'https://compoundtome.com/latest.json'
+const DOWNLOAD_PAGE = 'https://compoundtome.com/'
+
+function semverNewer(a, b) {
+  // a 比 b 新?非法输入一律 false(官网 JSON 坏了不能瞎弹)
+  const pa = String(a || '').split('.').map((n) => parseInt(n, 10) || 0)
+  const pb = String(b || '').split('.').map((n) => parseInt(n, 10) || 0)
+  for (let i = 0; i < 3; i++) { if ((pa[i] || 0) !== (pb[i] || 0)) return (pa[i] || 0) > (pb[i] || 0) }
+  return false
+}
+
 export function UpdateBanner() {
-  const [stale, setStale] = useState(false)
+  const [stale, setStale] = useState(false)      // 网页版:服务器已发新 JS
+  const [latest, setLatest] = useState(null)     // 桌面版:官网有新版本 {version, url}
   useEffect(() => {
+    const tauri = typeof window !== 'undefined' && window.__TAURI__ && window.__TAURI__.core
+    let alive = true
+    if (tauri) {
+      // 桌面端:比对官网 latest.json 与自身版本。有新版→提示去官网下载覆盖安装
+      // (数据在用户目录,覆盖装不丢)。离线/官网抖动静默忽略,启动查一次+每 6 小时一次。
+      const check = async () => {
+        try {
+          const mine = await window.__TAURI__.core.invoke('app_version')
+          const r = await fetch(LATEST_URL + '?t=' + Date.now(), { cache: 'no-store' })
+          if (!r.ok) return
+          const j = await r.json()
+          if (alive && j && semverNewer(j.version, mine)) setLatest({ version: j.version, url: j.url || DOWNLOAD_PAGE })
+        } catch { /* 离线/官网抖动忽略,下次再查 */ }
+      }
+      check()
+      const t = setInterval(check, 6 * 3600 * 1000)
+      return () => { alive = false; clearInterval(t) }
+    }
+    // 网页版:比对服务器 index.html 的 JS hash,变了提示刷新
     const current = currentBuildHash()
     if (!current) return // dev 或识别不到 hash → 不检测
-    let alive = true
     const check = async () => {
       try {
         const r = await fetch('/app/index.html', { cache: 'no-store' })
@@ -84,6 +115,19 @@ export function UpdateBanner() {
     document.addEventListener('visibilitychange', onVis)
     return () => { alive = false; clearInterval(t); document.removeEventListener('visibilitychange', onVis) }
   }, [])
+  if (latest) {
+    const open = () => {
+      try { window.__TAURI__.core.invoke('open_external', { url: latest.url }); return } catch { /* noop */ }
+      try { window.open(latest.url, '_blank') } catch { /* noop */ }
+    }
+    return (
+      <div className="update-banner" role="status">
+        <span className="ub-dot" />
+        <span className="ub-text">发现新版本 v{latest.version},下载后直接覆盖安装,数据不受影响</span>
+        <button className="ub-btn" onClick={open}>去下载</button>
+      </div>
+    )
+  }
   if (!stale) return null
   return (
     <div className="update-banner" role="status">

@@ -210,35 +210,30 @@ def main():
             return good
         _need("cacert.pem(CA证书=所有https命根)", os.path.join(base, "certifi", "cacert.pem"))
         _need("schema_full.sql(空DB建全45表)", os.path.join(base, "schema_full.sql"))
-        # ★bge-m3:Mac 打进包(离线);Windows 不打包——NSIS makensis 无法装 >2G 单文件(pytorch_model.bin 2.3G),
-        #   Windows 首次语义检索时从 HF 下载(sidecar_main 已配 EMBED_MODEL 回落 BAAI/bge-m3)。故 Windows 缺 = 不 FAIL。
+        # ★bge-m3:全平台一律不打进包(0.2.0 起瘦身:安装包从 3-5G 降到几百 M,版本更新不再
+        #   反复下模型)。首次启动 model_bootstrap 从 OSS 下到 数据目录/models/bge-m3,更新版本不重下。
+        #   若构建目录里有(旧流程残留)仍校验其完整性;没有=正常,不 FAIL。
         _bge_dir = os.path.join(base, "models", "bge-m3")
         if os.path.isdir(_bge_dir):
             w = (_glob.glob(os.path.join(_bge_dir, "*.safetensors"))
                  + _glob.glob(os.path.join(_bge_dir, "pytorch_model.bin")))
             print(f"  {'OK  ' if w else 'FAIL'} 数据:bge-m3 权重文件")
             ok = ok and bool(w)
-        elif sys.platform.startswith("win"):
-            print("  OK   数据:bge-m3(Windows 不打包,首次语义检索时下载——NSIS 装不了 >2G 单文件)")
         else:
-            print("  FAIL 数据:bge-m3 模型目录(未打进包)")
-            ok = False
+            print("  OK   数据:bge-m3(不打包,首启从 OSS 下载到数据目录,更新版本不重下)")
         n_onnx = len(_glob.glob(os.path.join(base, "rapidocr", "**", "*.onnx"), recursive=True))
         print(f"  {'OK  ' if n_onnx else 'FAIL'} 数据:rapidocr onnx 模型({n_onnx} 个)")
         ok = ok and n_onnx > 0
         n_dl = len(_glob.glob(os.path.join(base, "downloads", "*")))
         print(f"  {'OK  ' if n_dl else 'FAIL'} 数据:微信助手安装包({n_dl} 个)")
         ok = ok and n_dl > 0
-        # ★音视频入库:SenseVoice ASR + Mac ffmpeg(缺了音视频转文字入库跑不了)
-        #   ★Windows 瘦身:SenseVoice(0.9G)不打包,首启门下载(和 bge-m3 一样),缺 ≠ FAIL。
+        # ★音视频入库:SenseVoice ASR + ffmpeg(缺了音视频转文字入库跑不了)
+        #   ★SenseVoice(0.9G)全平台一律不打包(0.2.0 起与 bge-m3 同批瘦身),首启门下载,缺 ≠ FAIL。
         _sv = os.path.join(base, "models", "sherpa-onnx-sense-voice-zh-en-ja-ko-yue-2024-07-17", "model.int8.onnx")
         if os.path.isfile(_sv):
             print("  OK   数据:SenseVoice ASR 模型")
-        elif sys.platform.startswith("win"):
-            print("  OK   数据:SenseVoice(Windows 不打包,首启下载——降到 2GB 内让 NSIS 打得动)")
         else:
-            print("  FAIL 数据:SenseVoice ASR 模型")
-            ok = False
+            print("  OK   数据:SenseVoice(不打包,首启从 OSS 下载到数据目录)")
         _ff = os.path.join(base, "bin", "ffmpeg" + (".exe" if sys.platform == "win32" else ""))
         print(f"  {'OK  ' if os.path.isfile(_ff) else 'FAIL'} 数据:ffmpeg 二进制")
         ok = ok and os.path.isfile(_ff)

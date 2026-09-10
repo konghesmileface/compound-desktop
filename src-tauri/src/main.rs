@@ -123,6 +123,13 @@ fn reveal_file(path: String) {
     }
 }
 
+/// 当前应用版本(tauri.conf.json 的 version)。前端更新检查用:和官网 latest.json 比对,
+/// 有新版弹「发现新版本」提示条(不做应用内自动更新——Mac 无开发者签名,updater 装不动)。
+#[tauri::command]
+fn app_version(app: tauri::AppHandle) -> String {
+    app.package_info().version.to_string()
+}
+
 /// 弹原生目录选择器,返回选中的文件夹**绝对路径**(浏览器 webkitdirectory 拿不到真实路径,
 /// 这是"定期同步固定文件夹"能真正落地的关键)。取消返回 None。
 #[tauri::command]
@@ -142,7 +149,7 @@ fn main() {
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
         .manage(SidecarState { child: child_for_state })
-        .invoke_handler(tauri::generate_handler![open_external, pick_folder, reveal_file])
+        .invoke_handler(tauri::generate_handler![open_external, pick_folder, reveal_file, app_version])
         .setup(move |app| {
             let handle = app.handle().clone();
             let port = free_port();

@@ -1,6 +1,6 @@
 name: Build Mac Intel 高精版
 
-# 高精版(rapidocr v6 + paddle PP-StructureV3 + bge-m3)。
+# 高精版(rapidocr v6 + paddle PP-StructureV3 打进包;bge-m3/SenseVoice 0.2.0 起不打包→首启从 OSS 下)。
 # 主 sidecar(torch)+ paddle worker(独立 paddle 环境,进程隔离)都用 Rosetta 出 x86_64;
 # Tauri 用 tauri.hd.conf.json 内嵌两个二进制,交叉编译 x86_64。macos-latest 不排队。
 on:
@@ -30,26 +30,19 @@ jobs:
           sudo installer -pkg /tmp/python.pkg -target /
           echo "PY=/Library/Frameworks/Python.framework/Versions/3.10/bin/python3" >> "$GITHUB_ENV"
 
-      - name: 下 bge-m3(打进包)
-        working-directory: sidecar
-        run: |
-          arch -x86_64 "$PY" -m pip install --upgrade pip huggingface_hub
-          arch -x86_64 "$PY" -c "from huggingface_hub import snapshot_download; snapshot_download('BAAI/bge-m3', local_dir='models/bge-m3', ignore_patterns=['onnx/*','*.onnx','colbert*','*.msgpack','*.h5','imgs/*'])"
-
-      - name: 下音视频入库模型 + Mac ffmpeg(SenseVoice ASR/说话人分离,打进包→离线可用)
+      # ★0.2.0 瘦身:bge-m3(2.3G)/SenseVoice(0.9G)不打包(对齐 Windows 已验证路),首启从 OSS 下到数据目录。
+      - name: 下音视频入库模型(不含SenseVoice) + Mac ffmpeg
         working-directory: sidecar
         run: |
           set -e
           mkdir -p models bin
-          curl -fsSL -o /tmp/sv.tar.bz2 https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models/sherpa-onnx-sense-voice-zh-en-ja-ko-yue-2024-07-17.tar.bz2
-          tar xjf /tmp/sv.tar.bz2 -C models/
           curl -fsSL -o models/silero_vad.onnx https://github.com/snakers4/silero-vad/raw/v4.0/files/silero_vad.onnx  # ★v4:sherpa1.11.1兼容
           curl -fsSL -o /tmp/seg.tar.bz2 https://github.com/k2-fsa/sherpa-onnx/releases/download/speaker-segmentation-models/sherpa-onnx-pyannote-segmentation-3-0.tar.bz2
           tar xjf /tmp/seg.tar.bz2 -C models/
           curl -fsSL -o models/3dspeaker_speech_eres2net_base_sv_zh-cn_3dspeaker_16k.onnx https://github.com/k2-fsa/sherpa-onnx/releases/download/speaker-recongition-models/3dspeaker_speech_eres2net_base_sv_zh-cn_3dspeaker_16k.onnx
           curl -fsSL -o /tmp/ff.zip https://evermeet.cx/ffmpeg/getrelease/ffmpeg/zip
           unzip -o /tmp/ff.zip -d bin/ && chmod +x bin/ffmpeg
-          du -sh models/sherpa-onnx-sense-voice-zh-en-ja-ko-yue-2024-07-17 bin/ffmpeg
+          ls -la models/ bin/
 
       - name: 冻结主 sidecar(x86_64,torch 环境)+ selftest
         working-directory: sidecar

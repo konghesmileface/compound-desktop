@@ -95,8 +95,15 @@ def render_ppt(data: dict, tag: str, theme: str = DEFAULT_THEME) -> str:
     blank = prs.slide_layouts[6]
 
     def paint_bg(slide):
+        # ★slide.background.fill 生成的 <p:bg> 很多渲染器不认(officecli 预览 / 部分 PowerPoint 导出
+        #   都渲成白底——实测 mac2「深空」PPT 全白)。可靠做法:铺一张满版矩形当底色,任何查看器都渲。
+        #   paint_bg 在加内容前调用→矩形天然在最底层。仍保留 slide.background 作双保险。
         slide.background.fill.solid()
         slide.background.fill.fore_color.rgb = C(th["bg"])
+        rect = slide.shapes.add_shape(MSO_SHAPE.RECTANGLE, 0, 0, SW, SH)
+        rect.fill.solid(); rect.fill.fore_color.rgb = C(th["bg"])
+        rect.line.fill.background()
+        rect.shadow.inherit = False
 
     def bar(slide, x, y, w, h, color):
         shp = slide.shapes.add_shape(MSO_SHAPE.RECTANGLE, x, y, w, h)

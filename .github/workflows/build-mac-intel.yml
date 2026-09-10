@@ -1,6 +1,6 @@
 name: Build Mac Intel 轻量版
 
-# 轻量版(rapidocr v6 + bge-m3 打进包)。
+# 轻量版(rapidocr v6 打进包;bge-m3/SenseVoice 0.2.0 起不打包→首启 model_bootstrap 从 OSS 下,包瘦到几百M)。
 # ★用 macos-latest(arm,不排队)+ Rosetta 跑 x86_64 Python 出 Intel sidecar;
 #   Tauri 交叉编译到 x86_64。避开 macos-13 死排。
 on:
@@ -40,21 +40,13 @@ jobs:
           sudo installer -pkg /tmp/python.pkg -target /
           echo "PY=/Library/Frameworks/Python.framework/Versions/3.10/bin/python3" >> "$GITHUB_ENV"
 
-      - name: 下 bge-m3 嵌入模型(打进包→离线开箱即用)
-        working-directory: sidecar
-        run: |
-          arch -x86_64 "$PY" -m pip install --upgrade pip huggingface_hub
-          arch -x86_64 "$PY" -c "from huggingface_hub import snapshot_download; snapshot_download('BAAI/bge-m3', local_dir='models/bge-m3', ignore_patterns=['onnx/*','*.onnx','colbert*','*.msgpack','*.h5','imgs/*'])"
-          du -sh models/bge-m3
-
-      - name: 下音视频入库模型 + Mac ffmpeg(SenseVoice ASR/说话人分离,打进包→离线可用)
+      # ★0.2.0 瘦身:bge-m3(2.3G)/SenseVoice(0.9G)不再打进包(对齐 Windows 已验证路)。
+      #   首启 model_bootstrap 从 OSS 下到数据目录;版本更新只换程序壳,模型不重下。
+      - name: 下音视频入库模型(不含SenseVoice) + Mac ffmpeg
         working-directory: sidecar
         run: |
           set -e
           mkdir -p models bin
-          # SenseVoice ASR(sherpa-onnx 官方,与 T430 实测同版本)
-          curl -fsSL -o /tmp/sv.tar.bz2 https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models/sherpa-onnx-sense-voice-zh-en-ja-ko-yue-2024-07-17.tar.bz2
-          tar xjf /tmp/sv.tar.bz2 -C models/
           # silero VAD ★必须 v4(sherpa-onnx 1.11.1 不认新版 silero,报 Unsupported silero vad model)
           curl -fsSL -o models/silero_vad.onnx https://github.com/snakers4/silero-vad/raw/v4.0/files/silero_vad.onnx
           # 说话人分离:pyannote 分割 + 3dspeaker 声纹
@@ -64,10 +56,9 @@ jobs:
           # Mac Intel 静态 ffmpeg(evermeet.cx)
           curl -fsSL -o /tmp/ff.zip https://evermeet.cx/ffmpeg/getrelease/ffmpeg/zip
           unzip -o /tmp/ff.zip -d bin/ && chmod +x bin/ffmpeg
-          du -sh models/sherpa-onnx-sense-voice-zh-en-ja-ko-yue-2024-07-17 bin/ffmpeg
           ls -la models/ bin/
 
-      - name: 冻结后端 sidecar(x86_64,内含 rapidocr v6 + bge-m3)+ selftest
+      - name: 冻结后端 sidecar(x86_64,内含 rapidocr v6)+ selftest
         working-directory: sidecar
         run: |
           arch -x86_64 "$PY" -m pip install -r requirements.txt pyinstaller
