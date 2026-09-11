@@ -21,8 +21,8 @@ PROVIDER_DEFAULTS = {
     "deepseek": ("https://api.deepseek.com", "deepseek-v4-pro", "deepseek-v4-flash"),
     "qwen": ("https://dashscope.aliyuncs.com/compatible-mode/v1", "qwen-max", "qwen-flash"),          # 稳定别名,自动跟最新代
     "doubao": ("https://ark.cn-beijing.volces.com/api/v3", "doubao-seed-2-1-pro-260628", "doubao-seed-2-0-mini-260428"),  # ★火山方舟:模型名要带准确版本号,旧doubao-pro-32k已下线;去控制台复制
-    "kimi": ("https://api.moonshot.cn/v1", "kimi-k2.5", "kimi-k2.5"),
-    "zhipu": ("https://open.bigmodel.cn/api/paas/v4", "glm-4.6", "glm-4.5-flash"),
+    "kimi": ("https://api.moonshot.cn/v1", "kimi-k2.6", "kimi-k2.6"),   # ★kimi-k2.5 已于2026-08-31下线(返404)→改 k2.6
+    "zhipu": ("https://open.bigmodel.cn/api/paas/v4", "glm-4.6", "glm-4.7-flash"),   # ★glm-4.5-flash 已停用(2026-01-30)→改 glm-4.7-flash
     "openai": ("https://api.openai.com/v1", "gpt-5", "gpt-5-mini"),
     "claude": ("https://api.anthropic.com/v1", "claude-sonnet-4-6", "claude-haiku-4-5"),              # OpenAI 兼容层
     "gemini": ("https://generativelanguage.googleapis.com/v1beta/openai", "gemini-2.5-pro", "gemini-2.5-flash"),
