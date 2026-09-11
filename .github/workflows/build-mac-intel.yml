@@ -62,6 +62,12 @@ jobs:
         working-directory: sidecar
         run: |
           arch -x86_64 "$PY" -m pip install -r requirements.txt pyinstaller
+          # ★cryptography 含 Rust 原生扩展(_rust.abi3.so):universal2 Python 下 pip 常误装 arm64 slice,
+          #   PyInstaller 交叉打 x86_64 时报 IncompatibleBinaryArchError。先卸载再用 --platform 强制拉含 x86_64 的 wheel。
+          SITE=$(arch -x86_64 "$PY" -c "import site;print(site.getsitepackages()[0])")
+          arch -x86_64 "$PY" -m pip uninstall -y cryptography || true
+          arch -x86_64 "$PY" -m pip install --no-deps --only-binary=:all: --platform macosx_10_12_universal2 --platform macosx_10_9_x86_64 --target "$SITE" cryptography
+          file "$SITE"/cryptography/hazmat/bindings/_rust.abi3.so
           arch -x86_64 "$PY" -m PyInstaller --noconfirm compound-sidecar.spec
           file dist/compound-sidecar/compound-sidecar
           ./dist/compound-sidecar/compound-sidecar --selftest
