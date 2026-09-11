@@ -73,9 +73,13 @@ def login():
 
 def main():
     tok = login()
-    back_port = free_port()
-    threading.Thread(target=ThreadingHTTPServer(("127.0.0.1", back_port), BackHandler).serve_forever,
-                     daemon=True).start()
+    # LOCAL_PORT 指定=转发到真 sidecar(全真回归);不指定=起桩后端(通道自测)
+    if os.environ.get("LOCAL_PORT"):
+        back_port = int(os.environ["LOCAL_PORT"])
+    else:
+        back_port = free_port()
+        threading.Thread(target=ThreadingHTTPServer(("127.0.0.1", back_port), BackHandler).serve_forever,
+                         daemon=True).start()
     phone_link._save({"cloud_token": tok, "relay_url": RELAY, "devices": []})
     phone_link.CONNECTOR.local_port = back_port
     phone_link.start()
