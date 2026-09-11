@@ -160,6 +160,19 @@ def _start_bg_analyzer():
         import chat_intel as _CI, entities as _EN, dockind as _DK
         import chat_topics as CT   # ★chat星系预热用;原来漏 import 导致 "name 'CT' is not defined"、预热一直失败→首次点仅聊天要现算
         _PF = _perf_profile(); _AB = _PF["analyze_batch"]   # 好机器每轮多处理、少sleep;老机器温柔
+        # ★★性能P0:pages/page_embeddings 缺 doc_id/page_id 索引→bg每轮"找没嵌入的微信页"三表JOIN
+        #   对 1.5万页×1.5万向量做 2.4亿次操作/轮→CPU 232%持续、承诺雷达卡死、所有请求(含保存key)被饿死
+        #   (用户实测本机承诺雷达卡466/保存无反应)。建索引后同查询 0.6s、CPU降到90%、接口30s超时→0.04s。
+        try:
+            _c0 = _con()
+            try:
+                _c0.execute("CREATE INDEX IF NOT EXISTS idx_pages_doc ON pages(doc_id)")
+                _c0.execute("CREATE INDEX IF NOT EXISTS idx_pageemb_page ON page_embeddings(page_id)")
+                _c0.commit()
+            finally:
+                _c0.close()
+        except Exception as _e:
+            print(f"[bg-analyze] 建索引: {_e}")
         while True:
             worked = False
             if _BG_ANALYZE_LOCK.acquire(blocking=False):
