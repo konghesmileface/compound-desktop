@@ -142,6 +142,14 @@ def _html_readable(raw):
         for t in soup(["script", "style", "noscript", "head", "nav", "header", "footer",
                        "aside", "form", "button", "svg", "iframe", "select", "label"]):
             t.decompose()
+        # ★公众号文章(mp.weixin): 正文固定在 #js_content / .rich_media_content(服务端渲染但
+        #   visibility:hidden),下面的通用 junk 启发式会把它整块误删→提取变 0。命中就直取+标题。
+        wx = soup.find(id="js_content") or soup.find(attrs={"class": "rich_media_content"})
+        if wx is not None and len(wx.get_text(strip=True)) >= 120:
+            title = soup.find(id="activity-name") or soup.find(attrs={"class": "rich_media_title"})
+            head = (title.get_text(" ", strip=True) + "\n") if title else ""
+            lines = [ln.strip() for ln in (head + wx.get_text("\n")).splitlines() if ln.strip()]
+            return "\n".join(lines)
         # 按 class/id 名删明显的非正文容器(导航/菜单/侧栏/横幅/cookie/订阅/分享/评论/广告)
         junk = _re.compile(r"(nav|menu|header|footer|sidebar|side-bar|banner|cookie|subscrib|"
                            r"share|social|comment|promo|advert|masthead|breadcrumb|pagination|"

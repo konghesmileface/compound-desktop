@@ -5199,7 +5199,11 @@ def _fetch_url(url: str, owner=None) -> str:
                 if os.path.exists(base + ext):
                     return base + ext
             return pth
-    req = _u.Request(url, headers={"User-Agent": "Mozilla/5.0"})
+    # ★完整浏览器 UA:裸 Mozilla/5.0 会被公众号(mp.weixin)打「环境异常」验证页,抓回来的是空壳
+    req = _u.Request(url, headers={
+        "User-Agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 17_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.5 Mobile/15E148 Safari/604.1",
+        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+        "Accept-Language": "zh-CN,zh;q=0.9"})
     r = _u.urlopen(req, timeout=15)
     ct = (r.headers.get("Content-Type") or "").split(";")[0].strip()
     ext = os.path.splitext(url.split("?")[0])[1].lower()
@@ -5219,9 +5223,17 @@ def _fetch_url(url: str, owner=None) -> str:
         try:
             html_txt = data.decode("utf-8", errors="ignore")
             m = _re.search(r"<title[^>]*>(.*?)</title>", html_txt, _re.S | _re.I)
-            if m:
+            _t_raw = m.group(1) if m else ""
+            if not _t_raw.strip():   # ★公众号 <title> 是空的(JS 填)→ 退 og:title / activity-name 标题
+                for _pat in (r'<meta[^>]+property=["\']og:title["\'][^>]+content=["\']([^"\']+)',
+                             r'<h1[^>]*id="activity-name"[^>]*>(.*?)</h1>'):
+                    _mm = _re.search(_pat, html_txt, _re.S | _re.I)
+                    if _mm and _re.sub(r"<[^>]+>", "", _mm.group(1)).strip():
+                        _t_raw = _re.sub(r"<[^>]+>", " ", _mm.group(1))
+                        break
+            if _t_raw.strip():
                 import html as _hh
-                title = _re.sub(r"\s+", " ", _hh.unescape(m.group(1))).strip()
+                title = _re.sub(r"\s+", " ", _hh.unescape(_t_raw)).strip()
                 title = _re.sub(r"[^0-9A-Za-z一-鿿 .-]", "_", title)[:60].strip(" _")
                 if title and title != "网页":
                     newdest = os.path.join(_updir, title + ".html")
