@@ -24,12 +24,26 @@ const IC = {
       <path d="M17.6 14.6l.7 2 2 .7-2 .7-.7 2-.7-2-2-.7 2-.7z" fill="currentColor" />
     </svg>
   ),
+  key: (
+    <svg viewBox="0 0 24 24" fill="none">
+      <circle cx="8" cy="9" r="4" fill="currentColor" fillOpacity="0.22" /><circle cx="8" cy="9" r="4" {...St} />
+      <path d="M11 11.4 19 19.4M16.4 16.8l2-2M14.2 14.6l2-2" {...St} />
+    </svg>
+  ),
+  persona: (
+    <svg viewBox="0 0 24 24" fill="none">
+      <circle cx="12" cy="8.4" r="3.4" fill="currentColor" fillOpacity="0.22" /><circle cx="12" cy="8.4" r="3.4" {...St} />
+      <path d="M5.5 20c0-3.6 2.9-6 6.5-6s6.5 2.4 6.5 6" {...St} />
+    </svg>
+  ),
 }
 
 const STEPS = [
-  { icon: 'brain', hue: 190, title: '欢迎来到 Compound', body: '你的复利大脑 —— 把你所有的历史(文档、笔记、目标)复利成一个会主动帮你的大脑。你越用,它越懂你。' },
-  { icon: 'ingest', hue: 210, title: '先喂它一点东西', body: '去「入库」拖进文档 / 文件夹。你的文件永远只在本地、不上传。库越满,联想和产出越准。', cta: '去入库', tab: 'ingest' },
-  { icon: 'spark', hue: 45, title: '它会主动来找你', body: '在「问答」建目标 / 日记卡片。AI 会翻你的全部历史,发现能推进的下一步、到点提醒你 —— 红点,就是它找你了。' },
+  { icon: 'brain', hue: 190, title: '欢迎来到 Compound', body: '你的复利大脑 —— 把你的聊天、文档、笔记复利成一个会主动帮你的大脑。跟着下面 4 步走,十分钟就能用起来。你越用,它越懂你。' },
+  { icon: 'key', hue: 265, title: '第 1 步 · 先配置你的 AI', body: '去「设置」选一家 AI(推荐 DeepSeek,便宜中文好)、填上你的 Key,填完点「测试连通」确认能用。★这是第一件必做的事 —— 没有 AI,画像、问答、产出这些全跑不起来。', cta: '去设置配 AI', tab: 'settings' },
+  { icon: 'ingest', hue: 210, title: '第 2 步 · 把你的数据弄进来', body: '去「入库」,三种方式任选:① 微信聊天 —— 装微信同步助手,电脑版微信开着就自动进;② iPhone 老聊天 —— 数据线连手机,一次性把历史补进来;③ 文档 —— 直接拖文件 / 文件夹。数据越多它越懂你,且全程只在本地、绝不上传。', cta: '去入库', tab: 'ingest' },
+  { icon: 'persona', hue: 45, title: '第 3 步 · 生成人格画像', body: '去「画像」,让 AI 通读你的数据、读懂你是谁、在意什么。有了画像,好友匹配、冥想主题曲、深度产出才算得准。', cta: '去生成画像', tab: 'persona' },
+  { icon: 'spark', hue: 320, title: '第 4 步 · 开始用,它会主动找你', body: '在「问答」建目标 / 日记卡片,AI 翻你全部历史帮你推进;「雷达」盯着承诺与商机;「好友」算姻缘契合;「冥想」为你谱专属主题曲。左侧出现红点,就是它主动来找你了。' },
 ]
 
 export default function Onboard({ onDone, onGoto }) {
