@@ -7,10 +7,15 @@
   - 桌面: 每账号一条(新顶旧);手机: 每账号多条,打 cid 路由戳
   - 手机→桌面: 帧加 cid 转发;桌面→手机: 按 cid 回投并剥掉 cid
   - presence: 桌面上/下线时推给该账号全部手机
-运行: RELAY_PORT=8300 ACCOUNT_URL=http://127.0.0.1:8000 python3 relay_server.py
+  - ★M2 WebRTC 信令(t=rtc): offer/answer/ice 经此转发(手机↔桌面),建 DataChannel 后业务数据直连不再过 relay
+  - ★M2 TURN 凭证(t=turn): 用 TURN_SECRET 现算 coturn REST 临时凭证(HMAC-SHA1),返 iceServers,secret 只在此不下发
+运行: RELAY_PORT=8300 ACCOUNT_URL=http://127.0.0.1:8000 TURN_SECRET=xxx python3 relay_server.py
 nginx: /relay 反代 ws → 127.0.0.1:8300(见 deploy/ 下配置)
 """
 import asyncio
+import base64
+import hashlib
+import hmac
 import json
 import os
 import secrets
@@ -19,7 +24,25 @@ import urllib.request
 
 PORT = int(os.environ.get("RELAY_PORT", "8300"))
 ACCOUNT_URL = os.environ.get("ACCOUNT_URL", "http://127.0.0.1:8000")
+TURN_SECRET = os.environ.get("TURN_SECRET", "")
+TURN_HOST = os.environ.get("TURN_HOST", "compoundtome.com")
+TURN_TTL = 24 * 3600
 MAX_FRAME = 52 * 1024 * 1024
+
+
+def _turn_iceservers():
+    """coturn use-auth-secret REST 凭证: username='<expiry>:webrtc', credential=b64(HMAC-SHA1(secret, username))。
+    无 secret 时只给 STUN(仍可尝试打洞,只是缺 TURN 兜底)。"""
+    stun = {"urls": ["stun:%s:3478" % TURN_HOST]}
+    if not TURN_SECRET:
+        return [stun]
+    user = "%d:webrtc" % int(time.time() + TURN_TTL)
+    cred = base64.b64encode(hmac.new(TURN_SECRET.encode(), user.encode(), hashlib.sha1).digest()).decode()
+    return [stun, {
+        "urls": ["turn:%s:3478?transport=udp" % TURN_HOST,
+                 "turn:%s:3478?transport=tcp" % TURN_HOST],
+        "username": user, "credential": cred,
+    }]
 
 ROOMS = {}   # ident -> {"desktop": ws|None, "phones": {cid: ws}}
 _tok_cache = {}   # token -> (ident, exp)
@@ -100,11 +123,14 @@ async def handle(ws):
                     frame = json.loads(raw)
                 except Exception:
                     continue
+                if frame.get("t") == "turn":          # 桌面也可要 TURN 凭证(建 offer 侧)
+                    await ws.send(json.dumps({"t": "turn", "iceServers": _turn_iceservers()}))
+                    continue
                 cid = frame.pop("cid", None)
                 target = room["phones"].get(cid)
                 if target:
                     try:
-                        await target.send(json.dumps(frame))
+                        await target.send(json.dumps(frame))   # 含 rtc 信令(answer/ice)回投手机
                     except Exception:
                         room["phones"].pop(cid, None)
         finally:
@@ -121,7 +147,10 @@ async def handle(ws):
                     frame = json.loads(raw)
                 except Exception:
                     continue
-                if frame.get("t") not in ("req", "pair"):
+                if frame.get("t") == "turn":          # 手机要 TURN 凭证,relay 就地发放不转桌面
+                    await ws.send(json.dumps({"t": "turn", "iceServers": _turn_iceservers()}))
+                    continue
+                if frame.get("t") not in ("req", "pair", "rtc"):   # ★rtc=WebRTC信令(offer/ice)转桌面
                     continue
                 frame["cid"] = cid
                 d = room["desktop"]
