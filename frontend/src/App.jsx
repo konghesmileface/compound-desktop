@@ -105,6 +105,11 @@ export default function App() {
     if (!auth) return
     api.wechatWatch().catch(() => {})
   }, [auth])
+  // 手机连接:登录后把云账号 token 交给 sidecar 外连模块(中转 hello 鉴权用),失败静默(下次登录再交)
+  React.useEffect(() => {
+    if (!auth || !auth.token) return
+    api.phoneCloudToken(auth.token).catch(() => {})
+  }, [auth])
   // 好友请求数(左侧「好友」tab 角标提示)
   const [friendReqs, setFriendReqs] = useState(0)
   React.useEffect(() => {

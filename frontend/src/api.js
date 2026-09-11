@@ -211,4 +211,9 @@ export const api = {
   autosyncList: () => fetch('/api/autosync/list', { headers: authHeaders() }).then(j),
   autosyncAdd: (path) => fetch('/api/autosync/add', { method: 'POST', headers: { 'Content-Type': 'application/json', ...authHeaders() }, body: JSON.stringify({ path }) }).then(j),
   autosyncRemove: (path) => fetch('/api/autosync/remove', { method: 'POST', headers: { 'Content-Type': 'application/json', ...authHeaders() }, body: JSON.stringify({ path }) }).then(j),
+  // 手机连接(复利 App 通道,后端 phone_link.py):token 交接/扫码配对/状态/设备管理
+  phoneCloudToken: (token) => fetch('/api/phone/cloud_token', { method: 'POST', headers: { 'Content-Type': 'application/json', ...authHeaders() }, body: JSON.stringify({ token }) }).then(j),
+  phonePairStart: () => fetch('/api/phone/pair/start', { method: 'POST', headers: authHeaders() }).then(j),
+  phoneStatus: () => fetch('/api/phone/status', { headers: authHeaders() }).then(j),
+  phoneRemoveDevice: (dev) => fetch(`/api/phone/device/${encodeURIComponent(dev)}`, { method: 'DELETE', headers: authHeaders() }).then(j),
 }

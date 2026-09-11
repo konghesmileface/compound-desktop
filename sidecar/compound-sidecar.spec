@@ -105,7 +105,8 @@ for pkg in ("sentence_transformers", "transformers", "sklearn",
             "sklearn.cluster", "sklearn.neighbors", "sklearn.feature_extraction.text",
             "sherpa_onnx", "soundfile", "edge_tts", "media_ingest",   # ★音视频入库 + 一生旁白TTS
             "yt_dlp", "bs4", "mobi",   # ★网址抓取(视频)/网页HTML解析/mobi电子书——均函数内惰性 import,不显式钉会被漏收
-            "dockind", "chat_intel", "entities", "relationships", "chat_topics", "owner_ctx"):   # ★人脉/雷达自驱本地模块(bg-analyze lazy import,显式钉防漏收)
+            "dockind", "chat_intel", "entities", "relationships", "chat_topics", "owner_ctx",   # ★人脉/雷达自驱本地模块(bg-analyze lazy import,显式钉防漏收)
+            "phone_link", "websockets", "cryptography", "qrcode"):   # ★手机通道:外连中转+E2E加密+配对码(crypto在函数内惰性import,必须钉)
     try:
         hiddenimports += collect_submodules(pkg)
     except Exception:
