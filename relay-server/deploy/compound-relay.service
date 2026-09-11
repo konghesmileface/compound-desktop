@@ -1,0 +1,15 @@
+[Unit]
+Description=Compound phone-link relay (E2E passthrough, no plaintext)
+After=network.target
+
+[Service]
+Type=simple
+WorkingDirectory=/opt/compound-relay
+Environment=RELAY_PORT=8300
+Environment=ACCOUNT_URL=http://127.0.0.1:8000
+ExecStart=/usr/bin/python3 /opt/compound-relay/relay_server.py
+Restart=always
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target

@@ -39,3 +39,6 @@ sherpa-onnx==1.10.46  # ★钉1.10.46(x86_64 Intel专属最优):≥1.11.2捆绑�
 #   真机x86_64 macOS12验证:1.10.46+silero v4→SenseVoice转写逐字准确+VAD+pyannote/3dspeaker说话人分离全通。
 #   ★配套:必须silero v4(≤1.11.x不认新版silero报Unsupported silero vad model)。CI已下v4。106(Linux)用1.13.6+v4亦验证兼容。
 soundfile       # sherpa-onnx 读写音频依赖
+websockets      # 手机通道:外连106中转(纯py零打包坑)
+cryptography    # 手机通道:P-256 ECDH+HKDF+AES-GCM 端到端加密
+qrcode          # 手机配对二维码(PIL已有)

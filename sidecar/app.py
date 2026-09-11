@@ -2874,6 +2874,19 @@ def _my_ids(con, me):
     return {r[0] for r in con.execute("SELECT id FROM documents WHERE owner=?", (me,))}
 
 
+# ---- 手机连接通道(App M1): 常驻外连云中转,端到端加密,协议见 phone_link.py 头注释 ----
+import phone_link as _phone_link
+app.include_router(_phone_link.build_router(_me))
+
+
+@app.on_event("startup")
+def _phone_link_boot():
+    try:
+        _phone_link.start(port=int(os.environ.get("WEB_PORT", "8200")))
+    except Exception as e:
+        print(f"[phone-link] start failed: {e}")
+
+
 # ===== 会员/付费:前端同源调本网关,网关转发到云账号服务(compound-server)。均不做付费门控。 =====
 def _cloud_proxy(method, path, authorization, body=None):
     data = json.dumps(body).encode() if body is not None else None
