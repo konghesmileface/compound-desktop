@@ -2121,11 +2121,22 @@ def wechat_bind(authorization: str = Header(None)):
 #    (job_id 以 iphone- 开头,前端 iOS tab 的五段式动画读它)。执行代码 = sidecar/wxsync/import_iphone。
 _IPHONE_IMPORT = {"running": False}
 
+def _ensure_ios_tools_path():
+    """★把 brew 目录加进进程 PATH:macOS GUI 启动的 app,PATH 默认只有 /usr/bin:/bin:/usr/sbin:/sbin,
+    不含 /usr/local/bin(Intel brew)和 /opt/homebrew/bin(Apple芯片 brew)→ shutil.which('idevicebackup2')
+    即使工具已装也找不到,误报'未检测到 iPhone 备份工具'(用户实测:本机装了却报缺)。加进 PATH 后 which
+    + 后续 idevicebackup2 子进程都能找到。幂等。"""
+    cur = os.environ.get("PATH", "").split(":")
+    for _p in ("/usr/local/bin", "/opt/homebrew/bin"):
+        if _p not in cur and os.path.isdir(_p):
+            os.environ["PATH"] = os.environ.get("PATH", "") + ":" + _p
+
 @app.get("/api/iphone/status")
 def iphone_status(authorization: str = Header(None)):
     """iOS 导入是否在跑 + 环境是否就绪(idevicebackup2 是否可用、有没有连手机)。"""
     _me(authorization)
     import shutil as _sh, subprocess as _sp
+    _ensure_ios_tools_path()   # ★先把 brew 路径加进 PATH,否则 GUI app 找不到已装的 idevicebackup2
     have_tool = bool(_sh.which("idevicebackup2") and _sh.which("idevice_id"))
     connected = False
     battery = None; charging = None
@@ -2160,6 +2171,7 @@ def iphone_import(authorization: str = Header(None)):
         return {"ok": True, "already_running": True}
 
     import shutil as _sh
+    _ensure_ios_tools_path()   # ★加 brew 路径进 PATH(GUI app 默认 PATH 找不到已装的 idevicebackup2)
     if not (_sh.which("idevicebackup2") and _sh.which("idevice_id")):
         raise HTTPException(400, "未检测到 iPhone 备份工具(idevicebackup2)。请先安装:brew install libimobiledevice")
 
