@@ -63,6 +63,29 @@ export default function Help() {
         <p>照着下面 1 → 2 → 3 做,十分钟内你的微信聊天就会自动进大脑。任何一步卡住,截图发我们,远程带你跑通。</p>
       </div>
 
+      {/* ===== 联系我们(置顶·醒目):遇到任何问题第一眼就能找到人 ===== */}
+      <div className="help-contact-hero">
+        <div className="hch-icon" aria-hidden>
+          <svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+            <rect x="2.5" y="4.5" width="19" height="15" rx="2.5" /><path d="M3.5 6.5l8.5 6 8.5-6" />
+          </svg>
+        </div>
+        <div className="hch-body">
+          <div className="hch-title">遇到问题?找我们,不用自己扛</div>
+          <div className="hch-sub">任何一步卡住、报错,或想让我们代接数据 —— 把<b>截图</b>和你的电脑系统(Windows / Intel Mac / Apple 芯片 Mac)发到下面邮箱,我们远程陪你跑到通。</div>
+          <div className="hch-actions">
+            <button type="button" className="hch-mail-btn" onClick={() => openExternal('mailto:hekong@spdt.freeqiye.com')}>
+              <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="2.5" y="4.5" width="19" height="15" rx="2.5" /><path d="M3.5 6.5l8.5 6 8.5-6" /></svg>
+              hekong@spdt.freeqiye.com
+            </button>
+            <button type="button" className="hch-copy-btn"
+              onClick={() => { try { navigator.clipboard.writeText('hekong@spdt.freeqiye.com').then(() => toast('邮箱已复制,去邮件发我们截图', 'ok')) } catch { toast('复制失败,请手动选中邮箱', 'err') } }}>
+              复制邮箱
+            </button>
+          </div>
+        </div>
+      </div>
+
       {/* ===== 主线:跟着做 ===== */}
       <div className="hstep glass">
         <div className="hstep-head"><span className="hstep-n">1</span><b>下载并安装「微信同步助手」</b><span className="hstep-time">约 2 分钟 · 只装一次</span></div>
@@ -151,23 +174,12 @@ export default function Help() {
         </div>
       ))}
 
-      <div className="help-contact glass">
-        <b>联系我们 · 搞不定?我们帮接。</b>把卡住那一步的截图和你的电脑系统(Windows / Intel Mac / Apple 芯片 Mac)发到下面的邮箱,远程陪你装到通;数据量大的也可以整体交给我们代接。
-        <div style={{ marginTop: 10, display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
-          <span style={{ opacity: 0.65 }}>邮箱</span>
-          <a
-            href="mailto:hekong@spdt.freeqiye.com"
-            style={{ fontWeight: 600 }}
-            onClick={(e) => { e.preventDefault(); openExternal('mailto:hekong@spdt.freeqiye.com') }}
-          >hekong@spdt.freeqiye.com</a>
-          <button
-            type="button" className="btn" style={{ padding: '2px 12px', fontSize: 12 }}
-            onClick={() => {
-              try { navigator.clipboard.writeText('hekong@spdt.freeqiye.com').then(() => toast('邮箱已复制', 'ok')) }
-              catch { toast('复制失败,请手动选中邮箱', 'err') }
-            }}
-          >复制</button>
-        </div>
+      <div className="help-contact-slim">
+        <span>还是搞不定?数据量大想让我们代接?</span>
+        <button type="button" className="hch-mail-link" onClick={() => openExternal('mailto:hekong@spdt.freeqiye.com')}>
+          <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="2.5" y="4.5" width="19" height="15" rx="2.5" /><path d="M3.5 6.5l8.5 6 8.5-6" /></svg>
+          hekong@spdt.freeqiye.com
+        </button>
       </div>
 
       {guideKey && <Guide sourceKey={guideKey} onClose={() => setGuideKey(null)} />}
