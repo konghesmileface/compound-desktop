@@ -15,6 +15,7 @@
 """
 import asyncio
 import base64
+import gzip as gzip_mod
 import hashlib
 import hmac as hmac_mod
 import io
@@ -225,6 +226,12 @@ class _Connector:
         except Exception:
             return dict(base, code="decrypt_failed")
         status, headers, body = self._local_call(req)
+        # 手机端声明支持 gzip(x-compound-gzip 头)且响应体可观 → 先压再加密。
+        # 106 出口带宽是通道吞吐瓶颈(实测 ~8KB/s),JSON 压 ~10 倍即快 ~10 倍;老手机端不声明则不压。
+        if body and len(body) > 1024 and str((req.get("headers") or {}).get("x-compound-gzip") or "") == "1":
+            body = gzip_mod.compress(body, 6)
+            headers = dict(headers or {})
+            headers["x-compound-encoding"] = "gzip"
         out = json.dumps({"status": status, "headers": headers,
                           "body_b64": _b64(body) if body else None}).encode()
         n, ct = _encrypt(key, ("resp:" + dev).encode(), out)

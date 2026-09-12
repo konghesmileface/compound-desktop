@@ -483,9 +483,27 @@ def stats(authorization: str = Header(None)):
         methods = {m: c for m, c in con.execute(
             "SELECT p.method, COUNT(*) FROM pages p JOIN documents d ON d.id=p.doc_id "
             "WHERE d.owner=? GROUP BY p.method ORDER BY 2 DESC", (me,))}
-        return {"documents": d[0], "pages": d[1], "methods": methods}
+        # app 数据全景:按内容类型细分(聊天/书/网页/视频…),payload 极小,适合手机通道
+        types = {}
+        for fn, mc in con.execute(
+                "SELECT filename, COALESCE(msg_count,0) FROM documents WHERE owner=?", (me,)):
+            fn = fn or ""
+            if mc > 0 or fn.startswith("微信_"):
+                k = "聊天"
+            else:
+                ext = os.path.splitext(fn)[1].lower()
+                k = _STAT_MEDIA.get(ext) or _FTYPE.get(ext, "其它")
+            types[k] = types.get(k, 0) + 1
+        return {"documents": d[0], "pages": d[1], "methods": methods, "types": types}
     finally:
         con.close()
+
+
+_STAT_MEDIA = {
+    ".mp4": "视频", ".mov": "视频", ".mkv": "视频", ".avi": "视频", ".webm": "视频",
+    ".mp3": "音频", ".wav": "音频", ".m4a": "音频", ".flac": "音频", ".aac": "音频",
+    ".png": "图片", ".jpg": "图片", ".jpeg": "图片", ".webp": "图片", ".heic": "图片", ".gif": "图片",
+}
 
 
 _FTYPE = {
@@ -977,17 +995,38 @@ def _db_cached(con, owner, name, builder):
         pass
     return v
 
+def _slim_relcards(data):
+    """手机人脉档精简:全量卡 ~850KB(600+人)经中转要 100s+;只留列表页字段,identity/open_loops 截断。"""
+    cards = []
+    for c in (data or {}).get("cards") or []:
+        if not isinstance(c, dict):
+            continue
+        cards.append({"contact": c.get("contact"), "identity": str(c.get("identity") or "")[:60],
+                      "msgcount": c.get("msgcount"), "days_ago": c.get("days_ago"),
+                      "deep": c.get("deep"), "is_group": c.get("is_group"),
+                      "member_count": c.get("member_count"),
+                      "open_loops": [str(x)[:48] for x in (c.get("open_loops") or [])[:2]]})
+    return {"cards": cards, "slim": 1}
+
+
 @app.get("/api/relationships")
-def relationships_api(refresh: int = 0, authorization: str = Header(None)):
-    """关系情报卡:每个微信联系人一张AI活档案(身份/事实/未了结/人情/走势)。"""
+def relationships_api(refresh: int = 0, slim: int = 0, offset: int = 0, limit: int = 0, authorization: str = Header(None)):
+    """关系情报卡:每个微信联系人一张AI活档案(身份/事实/未了结/人情/走势)。slim 供手机端列表页精简。"""
     me = _me(authorization)
     con = _con()
     try:
         # 只读缓存,秒回;limit 放大到覆盖所有会话(否则只返回最大的40个,漏掉warm先出的小会话卡)
         if refresh:
-            return {"cards": REL.all_cards(con, me, refresh=True, generate=True, limit=800)}
-        return _db_cached(con, me, "relationships",
-                          lambda: {"cards": REL.all_cards(con, me, refresh=False, generate=False, limit=800)})
+            data = {"cards": REL.all_cards(con, me, refresh=True, generate=True, limit=800)}
+        else:
+            data = _db_cached(con, me, "relationships",
+                              lambda: {"cards": REL.all_cards(con, me, refresh=False, generate=False, limit=800)})
+        if slim:
+            data = _slim_relcards(data)
+            if limit:
+                cards = data["cards"]
+                data = {"cards": cards[offset:offset + limit], "total": len(cards), "slim": 1}
+        return data
     finally:
         con.close()
 
