@@ -1629,13 +1629,47 @@ def rel_path_api(a: str = "", b: str = "", authorization: str = Header(None)):
         con.close()
 
 
+def _slim_commitments(data, window, slim):
+    """手机今日流用:window>0 只留"未来 window 天内到期且未陈旧"的 mine/theirs(overdue 全留);
+    slim 截断 quote 长文本。桌面端不传参数→全量,向后兼容。把承诺雷达从 ~200KB 压到几 KB,
+    避免经中转传输慢(实测全量 198KB 经 relay 24s,精简后 5KB 约 2.6s)。"""
+    if not isinstance(data, dict):
+        return data
+
+    def proc(item, force_keep=False):
+        if not isinstance(item, dict):
+            return item
+        d = item.get("days_to")
+        # mine/theirs 只要未来 window 天内到期且未陈旧;逾期很久的陈年承诺(days_to 大负数)不刷屏,
+        # 真正该提醒的逾期项走 overdue(force_keep 全留)。
+        if window and not force_keep:
+            if not isinstance(d, (int, float)) or d < 0 or d > window or item.get("stale"):
+                return None
+        if slim:
+            q = item.get("quote") or ""
+            return {"key": item.get("key"), "contact": item.get("contact"), "what": item.get("what"),
+                    "days_to": item.get("days_to"), "doc_id": item.get("doc_id"), "stale": item.get("stale"),
+                    "quote": (q[:120] + "…") if len(q) > 120 else q}
+        return item
+
+    out = dict(data)
+    out["mine"] = [x for x in (proc(i) for i in data.get("mine", [])) if x]
+    out["theirs"] = [x for x in (proc(i) for i in data.get("theirs", [])) if x]
+    out["overdue"] = [x for x in (proc(i, True) for i in data.get("overdue", [])) if x]
+    return out
+
+
 @app.get("/api/commitments")
-def commitments_api(refresh: int = 0, authorization: str = Header(None)):
-    """承诺雷达:跨人聚合未了结承诺(我欠的/等对方的),按到期排序。"""
+def commitments_api(refresh: int = 0, window: int = 0, slim: int = 0, authorization: str = Header(None)):
+    """承诺雷达:跨人聚合未了结承诺(我欠的/等对方的),按到期排序。
+    window/slim 供手机今日流精简(桌面端不传→全量)。"""
     me = _me(authorization)
     con = _con()
     try:
-        return CI.commitments_radar(con, me, refresh=bool(refresh))
+        data = CI.commitments_radar(con, me, refresh=bool(refresh))
+        if window or slim:
+            data = _slim_commitments(data, window, bool(slim))
+        return data
     finally:
         con.close()
 
