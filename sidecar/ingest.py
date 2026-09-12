@@ -419,7 +419,7 @@ FITZ_EXTS = (".pdf", ".epub", ".mobi", ".fb2", ".xps", ".cbz") + IMG_EXTS
 # Kindle KF8:fitz 打不开,先用 mobi 包转 epub 再走 fitz
 CONVERT_EXTS = (".azw3", ".azw")
 # Office / 文本 / 数据 / 网页 / 邮件:走 extract.py 提取
-OFFICE_EXTS = (".docx", ".pptx", ".xlsx", ".xlsm", ".md", ".markdown", ".txt",
+OFFICE_EXTS = (".docx", ".pptx", ".xlsx", ".xlsm", ".xls", ".md", ".markdown", ".txt",
                ".html", ".htm", ".csv", ".json", ".eml", ".mbox")
 # ★音/视频扩展名(与 media_ingest.AUDIO_EXTS/VIDEO_EXTS 一致;直接字面量,避免 import media_ingest
 #   触发 sherpa 加载)。process_any 里对这些走 media_ingest.process_media(转写入库)。

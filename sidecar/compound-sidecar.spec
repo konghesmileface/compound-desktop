@@ -99,7 +99,7 @@ if os.path.isdir(_dl):
 hiddenimports = ["cv2"]  # cv2 走上面显式收库,这里只作 plain hidden import(不 collect_submodules 免 gapi 崩)
 for pkg in ("sentence_transformers", "transformers", "sklearn",
             "fastapi", "uvicorn", "uvicorn.protocols", "uvicorn.lifespan",
-            "uvicorn.loops.auto", "anyio", "fitz", "docx", "pptx", "openpyxl",
+            "uvicorn.loops.auto", "anyio", "fitz", "docx", "pptx", "openpyxl", "xlrd",
             "rapidocr", "onnxruntime", "PIL", "pillow_heif", "certifi",
             "jieba", "requests", "numpy", "sklearn.utils._typedefs",
             "sklearn.cluster", "sklearn.neighbors", "sklearn.feature_extraction.text",

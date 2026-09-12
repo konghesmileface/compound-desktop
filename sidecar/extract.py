@@ -78,6 +78,25 @@ def _xlsx(path):
     return units
 
 
+def _xls(path):
+    # 老版 Excel 二进制格式(.xls):openpyxl 读不了,用 xlrd(2.0+ 恰好只保留 .xls 支持)。
+    #   每个工作表一个 unit,与 _xlsx 输出结构一致(工作表标题 + 行以 " | " 连接)。
+    import xlrd
+    wb = xlrd.open_workbook(path)
+    units = []
+    for i in range(wb.nsheets):
+        ws = wb.sheet_by_index(i)
+        rows = []
+        for r in range(ws.nrows):
+            vals = [str(ws.cell_value(r, c)) for c in range(ws.ncols)
+                    if str(ws.cell_value(r, c)).strip() != ""]
+            if vals:
+                rows.append(" | ".join(vals))
+        txt = f"# 工作表: {ws.name}\n" + "\n".join(rows)
+        units.append((i + 1, txt.strip(), "xls"))
+    return units
+
+
 def _text(path):
     with open(path, "r", encoding="utf-8", errors="ignore") as f:
         raw = f.read()
@@ -432,6 +451,8 @@ def extract_units(path: str):
         return _pptx(path)
     if ext in (".xlsx", ".xlsm"):
         return _xlsx(path)
+    if ext == ".xls":
+        return _xls(path)
     if ext == ".txt" and _looks_wechat_txt(path):
         return _wechat_txt(path)
     if ext in (".md", ".markdown", ".txt"):
