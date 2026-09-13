@@ -169,8 +169,10 @@ async def handle(ws):
 
 async def main():
     import websockets
+    # ping_timeout 容得下"一个大帧占满低带宽出口"的时长:106 出口最差 ~8KB/s,
+    # 132KB 帧要 ~17s,ping 排其后 >20s 被误杀(人脉档大帧间歇断线根因)→ 60s。
     async with websockets.serve(handle, "127.0.0.1", PORT, max_size=MAX_FRAME,
-                                ping_interval=25, ping_timeout=20):
+                                ping_interval=25, ping_timeout=60):
         print("[relay] listening 127.0.0.1:%d account=%s" % (PORT, ACCOUNT_URL))
         await asyncio.Future()
 
