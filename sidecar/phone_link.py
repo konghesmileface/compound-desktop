@@ -100,6 +100,9 @@ class _Connector:
         self._loop = None
         self._thread = None
         self._gen = 0               # token/配置变更代数,旧连接自杀
+        self._ws = None             # 当前 session 的 ws(供前端 answerer 经 loop 发 rtc 信令)
+        self._rtc_in = []           # 手机→桌面 rtc 信令队列(前端短轮询取走)
+        self._rtc_lock = threading.Lock()
 
     # -- 生命周期 --
     def ensure_started(self):
@@ -163,14 +166,19 @@ class _Connector:
                 raise RuntimeError("relay hello rejected: %s" % first)
             self.state = "connected"
             self.last_err = ""
-            async for raw in ws:
-                if self._gen != gen:
-                    return
-                try:
-                    frame = json.loads(raw)
-                except Exception:
-                    continue
-                asyncio.get_running_loop().create_task(self._handle(ws, frame))
+            self._ws = ws
+            try:
+                async for raw in ws:
+                    if self._gen != gen:
+                        return
+                    try:
+                        frame = json.loads(raw)
+                    except Exception:
+                        continue
+                    asyncio.get_running_loop().create_task(self._handle(ws, frame))
+            finally:
+                if self._ws is ws:
+                    self._ws = None
 
     async def _handle(self, ws, frame):
         t = frame.get("t")
@@ -180,6 +188,15 @@ class _Connector:
             elif t == "req":
                 resp = await asyncio.get_running_loop().run_in_executor(None, self._on_req, frame)
                 await ws.send(json.dumps(resp))
+            elif t == "rtc":
+                # WebRTC 信令(手机 offerer → 桌面 answerer):入队,前端 answerer 短轮询取走。
+                # 只搬运不解析,answer/ice 由前端算好经 /api/phone/rtc/signal 发回。
+                with self._rtc_lock:
+                    self._rtc_in.append({"sub": frame.get("sub"), "dev": frame.get("dev"),
+                                         "cid": frame.get("cid"), "sdp": frame.get("sdp"),
+                                         "cand": frame.get("cand")})
+                    if len(self._rtc_in) > 256:
+                        self._rtc_in = self._rtc_in[-256:]
         except Exception as e:
             try:
                 await ws.send(json.dumps({"t": "err", "code": "internal", "id": frame.get("id"),
@@ -230,6 +247,44 @@ class _Connector:
         n, ct = _encrypt(key, ("resp:" + dev).encode(), out)
         return {"t": "resp", "id": frame.get("id"), "cid": frame.get("cid"), "dev": dev,
                 "n": _b64(n), "d": _b64(ct)}
+
+    # -- WebRTC answerer 桥接(前端 webview 里跑 RTCPeerConnection,加解密仍在 Python) --
+    def rtc_drain(self):
+        """前端短轮询:取走并清空手机→桌面的 rtc 信令队列。"""
+        with self._rtc_lock:
+            out = self._rtc_in
+            self._rtc_in = []
+        return out
+
+    def rtc_send(self, frame):
+        """前端把 answer/ice 发回手机:经当前 relay ws 发 {t:rtc,...,cid}(relay 按 cid 回投)。"""
+        loop, ws = self._loop, self._ws
+        if not loop or not ws:
+            return False
+        data = json.dumps(dict(frame, t="rtc"))
+        try:
+            fut = asyncio.run_coroutine_threadsafe(ws.send(data), loop)
+            fut.result(timeout=5)
+            return True
+        except Exception:
+            return False
+
+    def rtc_exchange(self, dev, n_b64, d_b64):
+        """DataChannel 上的应用帧:复用 M1 同一套 解密→本地打后端→加密。密钥不出 Python。"""
+        rec = next((d for d in _load().get("devices", []) if d["dev"] == dev), None)
+        if not rec:
+            return None
+        key = _unb64(rec["key"])
+        try:
+            plain = _decrypt(key, ("req:" + dev).encode(), _unb64(n_b64), _unb64(d_b64))
+            req = json.loads(plain)
+        except Exception:
+            return None
+        status, headers, body = self._local_call(req)
+        out = json.dumps({"status": status, "headers": headers,
+                          "body_b64": _b64(body) if body else None}).encode()
+        n, ct = _encrypt(key, ("resp:" + dev).encode(), out)
+        return {"n": _b64(n), "d": _b64(ct)}
 
     def _local_call(self, req):
         path = req.get("path") or "/"
@@ -323,5 +378,38 @@ def build_router(me_fn):
         st["devices"] = [d for d in st.get("devices", []) if d["dev"] != dev]
         _save(st)
         return {"ok": True, "removed": before - len(st["devices"])}
+
+    # ---------- WebRTC answerer(桌面前端 webview 调用;鉴权同账号) ----------
+    @r.get("/api/phone/rtc/poll")
+    def rtc_poll(authorization: str = Header(None)):
+        me_fn(authorization)
+        # 只有 relay 连着才有意义;信令是手机→桌面的 offer/ice
+        return {"signals": CONNECTOR.rtc_drain(), "relay": CONNECTOR.state}
+
+    @r.post("/api/phone/rtc/signal")
+    def rtc_signal(payload: dict, authorization: str = Header(None)):
+        me_fn(authorization)
+        p = payload or {}
+        sub = p.get("sub")
+        if sub not in ("answer", "ice"):
+            raise HTTPException(400, "bad sub")
+        frame = {"sub": sub, "cid": p.get("cid")}
+        if sub == "answer":
+            frame["sdp"] = p.get("sdp")
+        else:
+            frame["cand"] = p.get("cand")
+        return {"ok": CONNECTOR.rtc_send(frame)}
+
+    @r.post("/api/phone/rtc/exchange")
+    def rtc_exchange(payload: dict, authorization: str = Header(None)):
+        me_fn(authorization)
+        p = payload or {}
+        dev, n, d = p.get("dev"), p.get("n"), p.get("d")
+        if not dev or not n or not d:
+            raise HTTPException(400, "missing dev/n/d")
+        r2 = CONNECTOR.rtc_exchange(dev, n, d)
+        if r2 is None:
+            raise HTTPException(400, "exchange failed")
+        return r2
 
     return r

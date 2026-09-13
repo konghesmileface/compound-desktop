@@ -216,4 +216,8 @@ export const api = {
   phonePairStart: () => fetch('/api/phone/pair/start', { method: 'POST', headers: authHeaders() }).then(j),
   phoneStatus: () => fetch('/api/phone/status', { headers: authHeaders() }).then(j),
   phoneRemoveDevice: (dev) => fetch(`/api/phone/device/${encodeURIComponent(dev)}`, { method: 'DELETE', headers: authHeaders() }).then(j),
+  // M2 WebRTC answerer(桌面前端 webview 里建直连;加解密仍在 Python)
+  rtcPoll: () => fetch('/api/phone/rtc/poll', { headers: authHeaders() }).then(j),
+  rtcSignal: (frame) => fetch('/api/phone/rtc/signal', { method: 'POST', headers: { 'Content-Type': 'application/json', ...authHeaders() }, body: JSON.stringify(frame) }).then(j),
+  rtcExchange: (dev, n, d) => fetch('/api/phone/rtc/exchange', { method: 'POST', headers: { 'Content-Type': 'application/json', ...authHeaders() }, body: JSON.stringify({ dev, n, d }) }).then(j),
 }

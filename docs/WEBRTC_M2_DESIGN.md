@@ -19,7 +19,7 @@
 - **手机端 WebRTC 传输**(`compound-mobile/src/channel/webrtc.js` + relay.js + api.js):RTCPeerConnection + DataChannel;`channelFetch` 优先 DataChannel、未就绪走 relay 并后台建直连、直连失败回落 relay。
 - **验证**:`compound-mobile/scripts/webrtc_check.py`(playwright 双页,真浏览器 WebRTC + 真 relay 信令)5 项全绿——DataChannel 建立/ICE 打洞/presence/请求往返×3/桌面确收。
 
-## 桌面端 answerer(待实现,进 0.2.8)
+## 桌面端 answerer ✅ 已实现并验证(2026-09-13,app-webrtc)
 桌面 WebRTC **不进 Rust crate、不进 Python aiortc**(打包深坑),跑在**桌面 Tauri 前端 webview JS** 里(客户端常驻开着,webview 原生支持 WebRTC,零新依赖)。前端 answerer 是"哑管道",加解密仍复用 Python phone_link(密钥不出 Python)。
 
 数据流:
@@ -30,6 +30,11 @@
 要写的:
 - phone_link.py:①`t=rtc` 入信令队列 ②`/api/phone/rtc/poll`(长轮询)③`/api/phone/rtc/signal`(前端→relay)④`/api/phone/rtc/exchange`(dev+n+d→复用解密转发)。offer 帧已带 `dev`(手机端已实现),exchange 按 dev 取 `phone_link.json` devices[].key。
 - 桌面前端:`RtcAnswerer` 组件(App 常驻挂载),轮询信令+建 pc+DataChannel→exchange 桥接。webview 最小化被节流时 DataChannel 可能断→检测到断自动让手机回落 relay(已有回落逻辑兜底)。
+
+**落地实现**:
+- `sidecar/phone_link.py`:_Connector 加 `_ws`(当前 relay ws)+ `_rtc_in` 信令队列;`_handle` 收 `t=rtc` 入队;`rtc_drain/rtc_send/rtc_exchange` 三方法;router 加 `/api/phone/rtc/{poll,signal,exchange}`。exchange 复用 `_decrypt/_local_call/_encrypt`(密钥不出 Python)。
+- `frontend/src/rtcAnswerer.js`:短轮询 poll→建 RTCPeerConnection→ondatachannel→answer/ice 经 signal 发回→DataChannel `{rid,n,d}` 经 exchange 桥接。`frontend/src/App.jsx` 登录后 `startRtcAnswerer()` 常驻。`api.js` 加 rtcPoll/rtcSignal/rtcExchange。
+- **验证(真环境)**:①`/api/phone/rtc/exchange` 真密钥解密→打后端→加密往返(rtc_exchange_test.mjs,status 200)②全链两浏览器页 E2E(真 answerer ↔ 真手机通道,经生产 relay 信令):**DataChannel open + 请求 via=webrtc-direct 不过 relay + status 200**(rtc_e2e.py PASS)。
 
 ## 待人工的最后一公里
 1. **安全组放行 UDP**:阿里云 106 需放行 UDP 3478、5349、49152-65535(TURN relay 范围)。106 的 `aliyun` cli 未配 AK(`/root/.aliyun/config.json` 缺失)→ 需在阿里云控制台放行,或配 AK 让脚本放行。**不放行则 STUN/TURN 公网不可达,打洞用不了**(但 relay 中转不受影响,功能不降级)。
