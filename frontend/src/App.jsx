@@ -1,4 +1,5 @@
 import React, { useState } from 'react'
+import { startRtcAnswerer, stopRtcAnswerer } from './rtcAnswerer.js'
 import Ingest from './Ingest'
 import Library from './Library'
 import Explore from './Explore'
@@ -109,6 +110,12 @@ export default function App() {
   React.useEffect(() => {
     if (!auth || !auth.token) return
     api.phoneCloudToken(auth.token).catch(() => {})
+  }, [auth])
+  // M2 WebRTC answerer:登录后常驻,应答手机打洞请求(直连成功则手机数据不过服务器)
+  React.useEffect(() => {
+    if (!auth || !auth.token) return
+    startRtcAnswerer()
+    return () => stopRtcAnswerer()
   }, [auth])
   // 好友请求数(左侧「好友」tab 角标提示)
   const [friendReqs, setFriendReqs] = useState(0)
