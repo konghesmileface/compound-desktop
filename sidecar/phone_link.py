@@ -157,8 +157,19 @@ class _Connector:
     async def _session(self, st, tok, gen):
         import websockets
         url = st.get("relay_url") or RELAY_DEFAULT
+        # ★open_timeout: 握手 20s 未完成即抛(不再无限卡死,失败记 last_err 并退避重连)。
+        # ★显式 SSL 上下文用 certifi(打包环境系统证书路径不可靠,验证失败会挂)。
+        ssl_ctx = None
+        if url.startswith("wss://"):
+            import ssl as _ssl
+            try:
+                import certifi
+                ssl_ctx = _ssl.create_default_context(cafile=certifi.where())
+            except Exception:
+                ssl_ctx = _ssl.create_default_context()
         async with websockets.connect(url, max_size=_MAX_BODY + 1024 * 1024,
-                                      ping_interval=25, ping_timeout=20) as ws:
+                                      ping_interval=25, ping_timeout=20,
+                                      open_timeout=20, close_timeout=5, ssl=ssl_ctx) as ws:
             await ws.send(json.dumps({"t": "hello", "v": 1, "role": "desktop", "token": tok}))
             first = json.loads(await asyncio.wait_for(ws.recv(), timeout=15))
             if first.get("t") != "ok":
