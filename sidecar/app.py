@@ -5022,8 +5022,11 @@ def ask(payload: dict = Body(...), authorization: str = Header(None)):
     messages = [{"role": "system", "content": system}]
     messages += history[-8:]
     messages += [{"role": "user", "content": query}]
+    # ★max_tokens 分场景:产出文档/长答案才 8000(不截断);普通对话 2000 足够——8000 会让生成拖很久且触发后端 180s 超时上限,是"问答很久才回"的主因之一
+    _want_doc = bool(re.search(r"写|产出|生成|起草|拟|报告|文档|纪要|方案|计划书|总结|梳理成|列个|表格", query or ""))
+    _mt = 8000 if _want_doc else 2000
     try:
-        answer = LLM.chat(messages, max_tokens=8000, model=LLM.fast_model())   # 8000:产出文档/长答案不截断(用户要)
+        answer = LLM.chat(messages, max_tokens=_mt, model=LLM.fast_model())
     except Exception as e:
         raise HTTPException(400, f"AI 调用失败(检查设置里的模型/key): {e}")
     if _ask_ck and (answer or "").strip():
