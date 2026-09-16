@@ -2406,6 +2406,7 @@ def discoveries_api(authorization: str = Header(None)):
     try:
         con.execute("CREATE TABLE IF NOT EXISTS chat_intel(username TEXT,contact TEXT,doc_id INTEGER,msgcount INTEGER,day TEXT,data TEXT,PRIMARY KEY(username,contact))")
         today = _dt.date.today()
+        dismissed = CI.load_dismissed(con, me)   # ★用户已清除的承诺(精确+重述模糊),这里必须过滤,否则删了又冒出来
         for contact, did, data in con.execute("SELECT contact, doc_id, data FROM chat_intel WHERE username=?", (me,)).fetchall():
             try:
                 d = json.loads(data)
@@ -2414,6 +2415,8 @@ def discoveries_api(authorization: str = Header(None)):
             for cm in (d.get("commitments") or []):
                 if cm.get("done"):
                     continue
+                if CI.is_dismissed(dismissed, me, contact, cm.get("what", "")):
+                    continue   # ★用户已把这件事标记「不再提醒」
                 due = cm.get("due") or ""
                 dt = None
                 try:

@@ -136,6 +136,7 @@ def _days_to(due):
 
 
 import hashlib as _hl
+import difflib as _difflib
 
 STALE_DAYS = 60   # 逾期超过 60 天 = 太老,默认折叠(几年前的旧承诺不刷屏)
 
@@ -144,15 +145,76 @@ def _commit_key(owner, contact, what):
     return _hl.md5(("%s|%s|%s" % (owner, contact, what)).encode("utf-8")).hexdigest()[:16]
 
 
+def _norm_what(s):
+    """归一承诺文本:去空白/标点,只留中英数,用于跨措辞的稳健比对。"""
+    return re.sub(r"[^\w一-鿿]", "", (s or "")).lower()
+
+
 def _ensure_dismiss(con):
-    con.execute("CREATE TABLE IF NOT EXISTS commit_dismissed(username TEXT, key TEXT, ts TEXT, PRIMARY KEY(username,key))")
+    con.execute("CREATE TABLE IF NOT EXISTS commit_dismissed(username TEXT, key TEXT, ts TEXT, contact TEXT, what TEXT, PRIMARY KEY(username,key))")
+    # 兼容旧表(只有 username/key/ts):补 contact/what 两列,供模糊匹配
+    try:
+        cols = {r[1] for r in con.execute("PRAGMA table_info(commit_dismissed)").fetchall()}
+        if "contact" not in cols:
+            con.execute("ALTER TABLE commit_dismissed ADD COLUMN contact TEXT")
+        if "what" not in cols:
+            con.execute("ALTER TABLE commit_dismissed ADD COLUMN what TEXT")
+    except Exception:
+        pass
+
+
+def _lookup_commit(con, owner, key):
+    """按 key 反查当前 chat_intel 里对应的 contact+what,dismiss 时留档供模糊匹配。"""
+    try:
+        con.execute("CREATE TABLE IF NOT EXISTS chat_intel(username TEXT,contact TEXT,doc_id INTEGER,msgcount INTEGER,day TEXT,data TEXT,PRIMARY KEY(username,contact))")
+        for contact, data in con.execute("SELECT contact, data FROM chat_intel WHERE username=?", (owner,)).fetchall():
+            try:
+                d = json.loads(data)
+            except Exception:
+                continue
+            for cm in (d.get("commitments") or []):
+                w = cm.get("what", "")
+                if _commit_key(owner, contact, w) == key:
+                    return contact, w
+    except Exception:
+        pass
+    return None, None
+
+
+def load_dismissed(con, owner):
+    """一次性载入某人的忽略清单:(精确key集合, [(contact, 归一what)…])。"""
+    _ensure_dismiss(con)
+    rows = con.execute("SELECT key, contact, what FROM commit_dismissed WHERE username=?", (owner,)).fetchall()
+    keys = {r[0] for r in rows}
+    fuzzy = [(r[1], _norm_what(r[2])) for r in rows if r[1] and r[2]]
+    return keys, fuzzy
+
+
+def is_dismissed(dismissed, owner, contact, what):
+    """判断某条承诺是否已被用户忽略:精确key命中 或 同一人下内容高度相似(抗LLM重述)。"""
+    keys, fuzzy = dismissed
+    if _commit_key(owner, contact, what) in keys:
+        return True
+    nw = _norm_what(what)
+    if not nw:
+        return False
+    for dc, dw in fuzzy:
+        if dc != contact or not dw:
+            continue
+        if nw == dw or (len(nw) >= 4 and (nw in dw or dw in nw)):
+            return True
+        if _difflib.SequenceMatcher(None, nw, dw).ratio() >= 0.55:
+            return True
+    return False
 
 
 def dismiss_commitment(con, owner, key):
-    """用户点「已了结/清除」某条承诺:只标记忽略,绝不删聊天记录。"""
+    """用户点「已了结/清除」某条承诺:只标记忽略,绝不删聊天记录。
+    同时留档 contact+what,之后即便 LLM 把这句话重述,也能按相似度继续忽略(不再复发)。"""
     _ensure_dismiss(con)
-    con.execute("INSERT OR REPLACE INTO commit_dismissed(username,key,ts) VALUES(?,?,?)",
-                (owner, key, _dt.date.today().isoformat()))
+    contact, what = _lookup_commit(con, owner, key)
+    con.execute("INSERT OR REPLACE INTO commit_dismissed(username,key,ts,contact,what) VALUES(?,?,?,?,?)",
+                (owner, key, _dt.date.today().isoformat(), contact, what))
     con.commit()
     return {"ok": True, "key": key}
 
@@ -160,8 +222,7 @@ def dismiss_commitment(con, owner, key):
 def commitments_radar(con, owner, refresh=False):
     """承诺雷达:跨人聚合所有未完成承诺,分'我欠的/等对方的',按到期紧迫排序。
     带时间维度:stale=太老(逾期>60天)默认折叠;可点清除(commit_dismissed)。"""
-    _ensure_dismiss(con)
-    dismissed = {r[0] for r in con.execute("SELECT key FROM commit_dismissed WHERE username=?", (owner,)).fetchall()}
+    dismissed = load_dismissed(con, owner)
     intel = all_intel(con, owner, refresh=refresh, generate=bool(refresh))
     mine, theirs = [], []
     for it in intel:
@@ -170,8 +231,8 @@ def commitments_radar(con, owner, refresh=False):
                 continue
             what = c.get("what", "")
             key = _commit_key(owner, it["contact"], what)
-            if key in dismissed:
-                continue   # 用户已清除
+            if is_dismissed(dismissed, owner, it["contact"], what):
+                continue   # 用户已清除(精确 key 或 LLM 重述后的相似句)
             dt = _days_to(c.get("due", ""))
             item = {"contact": it["contact"], "doc_id": it["doc_id"], "key": key,
                     "what": what, "due": c.get("due", ""),
