@@ -290,8 +290,6 @@ export default function Settings({ auth, onLogout, onNick, section = 'all' }) {
         <input ref={avRef} type="file" accept="image/*" style={{ display: 'none' }} onChange={onPickAvatar} />
       </div>
 
-      <PhoneLinkCard />
-
       <div className="glass set-card"><MembershipSection /></div>
 
       <div className="glass set-card">
@@ -332,6 +330,7 @@ export default function Settings({ auth, onLogout, onNick, section = 'all' }) {
           <button className="btn btn-primary" disabled={pwdBusy} onClick={changePwd}>{pwdBusy ? '保存中…' : '保存密码'}</button>
         </div>
       </div>
+      <PhoneLinkCard />
       </>)}
 
       {section !== 'account' && (
