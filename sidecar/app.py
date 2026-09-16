@@ -293,6 +293,16 @@ def _start_bg_analyzer():
                                         "WHERE d.filename LIKE '微信_与%' AND e.page_id IS NULL AND length(trim(p.text))>0").fetchone()[0]
                                     if _pend_emb == 0:
                                         _db_cached(con, owner, "chat_topic_galaxy", lambda: CT.chat_topic_galaxy(con, owner))
+                                        # ★预热洞察5端点:否则 data_sig 变化后首次点洞察要现读全库聊天+正则 ~40s(5端点各读一遍)
+                                        try:
+                                            import insights as _INS
+                                            _INS.communication_checkup(con, owner)
+                                            _INS.cooling_alerts(con, owner)
+                                            _INS.relationship_balance(con, owner)
+                                            _INS.favors_to_repay(con, owner)
+                                            _INS.dormant_leads(con, owner)
+                                        except Exception as _ei:
+                                            print(f"[bg-analyze] insights warm: {_ei}")
                                 except Exception as _e:
                                     print(f"[bg-analyze] chat_galaxy warm: {_e}")
                     finally:
