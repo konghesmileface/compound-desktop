@@ -120,7 +120,7 @@ function PhoneLinkCard() {
 
       {/* 三步指引 */}
       <div className="pl-steps">
-        <div className="pl-step"><span className="pl-step-n">1</span><div><b>手机打开复利</b><em>浏览器访问 compoundtome.com/m/,或装 App</em></div></div>
+        <div className="pl-step"><span className="pl-step-n">1</span><div><b>手机装上复利 App</b><em>App Store / 手机应用市场搜「复利」安装</em></div></div>
         <div className="pl-step"><span className="pl-step-n">2</span><div><b>登录同一个账号</b><em>和这台电脑用的是同一个手机号</em></div></div>
         <div className="pl-step"><span className="pl-step-n">3</span><div><b>扫下面的码</b><em>我的 → 配对桌面 → 对准这个二维码</em></div></div>
       </div>
