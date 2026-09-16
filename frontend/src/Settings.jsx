@@ -100,19 +100,36 @@ function PhoneLinkCard() {
     try { setQr(await api.phonePairStart()) } catch { toast('生成配对码失败', 'err') }
     setBusy(false)
   }
-  const relayLabel = { connected: '已连接', connecting: '连接中…', auth_failed: '登录态失效,重新登录后自动恢复', off: '未启用' }
+  const relayLabel = { connected: '中转在线', connecting: '连接中…', auth_failed: '登录态失效,重新登录即恢复', off: '未启用' }
+  const relayCls = st && st.relay === 'connected' ? 'on' : st && st.relay === 'auth_failed' ? 'err' : 'wait'
   return (
-    <div className="glass set-card">
-      <div className="set-card-head">
-        <div className="set-sec-h">手机连接 · 复利 App</div>
-        <span className="set-phone">中转:{(st && relayLabel[st.relay]) || '…'}</span>
+    <div className="glass set-card pl-card">
+      {/* 头:科幻星球 + 标题 + 中转脉冲状态 */}
+      <div className="pl-head">
+        <div className="pl-orb"><i /><i /><span className="pl-orb-core" /></div>
+        <div className="pl-head-main">
+          <div className="set-sec-h">把大脑装进口袋 · 手机连接</div>
+          <div className={'pl-relay pl-relay--' + relayCls}><i className="pl-dot" />{(st && relayLabel[st.relay]) || '…'}</div>
+        </div>
       </div>
-      <div className="set-sub">手机 App 扫码配对后,可随时随地安全访问这台电脑上的大脑。全部内容端到端加密,我们的服务器只负责转发,看不懂你的数据。</div>
+
+      <div className="set-sub">
+        手机装上复利,扫一次码,就能<b>随时随地</b>用上这台电脑里的大脑——路上问它、随手喂它资料、看它的新发现。
+        全程<b>端到端加密</b>,连我们的服务器都看不懂你的数据,只负责转发。<b>一辈子只需扫这一次。</b>
+      </div>
+
+      {/* 三步指引 */}
+      <div className="pl-steps">
+        <div className="pl-step"><span className="pl-step-n">1</span><div><b>手机打开复利</b><em>浏览器访问 compoundtome.com/m/,或装 App</em></div></div>
+        <div className="pl-step"><span className="pl-step-n">2</span><div><b>登录同一个账号</b><em>和这台电脑用的是同一个手机号</em></div></div>
+        <div className="pl-step"><span className="pl-step-n">3</span><div><b>扫下面的码</b><em>我的 → 配对桌面 → 对准这个二维码</em></div></div>
+      </div>
+
       {(st && st.devices && st.devices.length > 0) && (
-        <div style={{ margin: '10px 0' }}>
+        <div className="pl-devs">
           {st.devices.map((d) => (
-            <div key={d.dev} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '6px 0' }}>
-              <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="1.5"><rect x="7" y="2.5" width="10" height="19" rx="2.5" /><path d="M10.5 18.5h3" /></svg>
+            <div key={d.dev} className="pl-dev">
+              <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="1.5"><rect x="7" y="2.5" width="10" height="19" rx="2.5" /><path d="M10.5 18.5h3" /></svg>
               <span style={{ flex: 1 }}>{d.name}</span>
               <span className="set-phone">{new Date(d.created * 1000).toLocaleDateString()}</span>
               <button className="btn" onClick={async () => { await api.phoneRemoveDevice(d.dev).catch(() => {}); api.phoneStatus().then(setSt).catch(() => {}) }}>解绑</button>
@@ -120,15 +137,21 @@ function PhoneLinkCard() {
           ))}
         </div>
       )}
+
       {qr ? (
-        <div style={{ textAlign: 'center', padding: '8px 0' }}>
-          <img src={qr.qr} alt="配对二维码" style={{ width: 220, height: 220, borderRadius: 8, background: '#fff', padding: 6 }} />
-          <div className="set-phone" style={{ marginTop: 6 }}>打开复利 App → 我的 → 配对桌面端,扫描此码({left}s 内有效,一码一台)</div>
+        <div className="pl-qr-wrap">
+          <div className="pl-qr">
+            <img src={qr.qr} alt="配对二维码" />
+            <i className="pl-qr-corner tl" /><i className="pl-qr-corner tr" /><i className="pl-qr-corner bl" /><i className="pl-qr-corner br" />
+            <i className="pl-qr-scan" />
+          </div>
+          <div className="pl-qr-hint">用手机对准扫描 · <b>{left}s</b> 内有效 · 一码一台</div>
+          <button className="btn" style={{ marginTop: 8 }} onClick={() => setQr(null)}>收起</button>
         </div>
       ) : (
-        <div className="set-form-foot">
-          <span className="set-phone">{devCount ? `已配对 ${devCount} 台手机` : '还没有配对的手机'}</span>
-          <button className="btn btn-primary" disabled={busy} onClick={startPair}>{busy ? '生成中…' : '配对新手机'}</button>
+        <div className="pl-cta">
+          <span className="set-phone">{devCount ? `已配对 ${devCount} 台手机` : '还没有配对手机 —— 现在开始'}</span>
+          <button className="btn btn-primary pl-cta-btn" disabled={busy} onClick={startPair}>{busy ? '生成中…' : (devCount ? '再配一台' : '出示配对码')}</button>
         </div>
       )}
     </div>
@@ -290,6 +313,8 @@ export default function Settings({ auth, onLogout, onNick, section = 'all' }) {
         <input ref={avRef} type="file" accept="image/*" style={{ display: 'none' }} onChange={onPickAvatar} />
       </div>
 
+      <PhoneLinkCard />
+
       <div className="glass set-card"><MembershipSection /></div>
 
       <div className="glass set-card">
@@ -330,7 +355,6 @@ export default function Settings({ auth, onLogout, onNick, section = 'all' }) {
           <button className="btn btn-primary" disabled={pwdBusy} onClick={changePwd}>{pwdBusy ? '保存中…' : '保存密码'}</button>
         </div>
       </div>
-      <PhoneLinkCard />
       </>)}
 
       {section !== 'account' && (
