@@ -167,9 +167,13 @@ class _Connector:
                 ssl_ctx = _ssl.create_default_context(cafile=certifi.where())
             except Exception:
                 ssl_ctx = _ssl.create_default_context()
+        # ★ping_timeout=None:大文件(拍照/传文件)会用一个大帧占满慢出口/代理链路,
+        #   有限的 ping_timeout 会在上传途中因等不到 pong 而误杀连接(1011 keepalive timeout)。
+        #   置 None=不因慢 pong 断连(靠 TCP 出错 + 自动重连兜底);ping_interval 仍发保 NAT。
+        #   这样不管用户电脑有没有代理、链路快慢,拍照/传文件都不会传一半掉线。
         async with websockets.connect(url, max_size=_MAX_BODY + 1024 * 1024,
-                                      ping_interval=25, ping_timeout=20,
-                                      open_timeout=20, close_timeout=5, ssl=ssl_ctx) as ws:
+                                      ping_interval=25, ping_timeout=None,
+                                      open_timeout=30, close_timeout=5, ssl=ssl_ctx) as ws:
             await ws.send(json.dumps({"t": "hello", "v": 1, "role": "desktop", "token": tok}))
             first = json.loads(await asyncio.wait_for(ws.recv(), timeout=15))
             if first.get("t") != "ok":
