@@ -2810,9 +2810,18 @@ def list_cards(authorization: str = Header(None)):
         unread = dict(con.execute("SELECT card_id, COUNT(*) FROM card_msgs WHERE read=0 GROUP BY card_id").fetchall())
         con.execute("CREATE TABLE IF NOT EXISTS card_status (card_id INTEGER PRIMARY KEY, status TEXT)")
         stat = dict(con.execute("SELECT card_id, status FROM card_status").fetchall())
+        # ★各卡正文(内容预览):卡片是单页文档,取其页文本;手机列表要显示内容,不只标题
+        content_map = {}
+        _ids = [r[0] for r in rows]
+        if _ids:
+            _ph = ",".join("?" * len(_ids))
+            for _cid, _txt in con.execute(
+                    "SELECT doc_id, text FROM pages WHERE doc_id IN (%s) GROUP BY doc_id" % _ph, _ids).fetchall():
+                content_map[_cid] = _txt or ""
         cards = [{"id": r[0], "title": r[1],
                   "ctype": r[2].split(":", 1)[1] if ":" in r[2] else "note",
-                  "created": r[3], "unread": unread.get(r[0], 0), "status": stat.get(r[0], "")} for r in rows]
+                  "created": r[3], "unread": unread.get(r[0], 0), "status": stat.get(r[0], ""),
+                  "content": content_map.get(r[0], "")} for r in rows]
         return {"cards": cards, "unread_total": sum(unread.get(r[0], 0) for r in rows)}
     finally:
         con.close()
