@@ -24,7 +24,7 @@ import shutil
 import threading
 import datetime as _dt
 
-from fastapi import FastAPI, UploadFile, File, HTTPException, Query, Body, Header
+from fastapi import FastAPI, UploadFile, File, HTTPException, Query, Body, Header, Request
 from fastapi.responses import RedirectResponse
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -5373,6 +5373,53 @@ def _fetch_url(url: str, owner=None) -> str:
         except Exception:
             pass
     return dest
+
+
+# ---------------- 大文件分块上传(手机切块→逐块过通道→桌面重组入库)----------------
+# 每块 ~4MB,远小于通道单帧上限,所以再大的文件也不受 40/50MB 单帧限制。
+def _chunk_dir(owner, uid):
+    safe = "".join(c for c in str(uid) if c.isalnum() or c in "-_")[:64] or "u"
+    return os.path.join(_owner_updir(owner), "_chunks", safe)
+
+
+@app.post("/api/upload/chunk")
+async def upload_chunk(request: Request, id: str = Query(...), i: int = Query(...),
+                       authorization: str = Header(None)):
+    """接收一个分块(原始字节),按序号落盘到本次上传的临时目录。"""
+    owner = _me(authorization)
+    d = _chunk_dir(owner, id)
+    os.makedirs(d, exist_ok=True)
+    body = await request.body()
+    with open(os.path.join(d, "%06d.part" % int(i)), "wb") as f:
+        f.write(body)
+    return {"ok": True, "i": int(i), "bytes": len(body)}
+
+
+@app.post("/api/upload/complete")
+def upload_complete(payload: dict = Body(...), authorization: str = Header(None)):
+    """所有分块到齐 → 按序拼成完整文件 → 走与 /api/upload 相同的入库任务。"""
+    owner = _me(authorization)
+    uid = payload.get("id") or ""
+    name = os.path.basename(payload.get("filename") or "file")
+    total = int(payload.get("total") or 0)
+    backend = payload.get("backend") or "auto"
+    if backend not in BACKENDS:
+        backend = "auto"
+    d = _chunk_dir(owner, uid)
+    import glob as _glob
+    parts = sorted(_glob.glob(os.path.join(d, "*.part")))
+    if not parts or (total and len(parts) != total):
+        raise HTTPException(400, "分块不全 %d/%d,请重新收集" % (len(parts), total))
+    dest = os.path.join(_owner_updir(owner), name)
+    with open(dest, "wb") as out:
+        for p in parts:
+            with open(p, "rb") as pf:
+                shutil.copyfileobj(pf, out)
+    shutil.rmtree(d, ignore_errors=True)
+    jid = _new_job(1, backend)
+    threading.Thread(target=_run_ingest_job, args=(jid, [dest], backend, 200, owner),
+                     daemon=True).start()
+    return {"job_id": jid, "files_total": 1}
 
 
 @app.post("/api/upload_url")
