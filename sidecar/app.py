@@ -2323,13 +2323,21 @@ def realtime_toggle(payload: dict = Body(...), authorization: str = Header(None)
 
 
 # ==== P1/P2 洞察 ====
+def _radar_dis(con, me, section):
+    con.execute("CREATE TABLE IF NOT EXISTS radar_dismissed(username TEXT, section TEXT, item TEXT, PRIMARY KEY(username,section,item))")
+    return {r[0] for r in con.execute("SELECT item FROM radar_dismissed WHERE username=? AND section=?", (me, section)).fetchall()}
+
+
 @app.get("/api/cooling")
 def cooling_api(authorization: str = Header(None)):
     """关系降温预警(按互动节奏变化率,不是绝对天数)。"""
     me = _me(authorization)
     con = _con()
     try:
-        return INS.cooling_alerts(con, me)
+        r = INS.cooling_alerts(con, me)
+        dis = _radar_dis(con, me, "cooling")
+        r["alerts"] = [a for a in (r.get("alerts") or []) if a.get("contact") not in dis]
+        return r
     finally:
         con.close()
 
@@ -2340,7 +2348,10 @@ def favors_api(authorization: str = Header(None)):
     me = _me(authorization)
     con = _con()
     try:
-        return INS.favors_to_repay(con, me)
+        r = INS.favors_to_repay(con, me)
+        dis = _radar_dis(con, me, "favors")
+        r["items"] = [a for a in (r.get("items") or []) if a.get("contact") not in dis]
+        return r
     finally:
         con.close()
 
@@ -2351,7 +2362,28 @@ def dormant_api(authorization: str = Header(None)):
     me = _me(authorization)
     con = _con()
     try:
-        return INS.dormant_leads(con, me)
+        r = INS.dormant_leads(con, me)
+        dis = _radar_dis(con, me, "dormant")
+        r["items"] = [a for a in (r.get("items") or []) if a.get("contact") not in dis]
+        return r
+    finally:
+        con.close()
+
+
+@app.post("/api/radar/dismiss")
+def radar_dismiss_api(payload: dict = Body(...), authorization: str = Header(None)):
+    """忽略某条雷达建议(降温/人情/沉默):按 section+item(联系人)标记,两端同步、重装不复发。"""
+    me = _me(authorization)
+    section = str(payload.get("section", "")).strip()
+    item = str(payload.get("item", "")).strip()
+    if not section or not item:
+        return {"ok": False, "error": "缺 section/item"}
+    con = _con()
+    try:
+        con.execute("CREATE TABLE IF NOT EXISTS radar_dismissed(username TEXT, section TEXT, item TEXT, PRIMARY KEY(username,section,item))")
+        con.execute("INSERT OR REPLACE INTO radar_dismissed(username,section,item) VALUES(?,?,?)", (me, section, item))
+        con.commit()
+        return {"ok": True}
     finally:
         con.close()
 
