@@ -4908,6 +4908,21 @@ def mylibrary(authorization: str = Header(None)):
                 pass
         songs.append(_wentry)
 
+    # 歌词洗掉结构标记行([Intro]/Verse 2/BRIDGE/副歌…)——用户只要词,不要谱曲脚手架
+    import re as _re
+    _mark = _re.compile(r"^\s*[\[\(【(]?\s*(intro|outro|verse|chorus|pre[- ]?chorus|bridge|hook|interlude|solo|refrain|rap|breakdown|drop|instrumental|前奏|间奏|尾奏|主歌|副歌|导歌|桥段|说唱)\s*\d*\s*[\]\)】)]?\s*[::]?\s*$", _re.I)
+    for _s in songs:
+        if _s.get("lyrics"):
+            _ls, _prev = [], False
+            for _ln in str(_s["lyrics"]).splitlines():
+                if _mark.match(_ln):
+                    continue
+                _blank = not _ln.strip()
+                if _blank and _prev:
+                    continue
+                _ls.append(_ln); _prev = _blank
+            _s["lyrics"] = "\n".join(_ls).strip()
+
     # ---- 动画短片(故事集) ----
     life_titles = {}
     con = _con()
