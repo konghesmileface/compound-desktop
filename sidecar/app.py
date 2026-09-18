@@ -3803,7 +3803,8 @@ def _sync_cloud_songs(me, authorization):
         todo = []
         for s in (lib.get("songs") or []):
             fn = os.path.basename((s.get("url") or "").split("?")[0])
-            if fn.endswith(".mp3") and fn.startswith(me) and not os.path.exists(os.path.join(_THEMES_DIR, fn)):
+            # 自己名下的歌 + 平台礼物(gift,如共享欢迎曲 _welcome.mp3)都拉
+            if fn.endswith(".mp3") and (fn.startswith(me) or s.get("gift")) and not os.path.exists(os.path.join(_THEMES_DIR, fn)):
                 todo.append((fn, s))
         _song_sync_status[me] = {"syncing": True, "total": len(todo), "done": 0}
         n = 0
@@ -4800,6 +4801,24 @@ def mylibrary(authorization: str = Header(None)):
     songs.sort(key=lambda s: s.get("_ts", 0), reverse=True)
     for s in songs:
         s.pop("_ts", None)
+
+    # 平台礼物:每个用户默认都有《我们的礼物》(欢迎曲,共享 _welcome.mp3,
+    # 由 _sync_cloud_songs 从 106 拉到本地 themes;与云端 mylibrary 注入逻辑一致)
+    _wfp = os.path.join(_THEMES_DIR, "_welcome.mp3")
+    if os.path.exists(_wfp):
+        _wentry = {"title": "我们的礼物", "genre": "", "style": "", "lyrics": "",
+                   "date": _ym(_wfp), "url": "/api/theme/_welcome.mp3", "gift": True}
+        _wlp = os.path.splitext(_wfp)[0] + ".lyrics.json"
+        if os.path.exists(_wlp):
+            try:
+                _lj = json.load(open(_wlp, encoding="utf-8"))
+                _wentry["title"] = _lj.get("title") or _wentry["title"]
+                _wentry["lyrics"] = _lj.get("lyrics") or ""
+                _wentry["genre"] = _lj.get("genre") or ""
+                _wentry["style"] = _lj.get("style") or ""
+            except Exception:
+                pass
+        songs.append(_wentry)
 
     # ---- 动画短片(故事集) ----
     life_titles = {}
