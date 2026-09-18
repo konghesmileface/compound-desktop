@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react'
 import { api, apiUrl, openExternal } from './api'
+import { downloadSongTagged } from './songDownload'
 import { IconPlay, IconDownload, IconGallery } from './icons'
 import { Empty } from './ui'
 
@@ -109,7 +110,7 @@ function Player({ item, onClose }) {
                   })}
                 </div>
               )}
-              <button type="button" className="gp-dl" onClick={() => openExternal(item.url)}><span className="btn-ico"><IconDownload /></span>下载 MP3</button>
+              <button type="button" className="gp-dl" onClick={() => downloadSongTagged(item)}><span className="btn-ico"><IconDownload /></span>下载 MP3</button>
             </div>
           </div>
         ) : (
