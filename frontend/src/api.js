@@ -68,6 +68,13 @@ export async function saveHelperLocally(file) {
   return r && r.path
 }
 
+// 冥想歌成品(前端已打好 ID3 歌词封面)→ sidecar 落「下载」文件夹 + 文件管理器高亮
+export async function saveSongLocally(filename, dataB64) {
+  const r = await fetch('/api/save_song', { method: 'POST', headers: { 'Content-Type': 'application/json', ...authHeaders() }, body: JSON.stringify({ filename, data_b64: dataB64 }) }).then(j)
+  if (r && r.path) { try { window.__TAURI__ && window.__TAURI__.core && window.__TAURI__.core.invoke('reveal_file', { path: r.path }) } catch { /* noop */ } }
+  return r && r.path
+}
+
 export const api = {
   modelStatus: () => fetch('/api/model_status').then(j),
   stats: () => fetch('/api/stats', { headers: authHeaders() }).then(j),

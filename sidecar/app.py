@@ -4781,6 +4781,32 @@ def save_output(payload: dict = Body(...), authorization: str = Header(None)):
     return {"ok": True, "path": dst}
 
 
+@app.post("/api/save_song")
+def save_song(payload: dict = Body(...), authorization: str = Header(None)):
+    """冥想歌下载:前端现场打好 ID3(歌词+封面)把成品字节递过来,直接落「下载」文件夹。
+    ★不走浏览器(openExternal 只会在浏览器 tab 在线播放,不存盘)。"""
+    _me(authorization)
+    import base64 as _b64
+    fname = os.path.basename(str(payload.get("filename") or "").strip()) or "song.mp3"
+    if not fname.lower().endswith(".mp3"):
+        fname += ".mp3"
+    try:
+        data = _b64.b64decode(str(payload.get("data_b64") or ""), validate=False)
+    except Exception:
+        raise HTTPException(400, "数据解码失败")
+    if not data or len(data) > 200 * 1024 * 1024:
+        raise HTTPException(400, "数据为空或过大")
+    downloads = os.path.join(os.path.expanduser("~"), "Downloads")
+    try:
+        os.makedirs(downloads, exist_ok=True)
+    except Exception:
+        pass
+    dst = os.path.join(downloads, fname)
+    with open(dst, "wb") as f:
+        f.write(data)
+    return {"ok": True, "path": dst}
+
+
 @app.get("/api/music-list")
 def music_list():
     out = {"epic": [], "calm": [], "uplift": []}
