@@ -179,7 +179,12 @@ export default function Settings({ auth, onLogout, onNick, section = 'all' }) {
   const avRef = useRef()
 
   useEffect(() => {
-    const u = myUser(); if (u) api.getAvatars(u).then((r) => setAvatar((r.avatars || {})[u] || null)).catch(() => {})
+    const u = myUser(); if (u) api.getAvatars(u).then((r) => {
+      const a = (r.avatars || {})[u] || null
+      setAvatar(a)
+      // 拉到最新头像(可能是手机端刚改的)→ 广播同步左下角侧边栏,不必等切窗口
+      try { window.dispatchEvent(new CustomEvent('avatar-updated', { detail: a })) } catch (e) { /* noop */ }
+    }).catch(() => {})
     api.getProfile().then((p) => {
       setNick(p.nickname || myName()); setPhone(p.phone || '')
       setGender(p.gender || ''); setAge(p.age || ''); setZodiac(p.zodiac || ''); setMbti(p.mbti || ''); setBio(p.bio || '')

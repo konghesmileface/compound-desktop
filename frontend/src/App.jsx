@@ -68,10 +68,22 @@ export default function App() {
   const [myAvatar, setMyAvatar] = useState(null)
   React.useEffect(() => {
     if (!auth) { setMyAvatar(null); return }
-    api.getAvatars(auth.username).then((m) => setMyAvatar((m && m.avatars && m.avatars[auth.username]) || null)).catch(() => {})
-    const onAva = (e) => setMyAvatar(e.detail || null)   // 上传头像后即时刷新左下角(不用刷页面)
+    const refetch = () => api.getAvatars(auth.username)
+      .then((m) => setMyAvatar((m && m.avatars && m.avatars[auth.username]) || null)).catch(() => {})
+    refetch()
+    const onAva = (e) => setMyAvatar(e.detail || null)   // 本机上传头像后即时刷新左下角(不用刷页面)
+    // ★手机端(远程)改了头像,桌面 App 常驻不重 mount、也收不到本机 avatar-updated
+    //   → 切回窗口/标签可见时重新拉,左下角才会跟着变(此前一直是登录那一刻的旧头像)
+    const onFocus = () => refetch()
+    const onVis = () => { if (document.visibilityState === 'visible') refetch() }
     window.addEventListener('avatar-updated', onAva)
-    return () => window.removeEventListener('avatar-updated', onAva)
+    window.addEventListener('focus', onFocus)
+    document.addEventListener('visibilitychange', onVis)
+    return () => {
+      window.removeEventListener('avatar-updated', onAva)
+      window.removeEventListener('focus', onFocus)
+      document.removeEventListener('visibilitychange', onVis)
+    }
   }, [auth])
   const [onboard, setOnboard] = useState(() => localStorage.getItem('onboarded') !== '1' || (typeof window !== 'undefined' && window.location.search.includes('onboard')))
   const finishOnboard = () => { localStorage.setItem('onboarded', '1'); setOnboard(false) }
